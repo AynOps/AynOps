@@ -17,7 +17,7 @@ mcp = FastMCP("CyberSecurity-MCP-Server")
 # HELPERS
 
 def is_valid_domain(domain: str) -> bool:
-    pattern = r"^(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$"
+    pattern = r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
     return re.match(pattern, domain) is not None
 
 def get_cvss_details(cve: dict) -> dict:
@@ -393,9 +393,54 @@ def tech_stack_detect(domain: str) -> dict:
         return {"success": False, "error": "Could not connect to the domain"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+    
+# TOOL 6 — FULL RECON (runs all 5 tools)
+@mcp.tool()
+def full_recon(domain: str) -> dict:
+    """
+    Run all recon tools on a domain in parallel:
+    WHOIS, DNS enumeration, port scan, SSL inspection,
+    and technology stack detection.
+
+    Returns combined raw results. The MCP client (Claude)
+    should generate summaries for each section.
+    """
+    if not is_valid_domain(domain):
+        return {"success": False, "error": "Invalid domain format"}
+
+    results = {}
+
+    def run(name, fn, *args, **kwargs):
+        try:
+            results[name] = fn(*args, **kwargs)
+        except Exception as e:
+            results[name] = {"success": False, "error": str(e)}
+
+    # Run all tools in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+        futures = [
+            ex.submit(run, "whois",    whois_lookup,       domain),
+            ex.submit(run, "dns",      dns_enumeration,    domain),
+            ex.submit(run, "ports",    port_scan,          domain, "service"),
+            ex.submit(run, "ssl",      ssl_inspect,        domain),
+            ex.submit(run, "techstack",tech_stack_detect,  domain),
+        ]
+        concurrent.futures.wait(futures)
+
+    return {
+        "success": True,
+        "domain": domain,
+        "scanned_at": datetime.utcnow().isoformat() + "Z",
+        "results": results,
+        "instructions": (
+            "Generate a 2-3 sentence summary for each tool's output "
+            "(whois_summary, dns_summary, ports_summary, ssl_summary, techstack_summary) "
+            "and a final overall_summary of 4-5 sentences covering the full security posture. "
+        )
+    }
 
 
-# TOOL 6 — CVE LOOKUP
+# TOOL 7 — CVE LOOKUP
 @mcp.tool()
 def cve_lookup(software: str, version: str) -> dict:
     """
@@ -411,7 +456,7 @@ def cve_lookup(software: str, version: str) -> dict:
         response = requests.get(
             "https://services.nvd.nist.gov/rest/json/cves/2.0",
             params={"keywordSearch": f"{software} {version}"},
-            timeout=15,
+            timeout=60,
             headers={"User-Agent": "CyberSecurity-MCP-Server/1.0"},
         )
         response.raise_for_status()
@@ -448,7 +493,7 @@ def cve_lookup(software: str, version: str) -> dict:
         return {"success": False, "error": str(e)}
 
 
-# TOOL 7 — IP REPUTATION CHECK
+# TOOL 8 — IP REPUTATION CHECK
 @mcp.tool()
 def ip_reputation(ip_address: str) -> dict:
     """
@@ -499,55 +544,6 @@ def ip_reputation(ip_address: str) -> dict:
         return {"success": False, "error": f"Could not connect to AbuseIPDB API: {str(e)}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
-
-
-# ─────────────────────────────────────────────
-# TOOL 8 — FULL RECON (runs all 5 tools)
-# ─────────────────────────────────────────────
-
-@mcp.tool()
-def full_recon(domain: str) -> dict:
-    """
-    Run all recon tools on a domain in parallel:
-    WHOIS, DNS enumeration, port scan, SSL inspection,
-    and technology stack detection.
-
-    Returns combined raw results. The MCP client (Claude)
-    should generate summaries for each section.
-    """
-    if not is_valid_domain(domain):
-        return {"success": False, "error": "Invalid domain format"}
-
-    results = {}
-
-    def run(name, fn, *args, **kwargs):
-        try:
-            results[name] = fn(*args, **kwargs)
-        except Exception as e:
-            results[name] = {"success": False, "error": str(e)}
-
-    # Run all tools in parallel
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
-        futures = [
-            ex.submit(run, "whois",    whois_lookup,       domain),
-            ex.submit(run, "dns",      dns_enumeration,    domain),
-            ex.submit(run, "ports",    port_scan,          domain, "service"),
-            ex.submit(run, "ssl",      ssl_inspect,        domain),
-            ex.submit(run, "techstack",tech_stack_detect,  domain),
-        ]
-        concurrent.futures.wait(futures)
-
-    return {
-        "success": True,
-        "domain": domain,
-        "scanned_at": datetime.utcnow().isoformat() + "Z",
-        "results": results,
-        "instructions": (
-            "Generate a 2-3 sentence summary for each tool's output "
-            "(whois_summary, dns_summary, ports_summary, ssl_summary, techstack_summary) "
-            "and a final overall_summary of 4-5 sentences covering the full security posture. "
-        )
-    }
 
 if __name__ == "__main__":
     mcp.run()

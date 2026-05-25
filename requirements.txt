@@ -1,5 +1,5 @@
 fastmcp==3.2.4
-whois==1.20240129.2
+python-whois==0.9.6
 python-nmap==0.7.1
 dnspython==2.8.0
 trio-websocket==0.12.2
@@ -8,4 +8,3 @@ websockets==16.0
 requests==2.32.5
 requests-oauthlib==2.0.0
 requests-toolbelt==1.0.0
-reportlab==4.5.1

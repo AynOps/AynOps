@@ -10,7 +10,7 @@ Built with [FastMCP](https://github.com/jlowin/fastmcp) and Python.
 
 Claude by default has **zero native cybersecurity tooling**. No WHOIS. No DNS enumeration. No port scanning. No SSL inspection.
 
-This MCP server fixes that — extending Claude with **8 real-world security tools** that run live against any domain or IP. Reconnaissance that normally requires multiple specialized tools and 20+ minutes of manual work becomes a single prompt.
+This MCP server fixes that — extending Claude with **real-world security tools** that run live against any domain or IP. Reconnaissance that normally requires multiple specialized tools and 20+ minutes of manual work becomes a single prompt.
 
 This is a **local MCP server** — it runs entirely on your machine. Your data never leaves your computer.
 
@@ -26,7 +26,7 @@ This is a **local MCP server** — it runs entirely on your machine. Your data n
 | `ssl_inspect` | SSL/TLS certificate — issuer, expiry, cipher strength, SANs, TLS version |
 | `tech_stack_detect` | Web server, CMS, JS frameworks, CDN, analytics, and security header scoring |
 | `cve_lookup` | Search NVD for known CVEs by software name and version (no API key required) |
-| `ip_reputation` | Check if an IP is flagged as malicious via AbuseIPDB |
+| `ip_reputation` | Check if an IP is flagged as malicious via AbuseIPDB (api key requied) |
 | `full_recon` | Runs all 5 core tools in parallel and returns combined results for Claude to analyze |
 
 ---
@@ -231,7 +231,7 @@ Expected output:
 ```
 ...
 ----------------------------------------------------------------------
-Ran 3 tests in 0.001s
+Ran tests in 0.001s
 
 OK
 ```
@@ -262,9 +262,10 @@ Intended for:
 ```
 Cybersecurity-MCP-Server/
 ├── main.py                  # MCP server — all 8 tools
+├──.env.example              # For API testing
 ├── test_security_tools.py   # Unit tests with mocked APIs
 ├── requirements.txt         # Python dependencies
-├── Dockerfile               # For Glama verification
+├── Dockerfile               # For deployment
 ├── contributing.md          # Contribution guide
 └── README.md                # This file
 ```

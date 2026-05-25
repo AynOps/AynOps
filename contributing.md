@@ -70,11 +70,12 @@ Pick one and open a PR:
 3. Add your tool to `main.py` following the pattern above
 4. Test it in the MCP inspector:
    ```bash
-   fastmcp inspector main.py
+   fastmcp dev inspector main.py
    ```
 5. Add tests to `test_security_tools.py` — mock external APIs so tests don't need live connections
 6. Update the tools table in `README.md`
 7. Update `requirements.txt` if you added a new dependency
+8. Update '.env.example' if any tool needs an api key
 8. Open a pull request with a short description
 
 ---
@@ -91,6 +92,7 @@ Before submitting make sure:
 - [ ] Tests added to `test_security_tools.py` with mocked APIs
 - [ ] Tools table updated in `README.md`
 - [ ] `requirements.txt` updated if new dependency added
+- [ ] `.env.example` updated if needed
 
 ---
 
