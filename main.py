@@ -218,6 +218,7 @@ def ssl_inspect(domain: str, port: int = 443) -> dict:
 
     try:
         context = ssl.create_default_context()
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         conn = context.wrap_socket(
             socket.create_connection((domain, port), timeout=10),
             server_hostname=domain
