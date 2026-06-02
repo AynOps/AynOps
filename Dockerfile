@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-# Install system dependencies including nmap
+# Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends nmap && \
     apt-get clean && \
@@ -8,16 +8,24 @@ RUN apt-get update && \
     which nmap && \
     nmap --version
 
+# Install uv
+RUN pip install --no-cache-dir uv
+
 WORKDIR /app
 
-COPY requirements.txt .
+# Copy dependency files first (better Docker layer caching)
+COPY pyproject.toml uv.lock ./
 
-# Force correct whois package
-RUN pip uninstall whois -y || true && \
-    pip install --no-cache-dir -r requirements.txt
+# Install dependencies
+RUN uv sync --frozen --no-dev
 
-COPY main.py .
+# Copy application code
+COPY server.py .
+COPY tools ./tools
+COPY utils ./utils
+
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["python", "main.py"]
+CMD ["uv", "run", "server.py"]

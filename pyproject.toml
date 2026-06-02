@@ -8,9 +8,13 @@ dependencies = [
     "datetime>=6.0",
     "dnspython>=2.8.0",
     "fastmcp>=3.3.1",
+    "pip>=26.1.2",
+    "pytest>=9.0.3",
     "python-nmap>=0.7.1",
     "python-whois>=0.9.6",
     "reportlab>=4.5.1",
     "requests>=2.34.2",
-    "whois>=1.20240129.2",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

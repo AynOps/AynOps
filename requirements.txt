@@ -8,3 +8,4 @@ websockets==16.0
 requests==2.34.2
 requests-oauthlib==2.0.0
 requests-toolbelt==1.0.0
+pytest==9.0.2

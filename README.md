@@ -261,16 +261,19 @@ Intended for:
 
 ## 🗂️ Project Structure
 
-```text
-├── .github/            # GitHub workflows, templates and assets
-├── main.py             # MCP server entry point
-├── pyproject.toml      # Project configuration
-├── requirements.txt    # Dependencies
-├── glama.json          # Glama MCP metadata
-├── Dockerfile          # Container image
-├── SECURITY.md         # Security policy
-├── contributing.md     # Contribution guidelines
-└── README.md           # README File
+```
+├── .github/              # GitHub Actions workflows and templates
+├── tests/                # Unit tests
+├── tools/                # MCP tool implementations
+├── utils/                # Shared helper utilities
+├── server.py             # MCP server entry point
+├── pyproject.toml        # Project metadata and dependencies
+├── requirements.txt      # Python dependencies
+├── glama.json            # Glama MCP metadata
+├── Dockerfile            # Docker image definition
+├── SECURITY.md           # Security policy
+├── CONTRIBUTING.md       # Contribution guidelines
+└── README.md             # Project documentation
 ```
 ---
 

@@ -4,36 +4,43 @@ Thanks for your interest in contributing! This project is actively growing and n
 
 ---
 
-## 🛠️ How to Add a New Tool
+## How to Add a New Tool
 
-Adding a tool takes about 30-50 lines of Python. Here's the pattern every tool follows:
+### 1. Create a New Tool
+
+Add a new file inside the `tools/` directory:
+
+```
+tools/
+└── my_tool.py
+```
+
+Implement your tool using the standard pattern:
 
 ```python
-@mcp.tool()
+from utils.helpers import is_valid_domain
+
 def your_tool_name(domain: str) -> dict:
     """
     One clear sentence describing what this tool does.
     """
     try:
-        # 1. Validate input
         if not is_valid_domain(domain):
             return {"success": False, "error": "Invalid domain format"}
 
-        # 2. Your logic here
         result = {}
 
-        # 3. Return consistent structure
         return {
             "success": True,
             "domain": domain,
-            # your fields here
+            # additional fields
         }
 
     except Exception as e:
         return {"success": False, "error": str(e)}
 ```
 
-For tools that take an IP instead of a domain, validate using Python's built-in:
+For tools that operate on IP addresses, validate using Python's built-in `ipaddress` module:
 
 ```python
 import ipaddress
@@ -46,58 +53,129 @@ except ValueError:
 
 ---
 
-## 💡 Tool Ideas (open for contribution)
+### 2. Register the Tool
 
-Pick one issue and open a PR:
+Import and register the tool in `server.py`:
+
+```python
+from tools.file_name import tool_name
+
+mcp.tool()(tool_name)
+```
 
 ---
 
-## 📋 Steps to Contribute
+### 3. Add Tests
+
+Create a corresponding test file inside the `tests/` directory:
+
+```
+tests/
+└── test_my_tool.py
+```
+
+Run the tests:
+
+```bash
+pytest tests/test_my_tool.py -v
+```
+
+Every new tool must include at least:
+
+- One **happy-path** test (valid input, expected output)
+- One **failure-path** test (invalid input or error handling)
+
+---
+
+### 4. Verify with MCP Inspector
+
+Test the tool using MCP Inspector:
+
+```bash
+fastmcp dev inspector server.py
+```
+
+Verify that:
+
+- The tool appears in the available tools list
+- Inputs are validated correctly
+- Expected results are returned
+- Error handling works as intended
+
+---
+
+### 5. Update Documentation
+
+- Add the tool to the tools table in `README.md`
+- Include usage examples or notes where relevant
+- If the tool requires an API key, document how to obtain and configure it in the README
+
+---
+
+### 6. Update `.env.example` and `requirements.txt` (If Applicable)
+
+If your tool requires new environment variables, add them to `.env.example` with placeholder values:
+
+```env
+SHODAN_API_KEY=your_api_key_here
+VIRUSTOTAL_API_KEY=your_api_key_here
+```
+
+> **Never** commit real API keys, secrets, or credentials to the repository.
+
+---
+
+### 7. Submit Your Changes
+
+Open a pull request and submit the changes
+
+## Steps to Contribute
 
 1. Fork the repo
 2. Create a branch:
    ```bash
    git checkout -b tool/your-tool-name
    ```
-3. Add your tool to `main.py` following the pattern above
-4. Test it in the MCP inspector:
+3. Add your tool to `tools/` following the pattern above
+4. Test it in the MCP Inspector:
    ```bash
-   fastmcp dev inspector main.py
+   fastmcp dev inspector server.py
    ```
-6. Update the tools table in `README.md`
-7. Update `requirements.txt` if you added a new dependency
-8. Update '.env.example' if any tool needs an api key
+5. Add unit test for tool in `tests/`.
+5. Update the tools table in `README.md`
+6. Update `requirements.txt` if you added a new dependency
+7. Update `.env.example` if your tool needs an API key
 8. Open a pull request with a short description
 
 ---
 
-## ✅ PR Checklist
+## PR Checklist
 
-Before submitting make sure:
-
-- [ ] Tool follows the existing pattern in `main.py`
+- [ ] Tool follows the existing pattern in `tools/`
 - [ ] Input is validated (`is_valid_domain()` or `ipaddress` module)
 - [ ] Returns `{"success": True/False, ...}` on all code paths
 - [ ] Exceptions handled with `try/except` — server must never crash
-- [ ] Dependencies minimal — reuse existing libraries where possible
+- [ ] Unit test added in `tests/`.
+- [ ] Dependencies are minimal — reuse existing libraries where possible
 - [ ] Tools table updated in `README.md`
-- [ ] `requirements.txt` updated if new dependency added
-- [ ] `.env.example` updated if needed
+- [ ] `requirements.txt` updated if a new dependency was added
+- [ ] `.env.example` updated if a new API key is required
 
 ---
 
-## 📏 Guidelines
+## Guidelines
 
-- **Consistency** — every tool returns `{"success": True/False, ...}`
-- **Validation** — always validate inputs before making any external calls
-- **Error handling** — catch exceptions and return `{"success": False, "error": str(e)}`
-- **Dependencies** — check if a library is already used before adding a new one
-- **Legal** — use `scanme.nmap.org` for port scanning tests — the only public host officially permitted for Nmap testing
-- **API keys** — never hardcode keys; use environment variables like `os.getenv("YOUR_API_KEY")`
+| Rule | Detail |
+|---|---|
+| **Consistency** | Every tool returns `{"success": True/False, ...}` |
+| **Validation** | Always validate inputs before making external calls |
+| **Error handling** | Catch exceptions and return `{"success": False, "error": str(e)}` |
+| **Dependencies** | Check if a library is already used before adding a new one |
+| **Legal** | Use `scanme.nmap.org` for port scanning tests — the only public host officially permitted for Nmap testing |
+| **API keys** | Never hardcode keys; always use `os.getenv("YOUR_API_KEY")` |
 
 ---
 
-## ❓ Questions?
+## Questions?
 
-Open an issue on GitHub or reach out on LinkedIn:
-[Gaohar Imran](https://www.linkedin.com/in/gaohar-imran-5a4063379/)
+Open an issue on GitHub or reach out on LinkedIn: [Gaohar Imran](https://www.linkedin.com/in/gaohar-imran-5a4063379/)
