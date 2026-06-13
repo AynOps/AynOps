@@ -2,7 +2,8 @@ name: Welcome Pull Requests
 
 on:
   pull_request_target:
-    types: [opened]
+    types:
+      - opened
 
 permissions:
   issues: write
@@ -13,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Welcome first-time contributors
+      - name: Welcome contributors
         uses: actions/github-script@v8
         with:
           script: |
@@ -25,14 +26,14 @@ jobs:
               issue_number: pr.number,
               body: `🎉 Thanks for your contribution to AynOps!
 
-Hello @${pr.user.login}, thank you for opening this pull request. We appreciate your effort in improving the project.
+            Hello @${pr.user.login}, thank you for opening this pull request. We appreciate your effort in improving the project.
 
-Before requesting a review, please ensure that:
+            Before requesting a review, please ensure that:
 
-- [ ] Documentation has been updated (if applicable)
-- [ ] No secrets or sensitive information have been committed
-- [ ] Dependencies have been updated appropriately (if applicable)
-- [ ] \`.env.example\` has been updated (if applicable)
+            - [ ] Documentation has been updated (if applicable)
+            - [ ] No secrets or sensitive information have been committed
+            - [ ] Dependencies have been updated appropriately (if applicable)
+            - [ ] .env.example has been updated (if applicable)
 
-A maintainer will review your contribution soon. Thanks again for being a part of the AynOps community! 🚀`
+            A maintainer will review your contribution soon. Thanks again for being a part of the AynOps community! 🚀`
             });
