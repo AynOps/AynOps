@@ -14,7 +14,7 @@ A Model Context Protocol (MCP) server that gives AI Clients real-time cybersecur
   <a href="https://opensource.org/licenses/MIT" target="_blank"> <img src="https://img.shields.io/badge/license-MIT-green.svg" /></a>
   <a href="https://github.com/AynOps/AynOps" target="_blank"> <img src="https://img.shields.io/github/stars/AynOps/AynOps?style=social" /></a>
   <a href="https://github.com/AynOps/AynOps/network/members" target="_blank"><img src="https://img.shields.io/github/forks/AynOps/AynOps?style=social" /></a>
-  <a href="https://pypi.org/project/AynOps/" target="_blank"><img src="https://img.shields.io/pypi/v/Cybersecurity-MCP-Server?label=version" /></a>
+  <a href="https://pypi.org/project/AynOps/" target="_blank"><img src="https://img.shields.io/pypi/v/AynOps?label=version" /></a>
   <a href="https://github.com/AynOps/AynOps/issues" target="_blank"><img src="https://img.shields.io/github/issues/AynOps/AynOps" /></a>
   <a href="https://glama.ai/mcp/servers/gaoharimran29-glitch/AynOps">
   <img src="https://glama.ai/mcp/servers/gaoharimran29-glitch/AynOps/badges/score.svg" /></a>
