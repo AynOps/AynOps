@@ -18,6 +18,9 @@ A Model Context Protocol (MCP) server that gives AI Clients real-time cybersecur
   <a href="https://github.com/AynOps/AynOps/issues" target="_blank"><img src="https://img.shields.io/github/issues/AynOps/AynOps" /></a>
   <a href="https://glama.ai/mcp/servers/gaoharimran29-glitch/AynOps">
   <img src="https://glama.ai/mcp/servers/gaoharimran29-glitch/AynOps/badges/score.svg" /></a>
+  <a href="https://www.python.org/downloads/" target="_blank">
+  <img src="https://img.shields.io/badge/python-3.12+-blue.svg" />
+</a>
 </div>
 
 
