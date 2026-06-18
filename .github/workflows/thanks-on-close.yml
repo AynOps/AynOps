@@ -15,13 +15,19 @@ jobs:
       - uses: actions/github-script@v8
         with:
           script: |
+            const username = context.payload.issue.user.login;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: [
-                "✅ Thanks for your report! This issue has been closed.",
+                `🎉 This issue has been closed — nice work, @${username}!`,
                 "",
-                "Feel free to open a new one if the problem persists."
+                "Thank you so much for your contribution to AynOps!",
+                "Every contribution helps make this project better for everyone. 🙏",
+                "",
+                "If AynOps has been useful to you, consider giving it a ⭐ star —",
+                "it helps the project grow and reach more people:",
+                "https://github.com/AynOps/AynOps"
               ].join("\n")
             });
