@@ -21,7 +21,7 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: [
-                `🎉 This issue has been closed — nice work, @${username}!`,
+                `🎉 This issue has been closed — nice work`,
                 "",
                 "Thank you so much for your contribution to AynOps!",
                 "Every contribution helps make this project better for everyone. 🙏",
