@@ -25,7 +25,11 @@ def asn_lookup(target: str) -> dict:
         if not api_key:
             return {
                 "success": False,
-                "error": "Environment variable 'IP_API_KEY' is missing or not set."
+                "error": (
+                    "IP_API_KEY environment variable is not set. "
+                    "Get a free key at https://ipapi.com and add it to "
+                    "your Claude Desktop config under 'IP_API_KEY'."
+                )
             }
 
         if "://" in target:
