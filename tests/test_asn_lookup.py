@@ -1,15 +1,18 @@
-from unittest.mock import Mock, MagicMock, patch, call
-import unittest
-import socket
-from tools.asn_tool import asn_lookup
 import os
+import socket
+import unittest
+from unittest.mock import Mock, patch
+
+import requests
+
+from tools.asn_tool import asn_lookup
 
 
 class TestAsnLookup(unittest.TestCase):
 
     def test_missing_api_key_returns_error(self):
         with patch.dict(os.environ, {}, clear=True):
-            result = asn_lookup("example.com")
+            result = asn_lookup("8.8.8.8")
         self.assertFalse(result["success"])
         self.assertIn("IP_API_KEY", result["error"])
 
@@ -52,7 +55,6 @@ class TestAsnLookup(unittest.TestCase):
     @patch.dict(os.environ, {"IP_API_KEY": "test-key"})
     @patch("tools.asn_tool.requests.get")
     def test_api_timeout_returns_error(self, mock_get):
-        import requests
         mock_get.side_effect = requests.exceptions.Timeout()
 
         result = asn_lookup("8.8.8.8")
