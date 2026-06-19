@@ -51,5 +51,16 @@ class TestWhoisLookup(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("WHOIS server timeout", result["error"])
 
+    @patch("tools.whois_tool.whois.whois")
+    def test_whois_none_dates_return_null(self, mock_whois):
+        m = self._mock_whois_result()
+        m.expiration_date = None
+        m.creation_date = None
+        mock_whois.return_value = m
+        result = whois_lookup("example.com")
+        self.assertTrue(result["success"])
+        self.assertIsNone(result["expiration_date"])
+        self.assertIsNone(result["creation_date"])
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

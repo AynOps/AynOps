@@ -10,6 +10,8 @@ def whois_lookup(domain: str) -> dict:
         result = whois.whois(domain)
 
         def safe_date(d):
+            if d is None:
+                return None
             return str(d[0] if isinstance(d, list) else d)
 
         return {
