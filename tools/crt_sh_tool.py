@@ -52,6 +52,7 @@ def cert_transparency(domain: str) -> Dict[str, Any]:
         data = response.json()
 
         unique_subdomains = set()
+        wildcards = set()
         certificates = []
         seen = set()
 
@@ -63,9 +64,16 @@ def cert_transparency(domain: str) -> Dict[str, Any]:
 
             for name in names:
                 name = name.strip().lower()
-                if not name or name.startswith("*."):
-                    name = name[2:] if name.startswith("*.") else name
-                    
+
+                if not name:
+                    continue
+
+                if name.startswith("*."):
+                    wildcard_pattern = name[1:]  # "*.example.com" -> ".example.com"
+                    if wildcard_pattern.endswith(domain):
+                        wildcards.add(wildcard_pattern)
+                    continue
+
                 if not name.endswith(domain) or name == domain:
                     continue
 
@@ -90,6 +98,7 @@ def cert_transparency(domain: str) -> Dict[str, Any]:
             "total_certificates": len(certificates),
             "total_unique_subdomains": len(unique_subdomains),
             "unique_subdomains": sorted(unique_subdomains),
+            "wildcards_found": sorted(wildcards),
             "returned_certificates": min(50, len(certificates)),
             "truncated": len(certificates) > 50,
             "certificates": certificates[:50]
@@ -107,6 +116,7 @@ def cert_transparency(domain: str) -> Dict[str, Any]:
                 "total_certificates": 0,
                 "total_unique_subdomains": len(fallback_subdomains),
                 "unique_subdomains": sorted(list(fallback_subdomains)),
+                "wildcards_found": [],
                 "returned_certificates": 0,
                 "truncated": False,
                 "certificates": [],
