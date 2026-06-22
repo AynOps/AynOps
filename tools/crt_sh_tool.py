@@ -70,7 +70,7 @@ def cert_transparency(domain: str) -> Dict[str, Any]:
 
                 if name.startswith("*."):
                     wildcard_pattern = name[1:]  # "*.example.com" -> ".example.com"
-                    if wildcard_pattern.endswith(domain):
+                    if wildcard_pattern.endswith("." + domain) or wildcard_pattern == "." + domain:
                         wildcards.add(wildcard_pattern)
                     continue
 
