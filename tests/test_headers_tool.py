@@ -15,11 +15,12 @@ def _resp(status_code: int, headers: dict):
     that look like a production bug but are actually just an inaccurate
     mock.
 
-    headers is a plain dict on input, curl_cffi (like `requests`)
-    already combines a repeated header into one comma-joined value
-    during its own parsing, so by the time this tool sees resp.headers,
-    a duplicate-header scenario is already a single combined string,
-    not separate entries.
+    headers is a plain dict on input, note this means a genuinely
+    duplicate header name can't be represented this way (a Python dict
+    literal collapses a repeated key before Headers() ever sees it).
+    See test_dict_headers_items_preserves_genuinely_duplicate_headers
+    below for the test that specifically covers that case using a
+    list of tuples instead.
     """
     m = Mock()
     m.status_code = status_code
@@ -91,9 +92,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_hsts_max_age_zero_flagged_high(self, mock_get):
-        """Fix: max-age=0 actively disables HSTS (a real rollback
-        technique), so it must be flagged as high severity, not lumped
-        in with merely-short-but-nonzero durations as medium."""
         mock_get.return_value = _resp(200, {
             "Strict-Transport-Security": "max-age=0",
         })
@@ -104,8 +102,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_hsts_negative_max_age_flagged_high(self, mock_get):
-        """Fix: a negative max-age is invalid per spec, not just "weak", so it
-        must be flagged distinctly from a low-but-valid value."""
         mock_get.return_value = _resp(200, {
             "Strict-Transport-Security": "max-age=-1",
         })
@@ -116,9 +112,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_hsts_malformed_max_age_value_caught(self, mock_get):
-        """A non-numeric max-age (e.g. a malformed or hand-edited header)
-        must be caught by the except clause, not raise an uncaught
-        exception."""
         mock_get.return_value = _resp(200, {
             "Strict-Transport-Security": "max-age=notanumber",
         })
@@ -130,9 +123,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_hsts_present_without_max_age_directive(self, mock_get):
-        """HSTS header present but with no max-age= substring at all
-        (e.g. just "includeSubDomains"), distinct from HSTS being
-        completely absent."""
         mock_get.return_value = _resp(200, {
             "Strict-Transport-Security": "includeSubDomains",
         })
@@ -144,10 +134,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_hsts_missing_includesubdomains_upgrades_severity(self, mock_get):
-        """A valid, long max-age without includeSubDomains should still
-        be flagged (and the severity upgraded from the default "low"
-        to "medium" for the missing directive), not silently accepted
-        as fully clean."""
         mock_get.return_value = _resp(200, {
             "Strict-Transport-Security": "max-age=31536000",
         })
@@ -198,11 +184,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_csp_missing_default_src_flagged_once(self, mock_get):
-        """Regression test for the redundant-check cleanup: a CSP with
-        neither default-src 'self' nor 'none' should be flagged exactly
-        once (the old code had two nested checks for the exact same
-        condition -- this verifies behavior is unchanged after removing
-        the dead duplicate, not just that it doesn't crash)."""
         mock_get.return_value = _resp(200, {
             "Content-Security-Policy": "script-src 'self'",
         })
@@ -229,7 +210,16 @@ class TestHeadersAnalyzer(unittest.TestCase):
         a header that appears more than once in a real response into one
         comma-joined value during parsing, verify the analysis logic
         correctly flags an unsafe directive even when it's not first in
-        an already-combined value."""
+        an already-combined value.
+
+        Note: this test's mock is built from a Python dict, so it can
+        only represent a value that is ALREADY combined into one string.
+        It tests the downstream CSP-parsing logic, not curl_cffi's
+        own merging mechanism. See
+        test_dict_headers_items_preserves_genuinely_duplicate_headers
+        for the test that covers the merging mechanism itself using
+        genuinely separate header entries.
+        """
         mock_get.return_value = _resp(200, {
             "Content-Security-Policy": "default-src 'self', script-src 'unsafe-inline'",
         })
@@ -237,6 +227,39 @@ class TestHeadersAnalyzer(unittest.TestCase):
         csp = result["headers"]["content-security-policy"]
         self.assertIn("default-src 'self'", csp["value"])
         self.assertIn("script-src 'unsafe-inline'", csp["value"])
+        self.assertEqual(csp["severity"], "high")
+
+    @patch("tools.headers_tool.requests.get")
+    def test_dict_headers_items_preserves_genuinely_duplicate_headers(self, mock_get):
+        """Regression test requested in review: the test above
+        (test_combined_duplicate_csp_directives_are_analyzed_correctly)
+        builds Headers() from a Python dict literal, but a dict
+        literal with a duplicate key collapses to a single entry in
+        plain Python before Headers() ever receives it, so that test
+        never actually exercised curl_cffi's own duplicate-merging
+        behavior, only the downstream CSP-parsing logic on a value
+        that was already a single combined string.
+
+        This test instead builds a real curl_cffi Headers object from
+        a list of tuples, which CAN represent two genuinely separate
+        entries for the same header name, unlike a dict, to directly
+        verify that dict(resp.headers.items()) in _walk_redirect_chain
+        does not silently collapse to just one of them, the way the
+        original urllib-based implementation did.
+        """
+        mock_resp = Mock()
+        mock_resp.status_code = 200
+        mock_resp.headers = Headers([
+            ("Content-Security-Policy", "script-src 'unsafe-inline'"),
+            ("Content-Security-Policy", "default-src 'self'"),
+        ])
+        mock_get.return_value = mock_resp
+
+        result = headers_analyzer("example.com")
+
+        csp = result["headers"]["content-security-policy"]
+        self.assertIn("script-src 'unsafe-inline'", csp["value"])
+        self.assertIn("default-src 'self'", csp["value"])
         self.assertEqual(csp["severity"], "high")
 
     @patch("tools.headers_tool.requests.get")
@@ -249,9 +272,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_x_frame_options_unrecognized_value_flagged(self, mock_get):
-        """A value that's neither DENY nor SAMEORIGIN (e.g. a malformed
-        or non-standard directive) must be flagged, not silently treated
-        as acceptable just because the header is present."""
         mock_get.return_value = _resp(200, {"X-Frame-Options": "ALLOW-FROM https://example.com"})
         result = headers_analyzer("example.com")
         xfo = result["headers"]["x-frame-options"]
@@ -285,11 +305,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_referrer_policy_weak_value_flagged(self, mock_get):
-        """A Referrer-Policy value that's present but not in the
-        recognized "good" list (e.g. "unsafe-url", which leaks the full
-        URL including path and query string cross-origin) must be
-        flagged as leaking more than necessary, not silently accepted
-        just because the header exists."""
         mock_get.return_value = _resp(200, {"Referrer-Policy": "unsafe-url"})
         result = headers_analyzer("example.com")
         rp = result["headers"]["referrer-policy"]
@@ -298,8 +313,7 @@ class TestHeadersAnalyzer(unittest.TestCase):
         self.assertEqual(rp["severity"], "medium")
 
     # ------------------------------------------------------------------
-    # Permissions-Policy content analysis (fix: presence-only -> low was
-    # treated as automatically "fine" regardless of content)
+    # Permissions-Policy content analysis
     # ------------------------------------------------------------------
 
     @patch("tools.headers_tool.requests.get")
@@ -333,10 +347,7 @@ class TestHeadersAnalyzer(unittest.TestCase):
         self.assertEqual(pp["severity"], "low")
 
     # ------------------------------------------------------------------
-    # WAF / bot-challenge detection (#62: "differences between browser
-    # and non-browser requests") -- confirmed via live testing that a
-    # site behind Cloudflare can serve a JS challenge page instead of
-    # the real site to a non-browser-fingerprinted client.
+    # WAF / bot-challenge detection
     # ------------------------------------------------------------------
 
     @patch("tools.headers_tool.requests.get")
@@ -352,10 +363,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_normal_cloudflare_site_without_challenge_is_analyzed_normally(self, mock_get):
-        """Server: cloudflare alone must not trigger the challenge
-        rejection, only the explicit cf-mitigated: challenge signal
-        should. Plenty of legitimate sites run behind Cloudflare without
-        ever serving a challenge."""
         mock_get.return_value = _resp(200, {
             "Server": "cloudflare",
             "X-Frame-Options": "DENY",
@@ -366,11 +373,7 @@ class TestHeadersAnalyzer(unittest.TestCase):
         self.assertTrue(result["headers"]["x-frame-options"]["present"])
 
     # ------------------------------------------------------------------
-    # Full redirect-chain recovery (#62: "Redirect handling" / "Response
-    # selection"), each hop is fetched individually (allow_redirects=
-    # False) so its own headers are captured, not just the final
-    # destination's. A header present on an intermediate hop but absent
-    # (or different) on the final destination is now fully visible.
+    # Full redirect-chain recovery
     # ------------------------------------------------------------------
 
     @patch("tools.headers_tool.requests.get")
@@ -384,9 +387,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_redirect_captures_each_hops_distinct_headers(self, mock_get):
-        """Root-cause fix: the redirect hop and the final hop
-        have DIFFERENT X-Frame-Options values, and both must be visible
-        in redirect_chain, not just the final one."""
         mock_get.side_effect = [
             _resp(301, {
                 "Location": "https://www.example.com/home",
@@ -408,16 +408,11 @@ class TestHeadersAnalyzer(unittest.TestCase):
         self.assertEqual(
             result["redirect_chain"][1]["headers"]["x-frame-options"], "DENY"
         )
-        # The final analysis must reflect the DESTINATION's header, not
-        # the redirect's.
         self.assertEqual(result["headers"]["x-frame-options"]["value"], "DENY")
         self.assertEqual(result["final_url"], "https://www.example.com/home")
 
     @patch("tools.headers_tool.requests.get")
     def test_relative_location_header_is_resolved(self, mock_get):
-        """A redirect's Location header is often a relative path, not a
-        full URL. It must be resolved against the current URL, not
-        treated as a literal (broken) next destination."""
         mock_get.side_effect = [
             _resp(301, {"Location": "/new-path"}),
             _resp(200, {"X-Frame-Options": "DENY"}),
@@ -427,14 +422,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_self_redirecting_url_fails_explicitly(self, mock_get):
-        """Regression test for a bug found during final audit: a server
-        misconfigured to 301-redirect a URL to itself (a real pattern,
-        e.g. broken nginx/Apache redirect rules) would previously be
-        silently analyzed as if its 301 response were the real page,
-        reporting redirected=False (technically true by the old len(hops)
-        > 1 check, since the loop guard stopped the chain at 1 hop) while
-        actually surfacing the REDIRECT's own headers as the site's
-        configuration. Must now fail explicitly instead."""
         mock_get.return_value = _resp(301, {
             "Location": "https://example.com",
             "X-Frame-Options": "SAMEORIGIN",
@@ -442,19 +429,13 @@ class TestHeadersAnalyzer(unittest.TestCase):
         result = headers_analyzer("example.com")
         self.assertFalse(result["success"])
         self.assertIn("error", result)
-        # Must not contain a "headers" analysis key at all, there is no
-        # successful analysis to report.
         self.assertNotIn("headers", result)
 
     @patch("tools.headers_tool.requests.get")
     def test_redirect_loop_does_not_hang(self, mock_get):
-        """A redirect pointing back to an already-visited URL must stop
-        (not loop forever). And since it never resolves to real page
-        content, it must fail explicitly rather than silently analyzing
-        whichever redirect response it stopped on."""
         mock_get.side_effect = [
             _resp(301, {"Location": "https://example.com/b"}),
-            _resp(301, {"Location": "https://example.com"}),  # loops back
+            _resp(301, {"Location": "https://example.com"}),
         ]
         result = headers_analyzer("example.com")
         self.assertFalse(result["success"])
@@ -462,10 +443,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_redirect_chain_caps_at_max_hops(self, mock_get):
-        """A long chain of redirects that never resolves to real content
-        must stop at a reasonable cap (bounded request count) and fail
-        explicitly, not silently analyze whichever redirect response
-        it happened to stop on as if it were the real page."""
         def make_redirect(i):
             return _resp(301, {"Location": f"https://example.com/{i}"})
         mock_get.side_effect = [make_redirect(i) for i in range(20)]
@@ -476,10 +453,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_redirect_missing_location_header_stops_cleanly(self, mock_get):
-        """A 301/302 with no Location header is malformed and has no
-        real destination to analyze, must stop gracefully (not crash
-        on a None location) and fail explicitly rather than analyzing
-        the broken redirect response itself as if it were the page."""
         mock_get.return_value = _resp(301, {})
         result = headers_analyzer("example.com")
         self.assertFalse(result["success"])
@@ -507,14 +480,6 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool._walk_redirect_chain", return_value=[])
     def test_empty_hop_list_returns_failure(self, _):
-        """_walk_redirect_chain always appends at least one hop before
-        it can return via the real requests.get() call site (max_hops
-        defaults to 8, and `seen` always starts empty), so this branch
-        is unreachable through the public API today. It's kept as a
-        defensive guard in case _walk_redirect_chain's contract changes
-        later (e.g. max_hops becomes caller-configurable down to 0).
-        Tested here by patching the internal function directly, since
-        there's no way to trigger it through headers_analyzer()."""
         result = headers_analyzer("example.com")
         self.assertFalse(result["success"])
         self.assertIn("error", result)
