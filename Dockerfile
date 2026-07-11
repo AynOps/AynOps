@@ -26,6 +26,4 @@ COPY utils ./utils
 
 ENV PYTHONUNBUFFERED=1
 
-EXPOSE 8000
-
 CMD ["uv", "run", "server.py"]
