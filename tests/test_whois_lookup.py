@@ -1,5 +1,5 @@
 from unittest.mock import MagicMock, patch
-from concurrent.futures import TimeoutError as FuturesTimeoutError
+import socket
 import unittest
 from tools.whois_tool import whois_lookup
 
@@ -52,13 +52,15 @@ class TestWhoisLookup(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("WHOIS server timeout", result["error"])
 
-    @patch("tools.whois_tool.ThreadPoolExecutor")
-    def test_whois_executor_timeout(self, mock_executor_class):
-        """Test that executor timeout is caught and returns proper error message."""
-        mock_executor = MagicMock()
-        mock_executor_class.return_value.__enter__.return_value = mock_executor
-        mock_executor.submit.return_value.result.side_effect = FuturesTimeoutError()
+    @patch("tools.whois_tool.whois.whois", side_effect=TimeoutError("WHOIS lookup timed out"))
+    def test_whois_timeout_error_caught(self, _):
+        result = whois_lookup("example.com")
+        self.assertFalse(result["success"])
+        self.assertIn("timed out after", result["error"])
+        self.assertIn("10 seconds", result["error"])
 
+    @patch("tools.whois_tool.whois.whois", side_effect=socket.timeout("connection timed out"))
+    def test_whois_socket_timeout_caught(self, _):
         result = whois_lookup("example.com")
         self.assertFalse(result["success"])
         self.assertIn("timed out after", result["error"])
