@@ -1,4 +1,4 @@
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 import unittest
 from tools.whois_tool import whois_lookup
 
@@ -50,6 +50,12 @@ class TestWhoisLookup(unittest.TestCase):
         result = whois_lookup("example.com")
         self.assertFalse(result["success"])
         self.assertIn("WHOIS server timeout", result["error"])
+
+    @patch("tools.whois_tool.whois.whois", side_effect=TimeoutError("WHOIS lookup timed out"))
+    def test_whois_timeout_error_caught(self, _):
+        result = whois_lookup("example.com")
+        self.assertFalse(result["success"])
+        self.assertIn("timed out", result["error"].lower())
 
     @patch("tools.whois_tool.whois.whois")
     def test_whois_none_dates_return_null(self, mock_whois):

@@ -1,13 +1,16 @@
 import whois
 from utils.helpers import is_valid_domain
 
+WHOIS_TIMEOUT_SECONDS = 10
+
+
 def whois_lookup(domain: str) -> dict:
     """Perform WHOIS lookup for a domain."""
     try:
         if not is_valid_domain(domain):
             return {"success": False, "error": "Invalid domain format"}
 
-        result = whois.whois(domain)
+        result = whois.whois(domain, timeout=WHOIS_TIMEOUT_SECONDS)
 
         def safe_date(d):
             if d is None:
