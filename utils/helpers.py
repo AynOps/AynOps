@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 
 def is_valid_domain(domain: str) -> bool:
     """Return whether a domain is a valid fully qualified domain name.
@@ -41,3 +42,27 @@ def get_english_description(cve: dict) -> str:
     descriptions = cve.get("descriptions", [])
     english = next((item for item in descriptions if item.get("lang") == "en"), None)
     return english.get("value", "") if english else ""
+
+def safe_parse_datetime(date_input) -> datetime | None:
+    """Helper to catch and resolve structural variances in string dates."""
+    if not date_input:
+        return None
+    
+    # If the input is already a datetime object (some tools return structured objects)
+    if isinstance(date_input, datetime):
+        return date_input
+        
+    clean_str = str(date_input).strip().replace("Z", "+00:00")
+    
+    # Try common formats sequentially
+    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S%z", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(clean_str, fmt)
+        except (ValueError, TypeError):
+            continue
+            
+    # Fallback onto standard ISO parsing
+    try:
+        return datetime.fromisoformat(clean_str)
+    except (ValueError, TypeError):
+        return None
