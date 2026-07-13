@@ -43,15 +43,15 @@ It is also listed on glama mcp registry.
 | `dns_enumeration` | A, AAAA, MX, NS, TXT, CNAME, SOA records + common subdomain brute-forcing |
 | `port_scan` | Nmap-powered scanner with service/version detection and security warnings |
 | `ssl_inspect` | SSL/TLS certificate — issuer, expiry, cipher strength, SANs, TLS version |
-| `headers_analyzer` | Analyzes HTTP security headers — checks HSTS, CSP, X-Frame-Options, and more with severity ratings and misconfiguration details |
 | `email_security_check` | Checks SPF, DKIM, and DMARC DNS records — returns a security_score, rating, and actionable recommendations for missing or weak configurations |
 | `tech_stack_detect` | Web server, CMS, JS frameworks, CDN, analytics, and security header scoring |
 | `cert_transparency` | Subdomain discovery via crt.sh Certificate Transparency logs with an automatic fallback to HackerTarget passive DNS on timeouts |
 | `asn_lookup` | Autonomous System Number (ASN) and network ownership lookup — identifies hosting provider, ISP, organization, geolocation, and infrastructure ownership for domains or IP addresses |
-| `cve_lookup` | Search NVD for known CVEs by software name and version (no API key required) |
 | `ip_reputation` | Check if an IP is flagged as malicious via AbuseIPDB (api key requied) |
 | `cloud_exposure_tool` | Checks for publicly accessible AWS S3, Azure Blob Storage, and Google Cloud Storage buckets using common bucket naming patterns derived from the target domain.|
 | `full_recon` | Runs all core tools in parallel and returns combined results with claude analysis |
+| `headers_analyzer` | Analyzes HTTP security headers — checks HSTS, CSP, X-Frame-Options, and more with severity ratings and misconfiguration details (Not included in full_recon) |
+| `cve_lookup` | Search NVD for known CVEs by software name and version (no API key required) (Not included in full_recon) |
 
 ---
 
@@ -281,6 +281,10 @@ Intended for:
 ├── .github/              # GitHub Actions workflows and templates
 ├── tests/                # Unit tests
 ├── tools/                # MCP tool implementations
+  ├── prompts/            # AI prompt templates
+  ├── signals/            # Signal extraction framework used by full_recon
+    ├── registry.py       # Registers tools and their signal extractors
+    └── extractor.py      # Executes all registered extractors and aggregates signals
 ├── utils/                # Shared helper utilities
 ├── server.py             # MCP server entry point
 ├── pyproject.toml        # Project metadata and dependencies
