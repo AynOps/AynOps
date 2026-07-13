@@ -72,7 +72,8 @@ class TestPortScan(unittest.TestCase):
     @patch("tools.portscan_tool.nmap.PortScanner")
     def test_scan_timeout_returns_structured_error(self, mock_cls):
         import nmap
-        mock_cls.return_value.scan.side_effect = nmap.PortScannerTimeout("timed out")
+        timeout_exc = getattr(nmap, "PortScannerTimeout", TimeoutError)
+        mock_cls.return_value.scan.side_effect = timeout_exc("timed out")
 
         result = port_scan("example.com")
 
