@@ -150,8 +150,11 @@ TOOL_REGISTRY = [
 ]
 ```
 
-- `wave`: 1 if the tool only needs `domain`. Use 2/3 if it needs `results` from an earlier wave, see `ip_reputation` for the pattern.
-- `should_run` / `skip_reason`: optional, for tools that depend on another tool's output (see `ip_reputation`).
+- `wave`: waves run in order (1 -> 2 -> 3), tools within a wave run in parallel. Pick by category, not just by whether the tool needs `domain`:
+  - **Wave 1**, lightweight API and infrastructure record lookups (`whois`, `dns`, `ssl`, `email_security`, `asn`).
+  - **Wave 2**, aggressive port/tech scans and throttled log aggregators (`ports`, `techstack`, `ct_logs`; crt.sh rate-limits).
+  - **Wave 3**, tools that depend on Wave 1/2 output (`ip_reputation`, which needs an IP resolved by `asn`/`dns`).
+- `should_run` / `skip_reason`: use when the tool can't run without another tool's successful output, e.g. `ip_reputation` needs an IP address, so it only runs if `asn`/`dns` resolved one. If `should_run` returns `False`, `fn` is never called and the tool is recorded as skipped with `skip_reason` instead of a result.
 
 ---
 
@@ -167,7 +170,7 @@ def your_tool_extractor(result, signals):
     signals["your_signal_key"] = result.get("some_field")
 ```
 
-Add `your_signal_key` with a default value to the base `signals` dict in `tools/signals/extractor.py`, otherwise `_format_signals_block()` will `KeyError` on skipped/failed runs.
+Add `your_signal_key` with a default value to the base `signals` dict in `tools/signals/extractor.py`, otherwise `_format_signals_block()` will `KeyError` on skipped/failed runs. Match the default to the signal's type, not just `None`: `None` for a not-yet-known scalar (`domain_expiry_days`), `[]` for a list (`dns_missing_records`, `open_ports`), `{}` for grouped data (`email_security`), `0` for a counter (`subdomain_count`), `False` for a flag (`ip_reputation_flagged`).
 
 ---
 
