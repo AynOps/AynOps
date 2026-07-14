@@ -26,6 +26,20 @@ class TestPortScan(unittest.TestCase):
         self.assertIn("results", result)
 
     @patch("tools.portscan_tool.nmap.PortScanner")
+    def test_scan_uses_nmap_and_application_timeouts(self, mock_cls):
+        scanner = self._make_scanner_mock()
+        mock_cls.return_value = scanner
+
+        result = port_scan("example.com", "service")
+
+        self.assertTrue(result["success"])
+        scanner.scan.assert_called_once_with(
+            hosts="example.com",
+            arguments="-sV -F --host-timeout 45s",
+            timeout=50,
+        )
+
+    @patch("tools.portscan_tool.nmap.PortScanner")
     def test_scan_includes_port_details(self, mock_cls):
         mock_cls.return_value = self._make_scanner_mock()
         result = port_scan("example.com")
@@ -54,6 +68,17 @@ class TestPortScan(unittest.TestCase):
 
         self.assertFalse(result["success"])
         self.assertIn("Nmap not found", result["error"])
+
+    @patch("tools.portscan_tool.nmap.PortScanner")
+    def test_scan_timeout_returns_structured_error(self, mock_cls):
+        import nmap
+        timeout_exc = getattr(nmap, "PortScannerTimeout", TimeoutError)
+        mock_cls.return_value.scan.side_effect = timeout_exc("timed out")
+
+        result = port_scan("example.com")
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "Port scan timed out")
 
     @patch("tools.portscan_tool.nmap.PortScanner")
     def test_invalid_scan_type_returns_error(self, mock_cls):

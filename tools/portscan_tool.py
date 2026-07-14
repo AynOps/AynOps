@@ -1,5 +1,15 @@
 import nmap
 
+SCAN_CONFIG = {
+    "basic": {"args": "-F --host-timeout 30s", "timeout": 35},
+    "service": {"args": "-sV -F --host-timeout 45s", "timeout": 50},
+    "os": {"args": "-O -F --host-timeout 45s", "timeout": 50},
+    "full": {"args": "-p- --host-timeout 5m", "timeout": 310},
+    "vuln": {"args": "--script vuln -F --host-timeout 90s", "timeout": 100},
+}
+
+PORT_SCAN_TIMEOUT_ERRORS = (TimeoutError, getattr(nmap, "PortScannerTimeout", TimeoutError))
+
 def port_scan(target: str, scan_type: str = "basic") -> dict:
     """
     Perform Nmap port scan on a target IP or domain.
@@ -11,29 +21,25 @@ def port_scan(target: str, scan_type: str = "basic") -> dict:
     - "full"    : All 65535 ports, slow (-p-)
     - "vuln"    : Basic vulnerability scripts (--script vuln -F)
     """
-    scan_args = {
-        "basic":   "-F",
-        "service": "-sV -F",
-        "os":      "-O -F",
-        "full":    "-p-",
-        "vuln":    "--script vuln -F"
-    }
-
-    if scan_type not in scan_args:
+    if scan_type not in SCAN_CONFIG:
         return {
             "success": False,
             "error": (
                 f"Invalid scan_type '{scan_type}'. Valid options are: "
-                f"{', '.join(scan_args.keys())}"
+                f"{', '.join(SCAN_CONFIG.keys())}"
             ),
-            "valid_scan_types": list(scan_args.keys()),
+            "valid_scan_types": list(SCAN_CONFIG.keys()),
         }
 
     try:
         scanner = nmap.PortScanner()
 
-        args = scan_args[scan_type]
-        scanner.scan(hosts=target, arguments=args)
+        config = SCAN_CONFIG[scan_type]
+        scanner.scan(
+            hosts=target,
+            arguments=config["args"],
+            timeout=config["timeout"],
+        )
 
         results = []
         for host in scanner.all_hosts():
@@ -72,6 +78,8 @@ def port_scan(target: str, scan_type: str = "basic") -> dict:
             "results": results
         }
 
+    except PORT_SCAN_TIMEOUT_ERRORS:
+        return {"success": False, "error": "Port scan timed out"}
     except nmap.PortScannerError as e:
         return {"success": False, "error": f"Nmap not found or not installed: {str(e)}"}
     except Exception as e:
