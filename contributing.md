@@ -126,6 +126,92 @@ VIRUSTOTAL_API_KEY=your_api_key_here
 
 ---
 
+## Adding a New Tool to Full Recon
+
+Additional steps on top of [How to Add a New Tool](#how-to-add-a-new-tool), do those first.
+
+### 1. Register the Tool
+
+Add an entry to `TOOL_REGISTRY` in `tools/signals/registry.py`:
+
+```python
+from tools.your_tool_file import your_tool_name
+from tools.signals.your_tool_file import your_tool_extractor
+
+TOOL_REGISTRY = [
+    ...
+    {
+        "name": "your_tool",
+        "fn": your_tool_name,
+        "wave": 1,
+        "args": lambda domain, results: (domain,),
+        "extractor": your_tool_extractor,
+    },
+]
+```
+
+- `wave`: waves run in order (1 -> 2 -> 3), tools within a wave run in parallel. Pick by category, not just by whether the tool needs `domain`:
+  - **Wave 1**, lightweight API and infrastructure record lookups (`whois`, `dns`, `ssl`, `email_security`, `asn`).
+  - **Wave 2**, aggressive port/tech scans and throttled log aggregators (`ports`, `techstack`, `ct_logs`; crt.sh rate-limits).
+  - **Wave 3**, tools that depend on Wave 1/2 output (`ip_reputation`, which needs an IP resolved by `asn`/`dns`).
+- `should_run` / `skip_reason`: use when the tool can't run without another tool's successful output, e.g. `ip_reputation` needs an IP address, so it only runs if `asn`/`dns` resolved one. If `should_run` returns `False`, `fn` is never called and the tool is recorded as skipped with `skip_reason` instead of a result.
+
+---
+
+### 2. Write the Extractor
+
+Add a file in `tools/signals/`:
+
+```python
+def your_tool_extractor(result, signals):
+    if not result.get("success"):
+        return
+
+    signals["your_signal_key"] = result.get("some_field")
+```
+
+Add `your_signal_key` with a default value to the base `signals` dict in `tools/signals/extractor.py`, otherwise `_format_signals_block()` will `KeyError` on skipped/failed runs. Match the default to the signal's type, not just `None`: `None` for a not-yet-known scalar (`domain_expiry_days`), `[]` for a list (`dns_missing_records`, `open_ports`), `{}` for grouped data (`email_security`), `0` for a counter (`subdomain_count`), `False` for a flag (`ip_reputation_flagged`).
+
+---
+
+### 3. Add Auto-Warnings
+
+Append plain-English strings to `signals["auto_warnings"]` when a value crosses a risk threshold. Follow the tiered pattern in `ssl_extractor`:
+
+```python
+if expiry < 0:
+    signals["auto_warnings"].append(f"SSL certificate expired {abs(expiry)} days ago — all HTTPS traffic at risk")
+elif expiry < 14:
+    signals["auto_warnings"].append(f"SSL certificate expires in {expiry} days — CRITICAL, renew immediately")
+```
+
+---
+
+### 4. Update the Report
+
+- Add a line for your signal in `_format_signals_block()` in `tools/fullrecon_tool.py`; required, or the LLM never sees it.
+- Update `tools/prompts/threat_analysis.py` only if the signal needs its own correlation rule (see "EVIDENCE QUALITY RULES").
+
+---
+
+### 5. Update Documentation
+
+- Add the tool to `Included in full_recon` in `README.md`, not `Standalone Tools`.
+
+---
+
+### 6. Add Tests
+
+- Unit test the tool (happy path + failure path).
+- Test the extractor directly with mocked `result` dicts, asserting on `signals`.
+- Update `mock_signals_full` in `tests/test_full_recon.py` if you added a new signal key.
+
+```bash
+pytest tests/ -v
+```
+
+---
+
 ## Steps to Contribute
 
 1. Fork the repo
