@@ -1,13 +1,20 @@
 import re
 from datetime import datetime
 
+_DOMAIN_PATTERN = re.compile(r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$")
+
 def is_valid_domain(domain: str) -> bool:
     """Return whether a domain is a valid fully qualified domain name.
 
     Reject IP addresses, localhost, domains without a TLD, and bare labels.
     """
-    pattern = r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
-    return re.match(pattern, domain) is not None
+    if len(domain) > 253:
+        return False
+
+    if any(len(label) > 63 for label in domain.split(".")):
+        return False
+
+    return _DOMAIN_PATTERN.fullmatch(domain) is not None
 
 def get_cvss_details(cve: dict) -> dict:
     """Extract CVSS severity and base score from an NVD CVE object.
