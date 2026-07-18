@@ -12,14 +12,16 @@ def test_robots_txt_inspect_invalid_domain():
 def test_robots_txt_inspect_happy_path_https(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 200
+    mock_response.url = "https://example.com/robots.txt"
     mock_response.text = """
 User-agent: *
-Disallow: /
-Disallow: /admin
+Disallow: /admin # No admins allowed
+Allow: /admin/public
 Disallow: /backup/
-Disallow: /admin
+
+User-agent: Googlebot
+Disallow: /secret/
 Sitemap: https://example.com/sitemap.xml
-Sitemap: https://example.com/sitemap2.xml
 """
     mock_get.return_value = mock_response
     
@@ -27,24 +29,39 @@ Sitemap: https://example.com/sitemap2.xml
     
     assert result["success"] is True
     assert result["domain"] == "example.com"
-    # / should be filtered out, duplicates should be removed, order preserved
-    assert result["disallowed_paths"] == ["/admin", "/backup/"]
-    assert result["sitemaps"] == ["https://example.com/sitemap.xml", "https://example.com/sitemap2.xml"]
+    assert result["robots_url"] == "https://example.com/robots.txt"
+    
+    # Check top level aggregations
+    assert "/admin" in result["disallowed_paths"]
+    assert "/backup/" in result["disallowed_paths"]
+    assert "/secret/" in result["disallowed_paths"]
+    assert result["allowed_paths"] == ["/admin/public"]
+    assert result["sitemaps"] == ["https://example.com/sitemap.xml"]
+    
+    # Check rule sets
+    assert len(result["rules"]) == 2
+    assert result["rules"][0]["user_agent"] == "*"
+    assert result["rules"][0]["disallow"] == ["/admin", "/backup/"]
+    assert result["rules"][0]["allow"] == ["/admin/public"]
+    
+    assert result["rules"][1]["user_agent"] == "Googlebot"
+    assert result["rules"][1]["disallow"] == ["/secret/"]
+    assert result["rules"][1]["allow"] == []
 
 @patch("tools.robots_txt_tool.requests.get")
 def test_robots_txt_inspect_fallback_to_http(mock_get):
-    # First call (HTTPS) raises an exception, second call (HTTP) succeeds
     mock_response = MagicMock()
     mock_response.status_code = 200
+    mock_response.url = "http://example.com/robots.txt"
     mock_response.text = "User-agent: *\nDisallow: /private"
     
-    # Configure side_effect: first call raises RequestException, second returns mock_response
     mock_get.side_effect = [requests.RequestException("Connection error"), mock_response]
     
     result = robots_txt_inspect("example.com")
     
     assert result["success"] is True
     assert result["domain"] == "example.com"
+    assert result["robots_url"] == "http://example.com/robots.txt"
     assert result["disallowed_paths"] == ["/private"]
     assert mock_get.call_count == 2
 

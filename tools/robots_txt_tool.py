@@ -1,4 +1,5 @@
 import requests
+from urllib.parse import urlparse
 from utils.helpers import is_valid_domain
 
 def robots_txt_inspect(domain: str) -> dict:
@@ -23,26 +24,82 @@ def robots_txt_inspect(domain: str) -> dict:
             response.raise_for_status()
             
         content = response.text
-        disallowed = []
+        robots_url = response.url
+        
+        # We will parse robots.txt into rules by User-agent
+        rules = []
+        current_agent = "*"
+        current_allow = []
+        current_disallow = []
+        
         sitemaps = []
         
         for line in content.splitlines():
+            # Strip inline comments first
+            if "#" in line:
+                line = line.split("#", 1)[0]
             line = line.strip()
-            if line.lower().startswith("disallow:"):
+            
+            if not line:
+                continue
+                
+            line_lower = line.lower()
+            
+            if line_lower.startswith("user-agent:"):
+                # If we were tracking a previous agent that had rules, save it
+                if current_allow or current_disallow:
+                    rules.append({
+                        "user_agent": current_agent,
+                        "allow": list(dict.fromkeys(current_allow)),
+                        "disallow": list(dict.fromkeys(current_disallow))
+                    })
+                    current_allow = []
+                    current_disallow = []
+                
+                current_agent = line.split(":", 1)[1].strip()
+                
+            elif line_lower.startswith("disallow:"):
                 path = line.split(":", 1)[1].strip()
-                # Filter out generic or empty entries
-                if path and path != "/":
-                    disallowed.append(path)
-            elif line.lower().startswith("sitemap:"):
+                if path:
+                    current_disallow.append(path)
+                    
+            elif line_lower.startswith("allow:"):
+                path = line.split(":", 1)[1].strip()
+                if path:
+                    current_allow.append(path)
+                    
+            elif line_lower.startswith("sitemap:"):
                 sitemap = line.split(":", 1)[1].strip()
                 if sitemap:
                     sitemaps.append(sitemap)
-        
+                    
+        # Add the last rule block if it has anything
+        if current_allow or current_disallow or current_agent == "*":
+            # Avoid adding empty duplicate '*' rules if we haven't seen anything
+            if current_allow or current_disallow or not any(r["user_agent"] == "*" for r in rules):
+                rules.append({
+                    "user_agent": current_agent,
+                    "allow": list(dict.fromkeys(current_allow)),
+                    "disallow": list(dict.fromkeys(current_disallow))
+                })
+
+        # For backward compatibility and top-level summary, aggregate all unique paths
+        all_allowed = []
+        all_disallowed = []
+        for r in rules:
+            all_allowed.extend(r["allow"])
+            all_disallowed.extend(r["disallow"])
+            
         return {
             "success": True,
             "domain": domain,
-            "disallowed_paths": list(dict.fromkeys(disallowed)),
-            "sitemaps": list(dict.fromkeys(sitemaps))
+            "robots_url": robots_url,
+            "allowed_paths": list(dict.fromkeys(all_allowed)),
+            "disallowed_paths": list(dict.fromkeys(all_disallowed)),
+            "sitemaps": list(dict.fromkeys(sitemaps)),
+            "crawl_delay": None,
+            "host": None,
+            "rules": rules
         }
 
     except requests.RequestException as e:

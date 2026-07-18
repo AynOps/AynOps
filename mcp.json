@@ -1,7 +1,7 @@
 {
   "name": "AynOps",
   "version": "1.1.2",
-  "description": "A Model Context Protocol server that gives AI Clients real-time cybersecurity reconnaissance capabilities \u00e2\u20ac\u201d WHOIS, DNS enumeration, port scanning, SSL inspection, CVE lookup, IP reputation, ASN lookup and more.",
+  "description": "A Model Context Protocol server that gives AI Clients real-time cybersecurity reconnaissance capabilities — WHOIS, DNS enumeration, port scanning, SSL inspection, CVE lookup, IP reputation, ASN lookup and more.",
   "author": "Gaohar Imran",
   "license": "MIT",
   "homepage": "https://github.com/AynOps/AynOps",
@@ -17,7 +17,7 @@
   "tools": [
     {
       "name": "whois_lookup",
-      "description": "Query domain registration data \u00e2\u20ac\u201d owner, registrar, creation date, expiry, name servers",
+      "description": "Query domain registration data — owner, registrar, creation date, expiry, name servers",
       "input": {
         "domain": "string"
       },
@@ -43,7 +43,7 @@
     },
     {
       "name": "ssl_inspect",
-      "description": "Inspect SSL/TLS certificate \u00e2\u20ac\u201d issuer, expiry, cipher, SANs, TLS version",
+      "description": "Inspect SSL/TLS certificate — issuer, expiry, cipher, SANs, TLS version",
       "input": {
         "domain": "string",
         "port": "integer"
@@ -52,7 +52,7 @@
     },
     {
       "name": "headers_analyzer",
-      "description": "Analyze HTTP response security headers \u00e2\u20ac\u201d checks HSTS, CSP, X-Frame-Options, and more with severity ratings and misconfiguration details",
+      "description": "Analyze HTTP response security headers — checks HSTS, CSP, X-Frame-Options, and more with severity ratings and misconfiguration details",
       "input": {
         "domain": "string"
       },
