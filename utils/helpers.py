@@ -54,11 +54,25 @@ def safe_parse_datetime(date_input) -> datetime | None:
     """Helper to catch and resolve structural variances in string dates."""
     if not date_input:
         return None
-    
+
     # If the input is already a datetime object (some tools return structured objects)
     if isinstance(date_input, datetime):
         return date_input
-        
+
+    # python-whois returns a list of datetimes for some TLDs (e.g. when the
+    # registrar exposes both registry and registrar expiration dates). Take
+    # the first element — they are typically identical, and the alternative
+    # (str(list)) yields "['2025-12-25 00:00:00']" which matches no format
+    # and silently suppresses domain-expiry warnings downstream.
+    if isinstance(date_input, list):
+        if not date_input:
+            return None
+        date_input = date_input[0]
+        if not date_input:
+            return None
+        if isinstance(date_input, datetime):
+            return date_input
+
     clean_str = str(date_input).strip().replace("Z", "+00:00")
     
     # Try common formats sequentially
