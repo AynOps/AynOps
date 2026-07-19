@@ -1,8 +1,9 @@
-import unittest
-from unittest.mock import patch, Mock
-import pytest
+from unittest.mock import Mock, patch
+
 from curl_cffi.requests.errors import RequestsError
+
 from tools.crt_sh_tool import cert_transparency
+
 
 @patch("tools.crt_sh_tool.requests.get")
 def test_cert_transparency_success(mock_get):
@@ -24,6 +25,8 @@ def test_cert_transparency_success(mock_get):
     assert result["source"] == "crt.sh"
     assert "api.example.com" in result["unique_subdomains"]
     assert "dev.example.com" in result["unique_subdomains"]
+    # Pure CT path should not use browser impersonation.
+    assert "impersonate" not in mock_get.call_args.kwargs
 
 
 def test_invalid_domain():
@@ -31,56 +34,40 @@ def test_invalid_domain():
     assert result["success"] is False
 
 
-# Patch BOTH the primary curl_cffi requests AND the standard_requests fallback
-@patch("tools.crt_sh_tool.standard_requests.get")
 @patch("tools.crt_sh_tool.requests.get")
-def test_timeout_with_fallback_success(mock_primary_get, mock_fallback_get):
-    mock_primary_get.side_effect = RequestsError("Operation timed out", 28)
-
-    mock_fallback_response = Mock()
-    mock_fallback_response.status_code = 200
-    mock_fallback_response.text = "api.example.com,1.1.1.1\nvpn.example.com,2.2.2.2"
-    mock_fallback_get.return_value = mock_fallback_response
-
-    result = cert_transparency("example.com")
-
-    assert result["success"] is True
-    assert result["source"] == "hackertarget_fallback"
-    assert "api.example.com" in result["unique_subdomains"]
-    assert "vpn.example.com" in result["unique_subdomains"]
-
-
-@patch("tools.crt_sh_tool.standard_requests.get")
-@patch("tools.crt_sh_tool.requests.get")
-def test_timeout_with_fallback_failure(mock_primary_get, mock_fallback_get):
-    mock_primary_get.side_effect = RequestsError("Operation timed out", 28)
-
-    mock_fallback_response = Mock()
-    mock_fallback_response.status_code = 200
-    mock_fallback_response.text = "API count exceeded - Increase Plan or Log In"
-    mock_fallback_get.return_value = mock_fallback_response
+def test_timeout_returns_clear_ct_error(mock_get):
+    mock_get.side_effect = RequestsError("Operation timed out", 28)
 
     result = cert_transparency("example.com")
 
     assert result["success"] is False
-    assert "error" in result
+    assert result["domain"] == "example.com"
+    assert result["error"] == "Certificate Transparency lookup failed."
+    assert result.get("source") != "hackertarget_fallback"
 
 
-@patch("tools.crt_sh_tool.standard_requests.get")
 @patch("tools.crt_sh_tool.requests.get")
-def test_http_error_trigger_fallback(mock_primary_get, mock_fallback_get):
-    mock_primary_get.side_effect = RequestsError("HTTP 502 Bad Gateway", 502)
-
-    mock_fallback_response = Mock()
-    mock_fallback_response.status_code = 200
-    mock_fallback_response.text = "fallback.example.com,3.3.3.3"
-    mock_fallback_get.return_value = mock_fallback_response
+def test_http_error_returns_clear_ct_error(mock_get):
+    mock_get.side_effect = RequestsError("HTTP 502 Bad Gateway", 502)
 
     result = cert_transparency("example.com")
 
-    assert result["success"] is True
-    assert result["source"] == "hackertarget_fallback"
-    assert "fallback.example.com" in result["unique_subdomains"]
+    assert result["success"] is False
+    assert result["error"] == "Certificate Transparency lookup failed."
+
+
+@patch("tools.crt_sh_tool.requests.get")
+def test_invalid_json_returns_clear_ct_error(mock_get):
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.side_effect = ValueError("No JSON")
+    mock_get.return_value = mock_response
+
+    result = cert_transparency("example.com")
+
+    assert result["success"] is False
+    assert result["error"] == "Certificate Transparency lookup failed."
 
 
 @patch("tools.crt_sh_tool.requests.get")
@@ -123,6 +110,7 @@ def test_wildcard_on_root_domain_is_captured(mock_get):
     assert result["unique_subdomains"] == []
     assert result["total_unique_subdomains"] == 0
 
+
 @patch("tools.crt_sh_tool.requests.get")
 def test_mixed_wildcard_and_concrete_subdomain(mock_get):
     mock_response = Mock()
@@ -142,6 +130,7 @@ def test_mixed_wildcard_and_concrete_subdomain(mock_get):
     assert ".example.com" in result["wildcards_found"]
     assert "api.example.com" in result["unique_subdomains"]
 
+
 @patch("tools.crt_sh_tool.requests.get")
 def test_unrelated_wildcard_is_filtered_out(mock_get):
     mock_response = Mock()
@@ -157,9 +146,10 @@ def test_unrelated_wildcard_is_filtered_out(mock_get):
     mock_get.return_value = mock_response
 
     result = cert_transparency("example.com")
-    
+
     assert result["wildcards_found"] == []
     assert result["unique_subdomains"] == []
+
 
 @patch("tools.crt_sh_tool.requests.get")
 def test_wildcard_suffix_collision_is_filtered_out(mock_get):
@@ -179,6 +169,3 @@ def test_wildcard_suffix_collision_is_filtered_out(mock_get):
     result = cert_transparency("ample.com")
 
     assert result["wildcards_found"] == []
-
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
