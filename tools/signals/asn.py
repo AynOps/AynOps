@@ -1,19 +1,10 @@
 def asn_extractor(result , signals):
-    if result.get("success"):
-        score = result.get("abuse_score") or result.get("data", {}).get("abuse_score", 0)
-        try:
-            score = int(score)
-        except (TypeError, ValueError):
-            score = 0
-        signals["ip_abuse_score"] = score
-        if score > 50:
-            signals["auto_warnings"].append(
-                f"ASN abuse score {score}/100 — HIGH malicious activity reported on this IP range"
-            )
-        elif score > 20:
-            signals["auto_warnings"].append(
-                f"ASN abuse score {score}/100 — elevated, investigate hosting provider"
-            )
-
-    else:
+    # asn_tool returns {ip, asn, org, isp, country, region, city} — it does
+    # NOT carry an abuse score. The abuse confidence score comes from the
+    # AbuseIPDB-backed ip_reputation tool and is populated by
+    # ip_reputation_extractor. The previous abuse_score lookup here was
+    # dead code: it always fell through to the `0` default, which silently
+    # zeroed out signals["ip_abuse_score"] (see PR #84 for the regression
+    # and the follow-up PR that moved the assignment to ip_reputation).
+    if not result.get("success"):
         return

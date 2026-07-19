@@ -7,6 +7,10 @@ def ip_reputation_extractor(result , signals):
             rep_score = int(rep_score)
         except (TypeError, ValueError):
             rep_score = 0
+        # ip_reputation is the canonical source for the abuse confidence
+        # score (AbuseIPDB). The asn_tool result does not carry this field,
+        # so the signal must be populated here, not in asn_extractor.
+        signals["ip_abuse_score"] = rep_score
         if flagged:
             signals["auto_warnings"].append(
                 f"IP flagged as MALICIOUS "

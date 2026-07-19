@@ -1,4 +1,5 @@
-from utils.helpers import is_valid_domain , get_cvss_details , get_english_description
+from utils.helpers import is_valid_domain , get_cvss_details , get_english_description , safe_parse_datetime
+from datetime import datetime, timezone
 import unittest
 
 class TestHelpers(unittest.TestCase):
@@ -54,6 +55,53 @@ class TestHelpers(unittest.TestCase):
 
     def test_empty_descriptions_returns_empty(self):
         self.assertEqual(get_english_description({}), "")
+
+    # ── safe_parse_datetime ─────────────────────────────────
+
+    def test_safe_parse_datetime_iso_string(self):
+        """A standard ISO datetime string parses correctly."""
+        result = safe_parse_datetime("2025-12-25 00:00:00")
+        self.assertEqual(result, datetime(2025, 12, 25, 0, 0, 0))
+
+    def test_safe_parse_datetime_none_input(self):
+        """None or empty input returns None."""
+        self.assertIsNone(safe_parse_datetime(None))
+        self.assertIsNone(safe_parse_datetime(""))
+        self.assertIsNone(safe_parse_datetime([]))
+
+    def test_safe_parse_datetime_passthrough_datetime_object(self):
+        """A datetime object is returned as-is."""
+        dt = datetime(2025, 12, 25, 0, 0, 0, tzinfo=timezone.utc)
+        self.assertEqual(safe_parse_datetime(dt), dt)
+
+    def test_safe_parse_datetime_list_takes_first_element(self):
+        """A list of date strings (python-whois TLD variance) takes the first.
+
+        Regression test for the bug where str(list) produced
+        "['2025-12-25 00:00:00']" which matched no format, silently
+        suppressing domain-expiry warnings in whois_extractor.
+        """
+        result = safe_parse_datetime(["2025-12-25 00:00:00", "2026-01-01 00:00:00"])
+        self.assertEqual(result, datetime(2025, 12, 25, 0, 0, 0))
+
+    def test_safe_parse_datetime_list_of_datetime_objects(self):
+        """A list of datetime objects takes the first element as-is."""
+        dt1 = datetime(2025, 12, 25, 0, 0, 0, tzinfo=timezone.utc)
+        dt2 = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        self.assertEqual(safe_parse_datetime([dt1, dt2]), dt1)
+
+    def test_safe_parse_datetime_empty_list_returns_none(self):
+        """An empty list returns None, not a crash."""
+        self.assertIsNone(safe_parse_datetime([]))
+
+    def test_safe_parse_datetime_list_with_empty_first_element(self):
+        """A list whose first element is empty/None falls through to None."""
+        self.assertIsNone(safe_parse_datetime([None, "2025-12-25"]))
+        self.assertIsNone(safe_parse_datetime(["", "2025-12-25"]))
+
+    def test_safe_parse_datetime_invalid_string_returns_none(self):
+        """A genuinely unparseable string returns None, not a crash."""
+        self.assertIsNone(safe_parse_datetime("not-a-date"))
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

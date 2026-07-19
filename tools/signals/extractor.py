@@ -10,7 +10,7 @@ def extract_signals(results):
     "open_ports":               [],     # ports
     "ssl_days_remaining":       None,   # ssl
     "software_detected":        [],     # techstack
-    "ip_abuse_score":           0,      # asn
+    "ip_abuse_score":           0,      # ip_reputation
     "subdomain_count":          0,      # ct_logs
     "missing_security_headers": [],     # headers
     "email_security":           {},     # email_security_tool
