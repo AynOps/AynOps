@@ -148,6 +148,16 @@
         "domain": "string"
       },
       "requires_api_key": false
+    },
+    {
+      "name": "hibp_check",
+      "description": "Check if an email or domain appears in Have I Been Pwned breach data (requires HIBP_API_KEY)",
+      "input": {
+        "query": "string"
+      },
+      "requires_api_key": true,
+      "api_key_env": "HIBP_API_KEY",
+      "api_key_url": "https://haveibeenpwned.com/API/Key"
     }
   ],
   "environment_variables": [
@@ -174,7 +184,8 @@
           "C:\\full\\path\\to\\AynOps\\server.py"
         ],
         "env": {
-          "ABUSEIPDB_API_KEY": "your-api-key-here"
+          "ABUSEIPDB_API_KEY": "your-api-key-here",
+          "HIBP_API_KEY": "your-hibp-api-key-here"
         }
       }
     }

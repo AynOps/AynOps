@@ -17,6 +17,7 @@ from tools.redirect_tracer import trace_redirects
 from tools.cloud_exposure_tool import cloud_exposure_check
 from tools.robots_txt_tool import robots_txt_inspect
 from tools.subdomain_takeover_tool import subdomain_takeover
+from tools.hibp_tool import hibp_check
 from tools.prompts.threat_analysis import THREAT_ANALYSIS_PROMPT
 
 mcp = FastMCP("AynOps")
@@ -37,6 +38,7 @@ mcp.tool()(trace_redirects)
 mcp.tool()(cloud_exposure_check)
 mcp.tool()(robots_txt_inspect)
 mcp.tool()(subdomain_takeover)
+mcp.tool()(hibp_check)
 
 @mcp.prompt(
     name="threat_analysis",

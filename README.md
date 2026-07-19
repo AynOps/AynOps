@@ -50,6 +50,7 @@ It is also listed on glama mcp registry.
 | `cert_transparency` | Subdomain discovery via crt.sh Certificate Transparency logs with an automatic fallback to HackerTarget passive DNS on timeouts |
 | `asn_lookup` | Autonomous System Number (ASN) and network ownership lookup via Team Cymru WHOIS — identifies ASN, BGP prefix, organization, registry, country, and allocation date for domains or IP addresses (no API key required) |
 | `ip_reputation` | Check if an IP is flagged as malicious via AbuseIPDB (api key requied) |
+| `hibp_check` | Check if an email or domain appears in Have I Been Pwned breaches (HIBP_API_KEY required) |
 | `full_recon` | Runs all core tools in parallel and returns combined result |
 
 ### Standalone Tools
@@ -181,7 +182,8 @@ Add this configuration:
       "command": "C:\\full\\path\\to\\AynOps\\.venv\\Scripts\\python.exe",
       "args": ["C:\\full\\path\\to\\AynOps\\server.py"],
       "env": {
-        "ABUSEIPDB_API_KEY": "your-api-key-here"
+        "ABUSEIPDB_API_KEY": "your-api-key-here",
+        "HIBP_API_KEY": "your-hibp-api-key-here"
       }
     }
   }
@@ -196,7 +198,8 @@ Add this configuration:
       "command": "/full/path/to/AynOps/.venv/bin/python3",
       "args": ["/full/path/to/AynOps/server.py"],
       "env": {
-        "ABUSEIPDB_API_KEY": "your-api-key-here"
+        "ABUSEIPDB_API_KEY": "your-api-key-here",
+        "HIBP_API_KEY": "your-hibp-api-key-here"
       }
     }
   }
