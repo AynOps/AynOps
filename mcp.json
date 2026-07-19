@@ -140,12 +140,27 @@
         "domain": "string"
       },
       "requires_api_key": false
+    },
+    {
+      "name": "hibp_check",
+      "description": "Check if an email address or domain has appeared in known data breaches using the Have I Been Pwned API",
+      "input": {
+        "query": "string"
+      },
+      "requires_api_key": true,
+      "api_key_env": "HIBP_API_KEY",
+      "api_key_url": "https://haveibeenpwned.com/API/Key"
     }
   ],
   "environment_variables": [
     {
       "name": "ABUSEIPDB_API_KEY",
       "description": "Required for ip_reputation tool. Get free key at abuseipdb.com",
+      "required": false
+    },
+    {
+      "name": "HIBP_API_KEY",
+      "description": "Required for hibp_check tool. Get free key at haveibeenpwned.com/API/Key",
       "required": false
     }
   ],
@@ -159,18 +174,19 @@
     ]
   },
   "claude_desktop_config": {
-    "mcpServers": {
-      "AynOps": {
-        "command": "C:\\full\\path\\to\\AynOps\\.venv\\Scripts\\python.exe",
-        "args": [
-          "C:\\full\\path\\to\\AynOps\\server.py"
-        ],
-        "env": {
-          "ABUSEIPDB_API_KEY": "your-api-key-here"
+      "mcpServers": {
+        "AynOps": {
+          "command": "C:\\\\full\\\\path\\\\to\\\\AynOps\\\\.venv\\\\Scripts\\\\python.exe",
+          "args": [
+            "C:\\\\full\\\\path\\\\to\\\\AynOps\\\\server.py"
+          ],
+          "env": {
+            "ABUSEIPDB_API_KEY": "your-api-key-here",
+            "HIBP_API_KEY": "your-hibp-api-key-here"
+          }
         }
       }
-    }
-  },
+    },
   "tags": [
     "cybersecurity",
     "reconnaissance",

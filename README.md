@@ -61,6 +61,7 @@ It is also listed on glama mcp registry.
 | `cloud_exposure_check` | Checks for publicly accessible AWS S3, Azure Blob Storage, and Google Cloud Storage buckets using common bucket naming patterns derived from the target domain |
 | `trace_redirects` | Traces the full HTTP redirect chain hop by hop — flags TLS downgrades, private-IP leaks, redirect loops, cross-domain hops, and overly long chains |
 | `robots_txt_inspect` | Fetch and parse robots.txt to reveal hidden directories and sitemaps |
+| `hibp_check` | Check if an email or domain appears in known data breaches via Have I Been Pwned API (requires API key) |
 
 ## Prompts Available
 | Prompt | Description |
@@ -177,10 +178,11 @@ Add this configuration:
 {
   "mcpServers": {
     "AynOps": {
-      "command": "C:\\full\\path\\to\\AynOps\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\full\\path\\to\\AynOps\\server.py"],
+      "command": "C:\\\\full\\\\path\\\\to\\\\AynOps\\\\.venv\\\\Scripts\\\\python.exe",
+      "args": ["C:\\\\full\\\\path\\\\to\\\\AynOps\\\\server.py"],
       "env": {
-        "ABUSEIPDB_API_KEY": "your-api-key-here"
+        "ABUSEIPDB_API_KEY": "your-api-key-here",
+        "HIBP_API_KEY": "your-hibp-api-key-here"
       }
     }
   }
@@ -195,7 +197,8 @@ Add this configuration:
       "command": "/full/path/to/AynOps/.venv/bin/python3",
       "args": ["/full/path/to/AynOps/server.py"],
       "env": {
-        "ABUSEIPDB_API_KEY": "your-api-key-here"
+        "ABUSEIPDB_API_KEY": "your-api-key-here",
+        "HIBP_API_KEY": "your-hibp-api-key-here"
       }
     }
   }
@@ -204,7 +207,7 @@ Add this configuration:
 
 > ⚠️ Always use the **full absolute path** to your `.venv` Python executable — not just `python` or `python3`. Claude Desktop may use a different Python installation otherwise.
 
-> **Note:** `ABUSEIPDB_API_KEY` is only required for the `ip_reputation` tool. Get a free key at [abuseipdb.com](https://www.abuseipdb.com).
+> **Note:** `ABUSEIPDB_API_KEY` is only required for the `ip_reputation` tool. Get a free key at [abuseipdb.com](https://www.abuseipdb.com). `HIBP_API_KEY` is only required for the `hibp_check` tool. Get a free key at [haveibeenpwned.com/API/Key](https://haveibeenpwned.com/API/Key).
 
 ### Step 5 — Restart Claude Desktop
 
