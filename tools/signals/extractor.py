@@ -11,6 +11,8 @@ def extract_signals(results):
     "ssl_days_remaining":       None,   # ssl
     "software_detected":        [],     # techstack
     "ip_abuse_score":           0,      # ip_reputation
+    "asn_number":               None,   # asn
+    "asn_isp":                  None,   # asn
     "subdomain_count":          0,      # ct_logs
     "missing_security_headers": [],     # headers
     "email_security":           {},     # email_security_tool
