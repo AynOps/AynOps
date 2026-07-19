@@ -76,8 +76,8 @@ def robots_txt_inspect(domain: str) -> dict:
                     sitemaps.append(sitemap)
 
             elif line_lower.startswith("crawl-delay:"):
-                # Per RFC 9309, Crawl-delay is a per-User-agent directive.
-                # The top-level return shape exposes the last-seen value.
+                # Crawl-delay is a non-standard (non-RFC 9309) directive that some crawlers honor.
+                # It's typically interpreted per User-agent; this tool exposes the last-seen value.
                 value = line.split(":", 1)[1].strip()
                 if value:
                     crawl_delay = value
