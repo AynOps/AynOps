@@ -29,6 +29,20 @@ class TestDnsEnumeration(unittest.TestCase):
         record.minimum = 5
         return [record]
 
+    def _make_caa_answer(self, flags, tag, value):
+        record = Mock()
+        record.flags = flags
+        record.tag = tag
+        record.value = value
+        return [record]
+
+    def _make_ttl_answer(self, values, ttl):
+        records = self._make_resolver_answer(values)
+        answer = MagicMock()
+        answer.__iter__.return_value = iter(records)
+        answer.rrset.ttl = ttl
+        return answer
+
     def test_invalid_domain(self):
         result = dns_enumeration("bad_domain")
         self.assertFalse(result["success"])
@@ -99,6 +113,94 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertTrue(result["success"])
         for rtype_records in result["records"].values():
             self.assertEqual(rtype_records, [])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_caa_records_parsed(self, mock_resolver_class):
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            import dns.resolver as real_dns
+
+            if domain != "example.com":
+                raise real_dns.NoAnswer
+            if rtype == "CAA":
+                return self._make_caa_answer(0, b"issue", b"letsencrypt.org")
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        caa = result["records"]["CAA"]
+        self.assertEqual(len(caa), 1)
+        self.assertEqual(caa[0]["flags"], 0)
+        self.assertEqual(caa[0]["tag"], "issue")
+        self.assertEqual(caa[0]["value"], "letsencrypt.org")
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_ttl_included_when_available(self, mock_resolver_class):
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            import dns.resolver as real_dns
+
+            if domain != "example.com":
+                raise real_dns.NoAnswer
+            if rtype == "A":
+                return self._make_ttl_answer(["93.184.216.34"], 300)
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["records"]["A"], ["93.184.216.34"])
+        self.assertEqual(result["ttl"]["A"], 300)
+        self.assertNotIn("MX", result["ttl"])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_subdomain_detected_via_aaaa_and_cname(self, mock_resolver_class):
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            import dns.resolver as real_dns
+
+            if domain == "example.com":
+                raise real_dns.NoAnswer
+            if domain == "www.example.com" and rtype == "AAAA":
+                return self._make_resolver_answer(["2606:2800:220:1:248:1893:25c8:1946"])
+            if domain == "mail.example.com" and rtype == "CNAME":
+                return self._make_resolver_answer(["example.com."])
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertIn("www.example.com", result["subdomains_found"])
+        self.assertIn("mail.example.com", result["subdomains_found"])
+        self.assertNotIn("ftp.example.com", result["subdomains_found"])
+        self.assertEqual(result["subdomains_found"].count("www.example.com"), 1)
+        resolver.resolve.assert_any_call("www.example.com", "A", lifetime=3, tcp=True)
+        resolver.resolve.assert_any_call("www.example.com", "AAAA", lifetime=3, tcp=True)
+        resolver.resolve.assert_any_call("mail.example.com", "CNAME", lifetime=3, tcp=True)
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_resolver_metadata_in_output(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        resolver.resolve.side_effect = real_dns.NoAnswer
+        mock_resolver_class.return_value = resolver
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertIn("resolver", result)
+        self.assertEqual(result["resolver"]["nameservers"], ["1.1.1.1", "8.8.8.8"])
+        self.assertEqual(result["resolver"]["lifetime"], 5)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
