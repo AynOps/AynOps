@@ -18,13 +18,9 @@ def asn_extractor(result, signals):
     if org:
         signals["asn_org"] = str(org).strip()
 
-    isp = result.get("isp")
-    if isp:
-        signals["asn_isp"] = str(isp).strip()
-    elif org and signals.get("asn_isp") is None:
-        # When the tool only returns an organization/AS name, expose it as
-        # asn_isp as well so consumers looking for ISP-like context still see it.
-        signals["asn_isp"] = str(org).strip()
+    ip = result.get("ip")
+    if ip:
+        signals["asn_ip"] = str(ip).strip()
 
     country = result.get("country")
     if country:

@@ -26,7 +26,7 @@ def _base_signals():
         "ip_reputation_flagged": False,
         "asn_number": None,
         "asn_org": None,
-        "asn_isp": None,
+        "asn_ip": None,
         "asn_country": None,
         "auto_warnings": [],
     }
@@ -146,7 +146,6 @@ def test_asn_extractor_does_not_touch_ip_abuse_score():
         "ip": "1.2.3.4",
         "asn": "AS64500",
         "org": "Test Org",
-        "isp": "Test ISP",
         "country": "Testland",
     }
     signals = _base_signals()
@@ -185,7 +184,6 @@ def test_extract_signals_populates_ip_abuse_score_from_ip_reputation():
             "ip": "1.2.3.4",
             "asn": "AS64500",
             "org": "Test Org",
-            "isp": "Test ISP",
             "country": "Testland",
         },
         "ports": {"success": False},
@@ -231,34 +229,15 @@ def test_asn_extractor_populates_metadata_signals():
         "ip": "1.2.3.4",
         "asn": "AS64500",
         "organization": "Example Networks",
-        "isp": "Example ISP",
         "country": "US",
     }
     signals = _base_signals()
     asn_extractor(result, signals)
     assert signals["asn_number"] == "AS64500"
     assert signals["asn_org"] == "Example Networks"
-    assert signals["asn_isp"] == "Example ISP"
+    assert signals["asn_ip"] == "1.2.3.4"
     assert signals["asn_country"] == "US"
     assert signals["ip_abuse_score"] == 0
-
-
-def test_asn_extractor_supports_legacy_org_field():
-    """Legacy org field is accepted and also mirrored into asn_isp when isp missing."""
-    result = {
-        "success": True,
-        "ip": "1.2.3.4",
-        "asn": "AS64500",
-        "org": "Legacy Org",
-        "country": "DE",
-    }
-    signals = _base_signals()
-    asn_extractor(result, signals)
-    assert signals["asn_number"] == "AS64500"
-    assert signals["asn_org"] == "Legacy Org"
-    assert signals["asn_isp"] == "Legacy Org"
-    assert signals["asn_country"] == "DE"
-
 
 def test_asn_extractor_skips_metadata_on_failure():
     """Failed ASN lookups leave asn_* fields unset."""
@@ -267,6 +246,6 @@ def test_asn_extractor_skips_metadata_on_failure():
     asn_extractor(result, signals)
     assert signals["asn_number"] is None
     assert signals["asn_org"] is None
-    assert signals["asn_isp"] is None
+    assert signals["asn_ip"] is None
     assert signals["asn_country"] is None
 

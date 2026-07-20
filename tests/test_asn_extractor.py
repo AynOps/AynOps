@@ -17,7 +17,7 @@ def _signals():
         "ip_reputation_flagged": False,
         "asn_number": None,
         "asn_org": None,
-        "asn_isp": None,
+        "asn_ip": None,
         "asn_country": None,
         "auto_warnings": [],
     }
@@ -38,7 +38,7 @@ def test_asn_extractor_success_populates_fields():
     asn_extractor(result, signals)
     assert signals["asn_number"] == "AS15169"
     assert signals["asn_org"] == "GOOGLE"
-    assert signals["asn_isp"] == "GOOGLE"
+    assert signals["asn_ip"] == "8.8.8.8"
     assert signals["asn_country"] == "US"
 
 
@@ -70,6 +70,6 @@ def test_extract_signals_includes_asn_fields():
     signals = extract_signals(results)
     assert signals["asn_number"] == "AS13335"
     assert signals["asn_org"] == "CLOUDFLARENET"
-    assert signals["asn_isp"] == "CLOUDFLARENET"
+    assert signals["asn_ip"] == "1.1.1.1"
     assert signals["asn_country"] == "US"
     assert signals["ip_abuse_score"] == 0
