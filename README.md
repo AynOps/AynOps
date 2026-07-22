@@ -61,6 +61,7 @@ It is also listed on glama mcp registry.
 | `cloud_exposure_check` | Checks for publicly accessible AWS S3, Azure Blob Storage, and Google Cloud Storage buckets using common bucket naming patterns derived from the target domain |
 | `trace_redirects` | Traces the full HTTP redirect chain hop by hop — flags TLS downgrades, private-IP leaks, redirect loops, cross-domain hops, and overly long chains |
 | `robots_txt_inspect` | Fetch and parse robots.txt to reveal hidden directories and sitemaps |
+| `subdomain_takeover` | Checks discovered subdomains for takeover vulnerabilities — matches CNAMEs against known-vulnerable service fingerprints (GitHub Pages, Heroku, S3, Azure, Ghost, Shopify, Fastly) and confirms via HTTP |
 
 ## Prompts Available
 | Prompt | Description |
