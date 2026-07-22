@@ -157,6 +157,26 @@ class TestSslInspect(unittest.TestCase):
         self.assertTrue(result["success"], f"Expected success but got error: {result.get('error')}")
         self.assertTrue(result["self_signed"])
 
+    def test_self_signed_uses_raw_rdn_tuples(self):
+        # Regression: duplicate RDN attributes must not be collapsed before
+        # comparing subject and issuer. The collapsed dicts are identical here,
+        # but the raw tuple structures differ, so the cert is not self-signed.
+        subject = (
+            (("commonName", "example.com"),),
+            (("organizationalUnitName", "A"),),
+            (("organizationalUnitName", "B"),),
+        )
+        issuer = (
+            (("commonName", "example.com"),),
+            (("organizationalUnitName", "B"),),
+        )
+        cert = self._make_cert()
+        cert["subject"] = subject
+        cert["issuer"] = issuer
+        result = self._run_inspect(cert)
+        self.assertTrue(result["success"], f"Expected success but got error: {result.get('error')}")
+        self.assertFalse(result["self_signed"])
+
     def test_validity_period_days(self):
         # not_before = now - 30d, not_after = now + 90d => validity ~= 120 days
         result = self._run_inspect(self._make_cert(days_valid=90))

@@ -180,13 +180,15 @@ def ssl_inspect(domain: str, port: int = 443) -> dict:
         def rdn(rdns):
             return {k: v for rdn in rdns for k, v in rdn}
 
-        subject = rdn(cert.get("subject", []))
-        issuer = rdn(cert.get("issuer", []))
+        raw_subject = cert.get("subject", ())
+        raw_issuer = cert.get("issuer", ())
+        subject = rdn(raw_subject)
+        issuer = rdn(raw_issuer)
 
         # --- issue #100: certificate fingerprinting ---
         common_name = subject.get("commonName", "")
         wildcard = common_name.startswith("*.") or any(s.startswith("*.") for s in sans)
-        self_signed = bool(subject) and subject == issuer
+        self_signed = bool(raw_subject) and raw_subject == raw_issuer
         validity_days = (not_after - not_before).days
 
         # --- issue #100: TLS & cipher security analysis ---
