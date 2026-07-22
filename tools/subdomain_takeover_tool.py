@@ -81,7 +81,7 @@ def _confirms_takeover(subdomain: str, fingerprint: dict) -> bool:
     indicator = fingerprint["indicator"]
     if "status" in indicator:
         return response.status_code == indicator["status"]
-    return indicator["body"] in response.text
+    return indicator["body"].lower() in response.text.lower()
 
 
 def subdomain_takeover(domain: str) -> dict:
