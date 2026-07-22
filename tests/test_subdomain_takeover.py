@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch, Mock
+from urllib.parse import urlparse
 
 from tools.subdomain_takeover_tool import subdomain_takeover
 
@@ -211,8 +212,12 @@ def test_https_failure_falls_back_to_http(mock_enum, mock_resolver_class, mock_g
     assert result["vulnerable"][0]["service"] == "Azure"
     # HTTPS tried first (and failed), then HTTP fallback succeeded.
     assert mock_get.call_count == 2
-    assert mock_get.call_args_list[0].args[0].startswith("https://app.example.com")
-    assert mock_get.call_args_list[1].args[0].startswith("http://app.example.com")
+    first_url = urlparse(mock_get.call_args_list[0].args[0])
+    second_url = urlparse(mock_get.call_args_list[1].args[0])
+    assert first_url.scheme == "https"
+    assert first_url.hostname == "app.example.com"
+    assert second_url.scheme == "http"
+    assert second_url.hostname == "app.example.com"
 
 
 @patch("tools.subdomain_takeover_tool.requests.get")
