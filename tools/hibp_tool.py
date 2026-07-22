@@ -3,7 +3,7 @@ import re
 
 import requests
 
-from utils.helpers import is_valid_domain
+from utils.helpers import is_valid_domain, normalize_domain
 
 HIBP_API_BASE = "https://haveibeenpwned.com/api/v3"
 HIBP_USER_AGENT = "AynOps-MCP-Server"
@@ -28,7 +28,8 @@ def _detect_query_type(query: str) -> str | None:
         return None
     if _EMAIL_PATTERN.fullmatch(q):
         return "email"
-    if is_valid_domain(q):
+    normalized_domain = normalize_domain(q)
+    if is_valid_domain(normalized_domain):
         return "domain"
     return None
 
@@ -117,6 +118,7 @@ def hibp_check(query: str) -> dict:
             }
 
         # domain mode
+        query = normalize_domain(query)
         url = f"{HIBP_API_BASE}/breaches"
         params = {"domain": query}
         response = requests.get(url, headers=headers, params=params, timeout=20)

@@ -165,6 +165,11 @@
       "name": "ABUSEIPDB_API_KEY",
       "description": "Required for ip_reputation tool. Get free key at abuseipdb.com",
       "required": false
+    },
+    {
+      "name": "HIBP_API_KEY",
+      "description": "Required for hibp_check tool. Get a key at haveibeenpwned.com",
+      "required": false
     }
   ],
   "installation": {

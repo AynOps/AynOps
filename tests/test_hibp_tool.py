@@ -121,6 +121,20 @@ class TestHibpCheck(unittest.TestCase):
 
     @patch.dict(os.environ, {"HIBP_API_KEY": "test-key"})
     @patch("tools.hibp_tool.requests.get")
+    def test_domain_is_normalized(self, mock_get):
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = []
+        mock_get.return_value = response
+
+        result = hibp_check(" Example.COM. ")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["query"], "example.com")
+        self.assertEqual(mock_get.call_args.kwargs["params"], {"domain": "example.com"})
+
+    @patch.dict(os.environ, {"HIBP_API_KEY": "test-key"})
+    @patch("tools.hibp_tool.requests.get")
     def test_unauthorized_api_key(self, mock_get):
         response = Mock()
         response.status_code = 401

@@ -50,7 +50,6 @@ It is also listed on glama mcp registry.
 | `cert_transparency` | Subdomain discovery via crt.sh Certificate Transparency logs with an automatic fallback to HackerTarget passive DNS on timeouts |
 | `asn_lookup` | Autonomous System Number (ASN) and network ownership lookup via Team Cymru WHOIS — identifies ASN, BGP prefix, organization, registry, country, and allocation date for domains or IP addresses (no API key required) |
 | `ip_reputation` | Check if an IP is flagged as malicious via AbuseIPDB (api key requied) |
-| `hibp_check` | Check if an email or domain appears in Have I Been Pwned breaches (HIBP_API_KEY required) |
 | `full_recon` | Runs all core tools in parallel and returns combined result |
 
 ### Standalone Tools
@@ -62,7 +61,7 @@ It is also listed on glama mcp registry.
 | `cloud_exposure_check` | Checks for publicly accessible AWS S3, Azure Blob Storage, and Google Cloud Storage buckets using common bucket naming patterns derived from the target domain |
 | `trace_redirects` | Traces the full HTTP redirect chain hop by hop — flags TLS downgrades, private-IP leaks, redirect loops, cross-domain hops, and overly long chains |
 | `robots_txt_inspect` | Fetch and parse robots.txt to reveal hidden directories and sitemaps |
-| `subdomain_takeover` | Checks discovered subdomains for takeover vulnerabilities — matches CNAMEs against known-vulnerable service fingerprints (GitHub Pages, Heroku, S3, Azure, Ghost, Shopify, Fastly) and confirms via HTTP |
+| `hibp_check` | Check if an email or domain appears in Have I Been Pwned breaches (HIBP_API_KEY required) |
 
 ## Prompts Available
 | Prompt | Description |
@@ -208,7 +207,7 @@ Add this configuration:
 
 > ⚠️ Always use the **full absolute path** to your `.venv` Python executable — not just `python` or `python3`. Claude Desktop may use a different Python installation otherwise.
 
-> **Note:** `ABUSEIPDB_API_KEY` is only required for the `ip_reputation` tool. Get a free key at [abuseipdb.com](https://www.abuseipdb.com).
+> **Note:** `ABUSEIPDB_API_KEY` is only required for the `ip_reputation` tool. Get a free key at [abuseipdb.com](https://www.abuseipdb.com). `HIBP_API_KEY` is only required for `hibp_check`; get a key at [haveibeenpwned.com/API/Key](https://haveibeenpwned.com/API/Key).
 
 ### Step 5 — Restart Claude Desktop
 
@@ -221,71 +220,6 @@ What cybersecurity tools do you have available?
 ```
 
 Claude should list all tools.
-
----
-
-### Alternative — Run with Docker
-
-The repository ships a `Dockerfile` that installs Nmap, `uv`, and project
-dependencies so you do not need a local Python virtualenv.
-
-**Build**
-
-```bash
-git clone https://github.com/AynOps/AynOps
-cd AynOps
-docker build -t aynops .
-```
-
-**Smoke-test the image** (stdio MCP servers speak JSON-RPC on stdin/stdout; a
-one-shot help/version style check is enough to confirm the process starts):
-
-```bash
-docker run --rm -i aynops
-# process waits for MCP JSON-RPC on stdin — Ctrl+C to exit
-```
-
-**Claude Desktop config (Docker)**
-
-Claude Desktop launches MCP servers as local processes. Point `command` at
-`docker` and pass the image via `args`. Use absolute paths only if you mount
-files; for the stock image the container is self-contained.
-
-| OS | Path |
-|---|---|
-| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
-| Mac | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Linux | `~/.config/Claude/claude_desktop_config.json` |
-
-```json
-{
-  "mcpServers": {
-    "AynOps": {
-      "command": "docker",
-      "args": [
-        "run",
-        "--rm",
-        "-i",
-        "-e", "ABUSEIPDB_API_KEY=your-api-key-here",
-        "aynops"
-      ]
-    }
-  }
-}
-```
-
-Notes and caveats:
-
-- **stdio only** — the container must stay attached (`-i`). Do not use `-d`.
-- **Nmap is inside the image** — host Nmap is not required for the Docker path.
-- **Network scans need network access** — default Docker bridge networking is
-  enough for public internet targets. Host-network mode is optional and OS-specific.
-- **`ABUSEIPDB_API_KEY`** is only required for `ip_reputation`. Omit the `-e`
-  line if you do not use that tool.
-- Rebuild after pulling updates: `docker build -t aynops .`
-- On Windows, ensure Docker Desktop is running and `docker` is on PATH for the
-  account that launches Claude Desktop.
-
 
 ---
 ## 📦 Listed On
