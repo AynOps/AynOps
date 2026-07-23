@@ -131,7 +131,7 @@ class TestHibpCheck(unittest.TestCase):
 
         self.assertTrue(result["success"])
         self.assertEqual(result["query"], "example.com")
-        self.assertEqual(mock_get.call_args.kwargs["params"], {"domain": "example.com"})
+        self.assertEqual(mock_get.call_args.kwargs["params"], {"Domain": "example.com"})
 
     @patch.dict(os.environ, {"HIBP_API_KEY": "test-key"})
     @patch("tools.hibp_tool.requests.get")
