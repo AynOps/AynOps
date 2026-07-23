@@ -72,7 +72,7 @@ def hibp_check(query: str) -> dict:
 
     try:
         if query_type == "email":
-            url = f"{HIBP_API_BASE}/breachedaccount/{requests.utils.quote(query)}"
+            url = f"{HIBP_API_BASE}/breachedAccount/{requests.utils.quote(query)}"
             params = {"truncateResponse": "false"}
             response = requests.get(url, headers=headers, params=params, timeout=20)
 
@@ -95,7 +95,7 @@ def hibp_check(query: str) -> dict:
 
             pastes_found = 0
             try:
-                paste_url = f"{HIBP_API_BASE}/pasteaccount/{requests.utils.quote(query)}"
+                paste_url = f"{HIBP_API_BASE}/pasteAccount/{requests.utils.quote(query)}"
                 paste_resp = requests.get(paste_url, headers=headers, timeout=20)
                 if paste_resp.status_code == 200:
                     pastes = paste_resp.json() or []
@@ -120,7 +120,7 @@ def hibp_check(query: str) -> dict:
         # domain mode
         query = normalize_domain(query)
         url = f"{HIBP_API_BASE}/breaches"
-        params = {"domain": query}
+        params = {"Domain": query}
         response = requests.get(url, headers=headers, params=params, timeout=20)
         response.raise_for_status()
         breaches_raw = response.json() or []
