@@ -468,6 +468,63 @@ class TestHeadersAnalyzer(unittest.TestCase):
         self.assertEqual(result["domain"], "www.example.com")
 
     # ------------------------------------------------------------------
+    # Per-hop severity analysis
+    # ------------------------------------------------------------------
+
+    @patch("tools.headers_tool.requests.get")
+    def test_intermediate_redirect_hop_gets_its_own_severity_analysis(self, mock_get):
+        mock_get.side_effect = [
+            _resp(301, {
+                "Location": "https://example.com/home",
+            }),
+            _resp(200, {
+                "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+                "Content-Security-Policy": "default-src 'self'",
+                "X-Frame-Options": "DENY",
+            }),
+        ]
+        result = headers_analyzer("example.com")
+
+        first_hop = result["redirect_chain"][0]
+        self.assertIn("analysis", first_hop)
+        self.assertFalse(
+            first_hop["analysis"]["strict-transport-security"]["present"]
+        )
+        self.assertEqual(
+            first_hop["analysis"]["strict-transport-security"]["severity"], "high"
+        )
+
+    @patch("tools.headers_tool.requests.get")
+    def test_final_hop_analysis_matches_top_level_headers(self, mock_get):
+        """The top-level `headers` key and the final hop's own
+        `redirect_chain[-1]["analysis"]` must be identical. If these
+        ever diverge, something is computing the "site's" analysis
+        differently from "the last hop's" analysis, which should
+        never happen.
+        """
+        mock_get.side_effect = [
+            _resp(301, {"Location": "https://example.com/home"}),
+            _resp(200, {
+                "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+                "X-Frame-Options": "DENY",
+            }),
+        ]
+        result = headers_analyzer("example.com")
+        self.assertEqual(
+            result["headers"], result["redirect_chain"][-1]["analysis"]
+        )
+
+    @patch("tools.headers_tool.requests.get")
+    def test_single_hop_chain_still_has_analysis_key(self, mock_get):
+        mock_get.return_value = _resp(200, {"X-Frame-Options": "DENY"})
+        result = headers_analyzer("example.com")
+        self.assertEqual(len(result["redirect_chain"]), 1)
+        self.assertIn("analysis", result["redirect_chain"][0])
+        self.assertEqual(
+            result["redirect_chain"][0]["analysis"], result["headers"]
+        )
+
+    # ------------------------------------------------------------------
     # Error handling
     # ------------------------------------------------------------------
 
