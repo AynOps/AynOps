@@ -26,9 +26,9 @@ A Model Context Protocol (MCP) server that gives AI Clients real-time cybersecur
 
 ## What is this?
 
-Claude by default has **zero native cybersecurity tooling**. No WHOIS. No DNS enumeration. No port scanning. No SSL inspection.
+AI Clients by default has **zero native cybersecurity tooling**. No WHOIS. No DNS enumeration. No port scanning. No SSL inspection.
 
-This MCP server fixes that — extending Claude with **real-world security tools** that run live against any domain or IP. Reconnaissance that normally requires multiple specialized tools and 20+ minutes of manual work becomes a single prompt.
+This MCP server fixes that — extending AI Clients with **real-world security tools** that run live against any domain or IP. Reconnaissance that normally requires multiple specialized tools and 20+ minutes of manual work becomes a single prompt.
 
 This is a **local MCP server** — it runs entirely on your machine. Your data never leaves your computer.
 It is also listed on glama mcp registry.
@@ -111,7 +111,7 @@ Claude: [calls full_recon → runs all core tools in parallel → delivers full 
 ## 📋 Prerequisites
 
 - **Python 3.12+** — [download](https://www.python.org/downloads/)
-- **Claude Desktop** — [download](https://claude.ai/download)
+- **Claude Desktop** — [download](https://claude.ai/download) or any other client you want
 - **Nmap** — required for port scanning ([download](https://nmap.org/download.html))
 - **Git** — [download](https://git-scm.com/)
 - **uv** - [download](https://docs.astral.sh/uv/getting-started/installation)
