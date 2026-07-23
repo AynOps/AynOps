@@ -179,7 +179,9 @@ def test_azure_vulnerable_matches_body(mock_enum, mock_resolver_class, mock_get)
     assert result["vulnerable"][0]["service"] == "Azure"
     # HTTPS is attempted first and succeeded, so exactly one request is made to https://.
     assert mock_get.call_count == 1
-    assert mock_get.call_args_list[0].args[0].startswith("https://app.example.com")
+    first_url = urlparse(mock_get.call_args_list[0].args[0])
+    assert first_url.scheme == "https"
+    assert first_url.hostname == "app.example.com"
 
 
 @patch("tools.subdomain_takeover_tool.requests.get")
