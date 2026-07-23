@@ -80,8 +80,20 @@ def headers_analyzer(domain: str) -> dict:
     Returns
     -------
     dict
-        ``{"success": True, "domain": ..., "headers": {...}}`` on success,
-        or ``{"success": False, "error": ...}`` on failure.
+        On success: ``{"success": True, "domain": ..., "requested_url": ...,
+        "final_url": ..., "redirected": bool, "redirect_chain": [...],
+        "headers": {...}}``.
+
+        ``headers`` is the severity analysis of the final hop (the actual
+        page a browser would land on). ``redirect_chain`` lists every hop
+        walked to get there, each with its own ``url``, ``status_code``,
+        raw ``headers``, and an ``analysis`` (same structure and rules as
+        the top-level ``headers``, run against that hop's own response;
+        see ``_analyze_raw_headers`` for the caveat on interpreting
+        findings from non-final hops). The last entry in ``redirect_chain``
+        always mirrors the top-level ``headers`` exactly.
+
+        On failure: ``{"success": False, "error": ...}``.
     """
     domain = normalize_domain(domain)
     if not is_valid_domain(domain):
@@ -166,6 +178,52 @@ def headers_analyzer(domain: str) -> dict:
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+    headers = _analyze_raw_headers(raw_headers)
+
+    redirect_chain = []
+    for h in hops:
+        # Computed once, reused for both the raw view and the analysis
+        # below, avoids lowercasing the same dict twice per hop.
+        hop_headers = {k.lower(): v for k, v in h["headers"].items()}
+        redirect_chain.append({
+            "url": h["url"],
+            "status_code": h["status_code"],
+            "headers": hop_headers,
+            "analysis": _analyze_raw_headers(hop_headers),
+        })
+
+    return {
+        "success": True,
+        "domain": domain,
+        "requested_url": requested_url,
+        "final_url": final_url,
+        "redirected": redirected,
+        "redirect_chain": redirect_chain,
+        "headers": headers,
+    }
+
+
+def _analyze_raw_headers(raw_headers: dict) -> dict:
+    """Run every header check against one response's headers.
+
+    Takes a single hop's lowercased headers dict and returns the same
+    ``headers`` analysis structure used at the top level of
+    ``headers_analyzer``'s result. Factored out so the exact same rules
+    apply whether it's being run on the final page or an intermediate
+    redirect hop.
+
+    Caveat this does NOT attempt to solve: content-dependent headers
+    (CSP, X-Frame-Options, X-Content-Type-Options, Permissions-Policy,
+    Referrer-Policy) are checked the same way on every hop, including
+    bare redirect responses that never carry them because there's no
+    page content at that layer to protect. A load-balancer-issued 301
+    will near-universally show "CSP missing, severity high" here;
+    that's an accurate description of THAT response, not a finding
+    about the site. Building a per-status-code significance model to
+    suppress that would be a separate, more speculative feature; this
+    function stays a plain, uniform ruleset and leaves interpretation
+    of intermediate-hop findings to the caller.
+    """
     headers: dict[str, Any] = {}
 
     # --- Strict-Transport-Security ---
@@ -366,19 +424,4 @@ def headers_analyzer(domain: str) -> dict:
                 "severity": "low",
             }
 
-    return {
-        "success": True,
-        "domain": domain,
-        "requested_url": requested_url,
-        "final_url": final_url,
-        "redirected": redirected,
-        "redirect_chain": [
-            {
-                "url": h["url"],
-                "status_code": h["status_code"],
-                "headers": {k.lower(): v for k, v in h["headers"].items()},
-            }
-            for h in hops
-        ],
-        "headers": headers,
-    }
+    return headers
