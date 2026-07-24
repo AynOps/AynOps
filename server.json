@@ -23,6 +23,13 @@
           "isRequired": false,
           "isSecret": true,
           "format": "string"
+        },
+        {
+          "name": "HIBP_API_KEY",
+          "description": "Required for hibp_check tool. Get a key at haveibeenpwned.com",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
         }
       ]
     }
