@@ -265,6 +265,7 @@ files; for the stock image the container is self-contained.
         "--rm",
         "-i",
         "-e", "ABUSEIPDB_API_KEY=your-api-key-here",
+        "-e" , "HIBP_API_KEY=your-api-key-here" ,
         "aynops"
       ]
     }
@@ -286,9 +287,6 @@ Notes and caveats:
 
 
 ---
-
-> **Note:** set `HIBP_API_KEY` in the Claude Desktop Docker config (or container env) to enable `hibp_check`.
-
 
 ## 📦 Listed On
 
