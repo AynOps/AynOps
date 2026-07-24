@@ -130,7 +130,8 @@ def test_aggregate_counts(mock_enum, mock_resolver_class, mock_get):
 
     def http_side_effect(url, **kwargs):
         response = Mock()
-        if "dev.example.com" in url:
+        host = (urlparse(url).hostname or "").lower()
+        if host == "dev.example.com":
             # GitHub Pages: takeover indicator is the unclaimed-site body string.
             # status_code is intentionally 200 (not 404) to prove the match keys
             # on the response body, not on a bare status code.
