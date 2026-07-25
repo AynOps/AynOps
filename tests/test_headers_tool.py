@@ -372,6 +372,28 @@ class TestHeadersAnalyzer(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertTrue(result["headers"]["x-frame-options"]["present"])
 
+    @patch("tools.headers_tool.requests.get")
+    def test_akamai_block_page_is_rejected_not_analyzed(self, mock_get):
+        mock_get.return_value = _resp(403, {
+            "Server": "AkamaiGHost",
+            "Content-Type": "text/html",
+        })
+        result = headers_analyzer("example.com")
+        self.assertFalse(result["success"])
+        self.assertIn("akamai", result["error"].lower())
+
+    @patch("tools.headers_tool.requests.get")
+    def test_normal_akamai_fronted_site_is_analyzed_normally(self, mock_get):
+        mock_get.return_value = _resp(200, {
+            "Server": "Apache",
+            "x-akamai-transformed": "9 16447 0 pmb=mRUM,2",
+            "Set-Cookie": "ak_bmsc=abc123; Domain=.example.com; Path=/",
+            "X-Frame-Options": "SAMEORIGIN",
+        })
+        result = headers_analyzer("example.com")
+        self.assertTrue(result["success"])
+        self.assertTrue(result["headers"]["x-frame-options"]["present"])
+
     # ------------------------------------------------------------------
     # Full redirect-chain recovery
     # ------------------------------------------------------------------
