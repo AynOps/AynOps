@@ -66,7 +66,7 @@ def ip_reputation(ip_address: str) -> dict:
             "is_public": bool(data.get("isPublic" , False)),
             "is_tor": is_tor,
             "reputation": reputation,
-            "num_distinct_users": data.get("numDistinctUsers" , 0),
+            "num_distinct_users": data.get("numDistinctUsers") or 0,
             "abuse_confidence_score": abuse_score,
             "total_reports": data.get("totalReports", 0),
             "country": data.get("countryCode"),
