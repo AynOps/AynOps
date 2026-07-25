@@ -374,6 +374,9 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_akamai_block_page_is_rejected_not_analyzed(self, mock_get):
+        # Real signature confirmed against marriott.com/homedepot.com/
+        # costco.com: a 403 with Server: AkamaiGHost and no origin
+        # headers at all -- Akamai's edge generated this page itself.
         mock_get.return_value = _resp(403, {
             "Server": "AkamaiGHost",
             "Content-Type": "text/html",
@@ -389,6 +392,16 @@ class TestHeadersAnalyzer(unittest.TestCase):
             "x-akamai-transformed": "9 16447 0 pmb=mRUM,2",
             "Set-Cookie": "ak_bmsc=abc123; Domain=.example.com; Path=/",
             "X-Frame-Options": "SAMEORIGIN",
+        })
+        result = headers_analyzer("example.com")
+        self.assertTrue(result["success"])
+        self.assertTrue(result["headers"]["x-frame-options"]["present"])
+
+    @patch("tools.headers_tool.requests.get")
+    def test_akamaighost_on_a_2xx_response_is_not_rejected(self, mock_get):
+        mock_get.return_value = _resp(200, {
+            "Server": "AkamaiGHost",
+            "X-Frame-Options": "DENY",
         })
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])

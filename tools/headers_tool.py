@@ -23,18 +23,22 @@ _SENSITIVE_PERMISSIONS_FEATURES = (
 )
 
 _WAF_BLOCK_PAGE_SIGNATURES = (
-    ("cf-mitigated", "challenge", "Cloudflare"),
-    ("server", "akamaighost", "Akamai"),
+    ("cf-mitigated", "challenge", "Cloudflare", None),
+    ("server", "akamaighost", "Akamai", 400),
 )
 
 
-def _detect_waf_block_page(raw_headers: dict) -> str | None:
-    """Return the provider name if raw_headers looks like a WAF's own
-    block/challenge page rather than real site content, else None.
+def _detect_waf_block_page(raw_headers: dict, status_code: int) -> str | None:
+    """Return the provider name if raw_headers (and, where required,
+    status_code) look like a WAF's own block/challenge page rather
+    than real site content, else None.
     """
-    for header_name, expected_value, provider in _WAF_BLOCK_PAGE_SIGNATURES:
-        if raw_headers.get(header_name, "").lower() == expected_value:
-            return provider
+    for header_name, expected_value, provider, min_status in _WAF_BLOCK_PAGE_SIGNATURES:
+        if raw_headers.get(header_name, "").lower() != expected_value:
+            continue
+        if min_status is not None and status_code < min_status:
+            continue
+        return provider
     return None
 
 
@@ -176,7 +180,7 @@ def headers_analyzer(domain: str) -> dict:
         # were the site's real security posture would be actively
         # misleading. Checked via a small signature table so adding a
         # new provider is a one-line addition, not new branching logic.
-        blocked_by = _detect_waf_block_page(raw_headers)
+        blocked_by = _detect_waf_block_page(raw_headers, final_hop["status_code"])
         if blocked_by:
             return {
                 "success": False,
