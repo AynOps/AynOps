@@ -12,6 +12,7 @@ dependencies = [
     "packaging>=26.2",
     "pip>=26.1.2",
     "pytest==9.0.3",
+    "python-dotenv>=1.2.2",
     "python-nmap>=0.7.1",
     "python-whois>=0.9.6",
     "reportlab>=4.5.1",
