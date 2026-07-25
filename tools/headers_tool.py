@@ -22,6 +22,25 @@ _SENSITIVE_PERMISSIONS_FEATURES = (
     "camera", "microphone", "geolocation", "payment", "usb",
 )
 
+_WAF_BLOCK_PAGE_SIGNATURES = (
+    ("cf-mitigated", "challenge", "Cloudflare", None),
+    ("server", "akamaighost", "Akamai", 400),
+)
+
+
+def _detect_waf_block_page(raw_headers: dict, status_code: int) -> str | None:
+    """Return the provider name if raw_headers (and, where required,
+    status_code) look like a WAF's own block/challenge page rather
+    than real site content, else None.
+    """
+    for header_name, expected_value, provider, min_status in _WAF_BLOCK_PAGE_SIGNATURES:
+        if raw_headers.get(header_name, "").lower() != expected_value:
+            continue
+        if min_status is not None and status_code < min_status:
+            continue
+        return provider
+    return None
+
 
 def _walk_redirect_chain(url: str, max_hops: int = _MAX_REDIRECT_HOPS) -> List[Dict[str, Any]]:
     """Manually follow redirects one hop at a time, capturing each
@@ -155,21 +174,21 @@ def headers_analyzer(domain: str) -> dict:
         # accurate.
         raw_headers = {k.lower(): v for k, v in final_hop["headers"].items()}
 
-        # Defensive check: if a WAF challenge still gets through despite
-        # impersonation (e.g. a stricter Cloudflare policy, or a different
-        # provider), its headers belong to the challenge page, not the
-        # site. Analyzing them as if they were the site's real security
-        # posture would be actively misleading. cf-mitigated is Cloudflare's
-        # own signal for this; confirmed present on a real challenge response
-        # observed during investigation.
-        if raw_headers.get("cf-mitigated") == "challenge":
+        # Defensive check: if a WAF challenge/block page gets served
+        # instead of the real site despite impersonation, its headers
+        # belong to that page, not the site; analyzing them as if they
+        # were the site's real security posture would be actively
+        # misleading. Checked via a small signature table so adding a
+        # new provider is a one-line addition, not new branching logic.
+        blocked_by = _detect_waf_block_page(raw_headers, final_hop["status_code"])
+        if blocked_by:
             return {
                 "success": False,
                 "error": (
-                    "Received a bot-detection challenge page instead of the "
-                    "real site (Cloudflare challenge detected). Headers from "
-                    "a challenge page do not reflect the site's actual "
-                    "configuration, so no analysis was performed."
+                    f"Received a bot-detection challenge/block page instead "
+                    f"of the real site ({blocked_by} detected). Headers "
+                    f"from this page do not reflect the site's actual "
+                    f"configuration, so no analysis was performed."
                 ),
             }
 
