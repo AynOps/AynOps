@@ -22,29 +22,72 @@ _SENSITIVE_PERMISSIONS_FEATURES = (
     "camera", "microphone", "geolocation", "payment", "usb",
 )
 
-_WAF_BLOCK_PAGE_SIGNATURES = (
+_WAF_BLOCK_PAGE_HEADER_SIGNATURES = (
     ("cf-mitigated", "challenge", "Cloudflare", None),
     ("server", "akamaighost", "Akamai", 400),
 )
 
+# Body-content signatures: (substring to search for in the lowercased
+# response body, provider label, minimum status code required or None).
+#
+# Needed because some providers' block pages aren't distinguishable via
+# headers alone: Imperva/Incapsula's X-Iinfo and X-CDN headers are
+# present on BOTH normal and blocked responses (confirmed: geico.com
+# shows X-Iinfo on its 200 homepage AND its 403 block page, just with a
+# different internal value each time), so headers can't tell them apart.
+# The block page's body is distinctive instead; it embeds
+# <iframe src="/_Incapsula_Resource?..."> that never appears in real
+# page content. Confirmed live against geico.com (403, plain
+# non-impersonated request), and independently corroborated by a
+# third-party anti-bot-bypass reference (scrapfly.io) and a 2020
+# GitHub issue (chromedp/chromedp#561) showing the identical HTML
+# structure, so this isn't a one-site coincidence. status_code >= 400
+# required for the same reason as Akamai's entry above: only 1 directly
+# confirmed live sample, no proof this string is exclusive to block
+# pages, so an error-class status is required as a second signal
+# rather than trusting the body substring alone.
+_WAF_BLOCK_PAGE_BODY_SIGNATURES = (
+    ("_incapsula_resource", "Imperva", 400),
+)
 
-def _detect_waf_block_page(raw_headers: dict, status_code: int) -> str | None:
-    """Return the provider name if raw_headers (and, where required,
-    status_code) look like a WAF's own block/challenge page rather
-    than real site content, else None.
+
+def _detect_waf_block_page(raw_headers: dict, status_code: int, body: str) -> str | None:
+    """Return the provider name if this response (headers and/or body)
+    looks like a WAF's own block/challenge page rather than real site
+    content, else None. Header signatures are checked first since
+    they're a cheap dict lookup; body signatures require a substring
+    search over the full response body.
     """
-    for header_name, expected_value, provider, min_status in _WAF_BLOCK_PAGE_SIGNATURES:
+    for header_name, expected_value, provider, min_status in _WAF_BLOCK_PAGE_HEADER_SIGNATURES:
         if raw_headers.get(header_name, "").lower() != expected_value:
             continue
         if min_status is not None and status_code < min_status:
             continue
         return provider
+
+    body_lower = body.lower()
+    for needle, provider, min_status in _WAF_BLOCK_PAGE_BODY_SIGNATURES:
+        if needle not in body_lower:
+            continue
+        if min_status is not None and status_code < min_status:
+            continue
+        return provider
+
     return None
 
 
 def _walk_redirect_chain(url: str, max_hops: int = _MAX_REDIRECT_HOPS) -> List[Dict[str, Any]]:
     """Manually follow redirects one hop at a time, capturing each
-    response's status and headers along the way.
+    response's status, headers, and body along the way.
+
+    Body is captured (not just headers) because some WAF block pages
+    aren't distinguishable via headers alone; see
+    _WAF_BLOCK_PAGE_BODY_SIGNATURES. This adds no extra network cost:
+    resp.text is already downloaded as part of the same GET, it just
+    wasn't being read anywhere before. Body is intentionally NOT
+    included in headers_analyzer's public redirect_chain output, it's
+    only used internally for the block-page check to avoid bloating
+    the return payload with full page HTML on every call.
 
     curl_cffi's built-in allow_redirects=True (like every other HTTP
     client's auto-follow) only ever surfaces the FINAL response. If an
@@ -72,6 +115,7 @@ def _walk_redirect_chain(url: str, max_hops: int = _MAX_REDIRECT_HOPS) -> List[D
             "url": current_url,
             "status_code": resp.status_code,
             "headers": dict(resp.headers.items()),
+            "body": resp.text,
         })
 
         if resp.status_code in _REDIRECT_STATUSES:
@@ -180,7 +224,9 @@ def headers_analyzer(domain: str) -> dict:
         # were the site's real security posture would be actively
         # misleading. Checked via a small signature table so adding a
         # new provider is a one-line addition, not new branching logic.
-        blocked_by = _detect_waf_block_page(raw_headers, final_hop["status_code"])
+        blocked_by = _detect_waf_block_page(
+            raw_headers, final_hop["status_code"], final_hop["body"]
+        )
         if blocked_by:
             return {
                 "success": False,
