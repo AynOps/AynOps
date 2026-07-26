@@ -5,7 +5,7 @@ from curl_cffi.requests.headers import Headers
 from tools.headers_tool import headers_analyzer
 
 
-def _resp(status_code: int, headers: dict):
+def _resp(status_code: int, headers: dict, body: str = ""):
     """Build a mock curl_cffi response for a single hop.
 
     Wraps headers in curl_cffi's real Headers class (not a plain dict)
@@ -21,9 +21,14 @@ def _resp(status_code: int, headers: dict):
     See test_dict_headers_items_preserves_genuinely_duplicate_headers
     below for the test that specifically covers that case using a
     list of tuples instead.
+
+    body defaults to ""; most tests only care about headers; tests
+    that need real body content (Imperva's body-signature detection)
+    pass it explicitly.
     """
     m = Mock()
     m.status_code = status_code
+    m.text = body
     m.headers = Headers(headers)
     return m
 
@@ -249,6 +254,7 @@ class TestHeadersAnalyzer(unittest.TestCase):
         """
         mock_resp = Mock()
         mock_resp.status_code = 200
+        mock_resp.text = ""
         mock_resp.headers = Headers([
             ("Content-Security-Policy", "script-src 'unsafe-inline'"),
             ("Content-Security-Policy", "default-src 'self'"),
@@ -373,6 +379,16 @@ class TestHeadersAnalyzer(unittest.TestCase):
         self.assertTrue(result["headers"]["x-frame-options"]["present"])
 
     @patch("tools.headers_tool.requests.get")
+    def test_cloudflare_fronted_403_without_challenge_header_is_analyzed_normally(self, mock_get):
+        mock_get.return_value = _resp(403, {
+            "Server": "cloudflare",
+            "X-Frame-Options": "DENY",
+        })
+        result = headers_analyzer("example.com")
+        self.assertTrue(result["success"])
+        self.assertTrue(result["headers"]["x-frame-options"]["present"])
+
+    @patch("tools.headers_tool.requests.get")
     def test_akamai_block_page_is_rejected_not_analyzed(self, mock_get):
         # Real signature confirmed against marriott.com/homedepot.com/
         # costco.com: a 403 with Server: AkamaiGHost and no origin
@@ -403,6 +419,50 @@ class TestHeadersAnalyzer(unittest.TestCase):
             "Server": "AkamaiGHost",
             "X-Frame-Options": "DENY",
         })
+        result = headers_analyzer("example.com")
+        self.assertTrue(result["success"])
+        self.assertTrue(result["headers"]["x-frame-options"]["present"])
+
+    @patch("tools.headers_tool.requests.get")
+    def test_imperva_block_page_body_signature_is_rejected_not_analyzed(self, mock_get):
+        mock_get.return_value = _resp(
+            403,
+            {
+                "Content-Type": "text/html",
+                "X-Iinfo": "15-36662187-0 0NNN RT(...) q(0 -1 -1 2) r(0 -1)",
+            },
+            body=(
+                '<html><head><META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">'
+                '</head><body><iframe id="main-iframe" '
+                'src="/_Incapsula_Resource?SWJIYLWA=abc123"></iframe></body></html>'
+            ),
+        )
+        result = headers_analyzer("example.com")
+        self.assertFalse(result["success"])
+        self.assertIn("imperva", result["error"].lower())
+
+    @patch("tools.headers_tool.requests.get")
+    def test_normal_imperva_fronted_site_is_analyzed_normally(self, mock_get):
+        mock_get.return_value = _resp(
+            200,
+            {
+                "X-CDN": "Imperva",
+                "X-Iinfo": "11-25276189-25276193 PNNN RT(...) q(0 0 0 0) r(3 3)",
+                "X-Frame-Options": "SAMEORIGIN",
+            },
+            body="<html><body>Welcome to the real site</body></html>",
+        )
+        result = headers_analyzer("example.com")
+        self.assertTrue(result["success"])
+        self.assertTrue(result["headers"]["x-frame-options"]["present"])
+
+    @patch("tools.headers_tool.requests.get")
+    def test_incapsula_resource_in_body_on_2xx_response_is_not_rejected(self, mock_get):
+        mock_get.return_value = _resp(
+            200,
+            {"X-Frame-Options": "DENY"},
+            body='<html><body><script src="/_Incapsula_Resource?x=1"></script></body></html>',
+        )
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
         self.assertTrue(result["headers"]["x-frame-options"]["present"])
