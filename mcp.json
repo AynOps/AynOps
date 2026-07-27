@@ -76,7 +76,7 @@
     },
     {
       "name": "cert_transparency",
-      "description": "Subdomain discovery and Certificate Transparency logs with an automatic fallback to HackerTarget passive DNS on timeouts",
+      "description": "Query crt.sh Certificate Transparency logs for a domain and extract certificate, subdomain, and wildcard information",
       "input": {
         "domain": "string"
       },
