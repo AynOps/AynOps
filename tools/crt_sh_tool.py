@@ -24,7 +24,7 @@ def cert_transparency(domain: str) -> Dict[str, Any]:
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
     try:
-        response = requests.get(url, headers=headers, timeout=50)
+        response = requests.get(url, headers=headers, timeout=50, impersonate='chrome')
         response.raise_for_status()
         data = response.json()
 
