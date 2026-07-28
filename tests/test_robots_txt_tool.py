@@ -43,10 +43,12 @@ Sitemap: https://example.com/sitemap.xml
     assert result["rules"][0]["user_agent"] == "*"
     assert result["rules"][0]["disallow"] == ["/admin", "/backup/"]
     assert result["rules"][0]["allow"] == ["/admin/public"]
+    assert result["rules"][0]["crawl_delay"] is None
     
     assert result["rules"][1]["user_agent"] == "Googlebot"
     assert result["rules"][1]["disallow"] == ["/secret/"]
     assert result["rules"][1]["allow"] == []
+    assert result["rules"][1]["crawl_delay"] is None
 
 @patch("tools.robots_txt_tool.requests.get")
 def test_robots_txt_inspect_fallback_to_http(mock_get):
@@ -140,4 +142,99 @@ def test_robots_txt_inspect_crawl_delay_uses_last_seen_value(mock_get):
     result = robots_txt_inspect("example.com")
 
     assert result["success"] is True
+    assert result["crawl_delay"] == "30"
+
+
+@patch("tools.robots_txt_tool.requests.get")
+def test_robots_txt_inspect_preserves_crawl_delay_only_groups(mock_get):
+    """Groups with only Crawl-delay (no Allow/Disallow) must be preserved.
+
+    Regression test for #110: the old parser dropped any rule group that
+    did not contain Allow or Disallow directives, losing per-bot Crawl-delay.
+    """
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.url = "https://example.com/robots.txt"
+    mock_response.text = (
+        "User-agent: SemrushBot\n"
+        "Crawl-delay: 10\n"
+        "\n"
+        "User-agent: Applebot\n"
+        "Crawl-delay: 10\n"
+        "\n"
+        "User-agent: Bingbot\n"
+        "Crawl-delay: 10\n"
+        "\n"
+        "User-agent: AhrefsBot\n"
+        "Crawl-delay: 10\n"
+    )
+    mock_get.return_value = mock_response
+
+    result = robots_txt_inspect("example.com")
+
+    assert result["success"] is True
+    assert len(result["rules"]) == 4
+    agents = [r["user_agent"] for r in result["rules"]]
+    assert agents == ["SemrushBot", "Applebot", "Bingbot", "AhrefsBot"]
+    for r in result["rules"]:
+        assert r["crawl_delay"] == "10"
+        assert r["allow"] == []
+        assert r["disallow"] == []
+
+
+@patch("tools.robots_txt_tool.requests.get")
+def test_robots_txt_inspect_consecutive_user_agents_same_group(mock_get):
+    """Consecutive User-agent lines belong to the same rule group (RFC 9309 §2.1)."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.url = "https://example.com/robots.txt"
+    mock_response.text = (
+        "User-agent: Googlebot\n"
+        "User-agent: Googlebot-Image\n"
+        "\n"
+        "Disallow: /private/\n"
+        "\n"
+        "User-agent: *\n"
+        "Allow: /\n"
+    )
+    mock_get.return_value = mock_response
+
+    result = robots_txt_inspect("example.com")
+
+    assert result["success"] is True
+    assert len(result["rules"]) == 2
+
+    # First group: two agents sharing the same rules
+    assert result["rules"][0]["user_agent"] == ["Googlebot", "Googlebot-Image"]
+    assert result["rules"][0]["disallow"] == ["/private/"]
+
+    # Second group: wildcard
+    assert result["rules"][1]["user_agent"] == "*"
+    assert result["rules"][1]["allow"] == ["/"]
+
+
+@patch("tools.robots_txt_tool.requests.get")
+def test_robots_txt_inspect_per_agent_crawl_delay_in_rules(mock_get):
+    """Each rule group carries its own crawl_delay."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.url = "https://example.com/robots.txt"
+    mock_response.text = (
+        "User-agent: *\n"
+        "Crawl-delay: 5\n"
+        "Disallow: /tmp\n"
+        "\n"
+        "User-agent: Googlebot\n"
+        "Crawl-delay: 30\n"
+        "Disallow: /secret/\n"
+    )
+    mock_get.return_value = mock_response
+
+    result = robots_txt_inspect("example.com")
+
+    assert result["success"] is True
+    assert len(result["rules"]) == 2
+    assert result["rules"][0]["crawl_delay"] == "5"
+    assert result["rules"][1]["crawl_delay"] == "30"
+    # Top-level uses last-seen
     assert result["crawl_delay"] == "30"

@@ -26,15 +26,32 @@ def robots_txt_inspect(domain: str) -> dict:
         content = response.text
         robots_url = response.url
         
-        # We will parse robots.txt into rules by User-agent
+        # Parse robots.txt into rule groups keyed by User-agent.
+        # Consecutive User-agent lines belong to the same group (RFC 9309 §2.1).
         rules = []
-        current_agent = "*"
+        current_agents = []
         current_allow = []
         current_disallow = []
+        current_crawl_delay = None
+        in_agent_block = False  # True while we are reading consecutive User-agent lines
         
         sitemaps = []
-        crawl_delay = None
         host = None
+
+        def flush_group():
+            nonlocal current_agents, current_allow, current_disallow, current_crawl_delay, in_agent_block
+            if current_agents:
+                rules.append({
+                    "user_agent": current_agents if len(current_agents) > 1 else current_agents[0],
+                    "allow": list(dict.fromkeys(current_allow)),
+                    "disallow": list(dict.fromkeys(current_disallow)),
+                    "crawl_delay": current_crawl_delay,
+                })
+            current_agents = []
+            current_allow = []
+            current_disallow = []
+            current_crawl_delay = None
+            in_agent_block = False
 
         for line in content.splitlines():
             # Strip inline comments first
@@ -48,24 +65,24 @@ def robots_txt_inspect(domain: str) -> dict:
             line_lower = line.lower()
             
             if line_lower.startswith("user-agent:"):
-                # If we were tracking a previous agent that had rules, save it
-                if current_allow or current_disallow:
-                    rules.append({
-                        "user_agent": current_agent,
-                        "allow": list(dict.fromkeys(current_allow)),
-                        "disallow": list(dict.fromkeys(current_disallow))
-                    })
-                    current_allow = []
-                    current_disallow = []
-                
-                current_agent = line.split(":", 1)[1].strip()
+                agent = line.split(":", 1)[1].strip()
+                if in_agent_block:
+                    # Consecutive User-agent: same group
+                    current_agents.append(agent)
+                else:
+                    # New group starts — flush the previous one
+                    flush_group()
+                    current_agents = [agent]
+                    in_agent_block = True
                 
             elif line_lower.startswith("disallow:"):
+                in_agent_block = False
                 path = line.split(":", 1)[1].strip()
                 if path:
                     current_disallow.append(path)
                     
             elif line_lower.startswith("allow:"):
+                in_agent_block = False
                 path = line.split(":", 1)[1].strip()
                 if path:
                     current_allow.append(path)
@@ -76,35 +93,28 @@ def robots_txt_inspect(domain: str) -> dict:
                     sitemaps.append(sitemap)
 
             elif line_lower.startswith("crawl-delay:"):
-                # Crawl-delay is a non-standard (non-RFC 9309) directive that some crawlers honor.
-                # It's typically interpreted per User-agent; this tool exposes the last-seen value.
+                in_agent_block = False
                 value = line.split(":", 1)[1].strip()
                 if value:
-                    crawl_delay = value
+                    current_crawl_delay = value
 
             elif line_lower.startswith("host:"):
-                # `Host:` is a non-standard but widely-recognized directive
-                # (originally from Yandex) used to specify the primary mirror.
                 value = line.split(":", 1)[1].strip()
                 if value:
                     host = value
 
-        # Add the last rule block if it has anything
-        if current_allow or current_disallow or current_agent == "*":
-            # Avoid adding empty duplicate '*' rules if we haven't seen anything
-            if current_allow or current_disallow or not any(r["user_agent"] == "*" for r in rules):
-                rules.append({
-                    "user_agent": current_agent,
-                    "allow": list(dict.fromkeys(current_allow)),
-                    "disallow": list(dict.fromkeys(current_disallow))
-                })
+        # Flush the last group
+        flush_group()
 
         # For backward compatibility and top-level summary, aggregate all unique paths
         all_allowed = []
         all_disallowed = []
+        crawl_delay = None
         for r in rules:
             all_allowed.extend(r["allow"])
             all_disallowed.extend(r["disallow"])
+            if r["crawl_delay"] is not None:
+                crawl_delay = r["crawl_delay"]
             
         return {
             "success": True,
