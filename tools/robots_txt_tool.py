@@ -1,32 +1,27 @@
 import requests
 from utils.helpers import is_valid_domain, normalize_domain
 
+
 def save_rule(rule: dict, rules: list) -> None:
     """Normalize a parsed rule group and append it to the collected rules."""
     if not rule["user_agents"]:
         return
 
-    has_directives = (rule["allow"] or rule['disallow'] or rule['crawl_delay'] is not None)
+    has_directives = (
+        rule["allow"]
+        or rule["disallow"]
+        or rule["crawl_delay"] is not None
+        )
 
     if not has_directives:
         return
 
-    if len(rule["user_agents"]) == 1:
-        data = {
-            "user_agent": rule["user_agents"][0],
-            "allow": list(dict.fromkeys(rule["allow"])),
-            "disallow": list(dict.fromkeys(rule["disallow"])),
-            "crawl_delay": rule["crawl_delay"],
-        }
-    else:
-        data = {
-            "user_agents": list(dict.fromkeys(rule["user_agents"])),
-            "allow": list(dict.fromkeys(rule["allow"])),
-            "disallow": list(dict.fromkeys(rule["disallow"])),
-            "crawl_delay": rule["crawl_delay"],
-        }
-
-    rules.append(data)
+    rules.append({
+        "user_agents": list(dict.fromkeys(rule["user_agents"])),
+        "allow": list(dict.fromkeys(rule["allow"])),
+        "disallow": list(dict.fromkeys(rule["disallow"])),
+        "crawl_delay": rule["crawl_delay"],
+    })
 
 
 def robots_txt_inspect(domain: str) -> dict:
@@ -103,16 +98,14 @@ def robots_txt_inspect(domain: str) -> dict:
 
                 if path:
                     current_rule["disallow"].append(path)
-
-                seen_directive_in_group = True
+                    seen_directive_in_group = True
                     
             elif line_lower.startswith("allow:"):
                 path = line.split(":", 1)[1].strip()
 
                 if path:
                     current_rule["allow"].append(path)
-
-                seen_directive_in_group = True
+                    seen_directive_in_group = True
                     
             elif line_lower.startswith("sitemap:"):
                 sitemap = line.split(":", 1)[1].strip()
@@ -124,8 +117,7 @@ def robots_txt_inspect(domain: str) -> dict:
 
                 if value:
                     current_rule["crawl_delay"] = value
-
-                seen_directive_in_group = True
+                    seen_directive_in_group = True
 
             elif line_lower.startswith("host:"):
                 # `Host:` is a non-standard but widely-recognized directive
