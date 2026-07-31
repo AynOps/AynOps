@@ -1,14 +1,41 @@
+import xml.etree.ElementTree as ET
 import nmap
 
 SCAN_CONFIG = {
     "basic": {"args": "-F --host-timeout 30s", "timeout": 35},
-    "service": {"args": "-sV -F --host-timeout 45s", "timeout": 50},
-    "os": {"args": "-O -F --host-timeout 45s", "timeout": 50},
-    "full": {"args": "-p- --host-timeout 5m", "timeout": 310},
-    "vuln": {"args": "--script vuln -F --host-timeout 90s", "timeout": 100},
+    "service": {"args": "-sV -F --host-timeout 120s", "timeout": 130},
+    "os": {"args": "-O -F --host-timeout 60s", "timeout": 65},
+    "full": {"args": "-p- --host-timeout 15m", "timeout": 950},
+    "vuln": {"args": "--script vuln -F --host-timeout 15m --script-timeout 5m", "timeout": 950},
 }
 
 PORT_SCAN_TIMEOUT_ERRORS = (TimeoutError, getattr(nmap, "PortScannerTimeout", TimeoutError))
+
+
+def _extract_host_timeout_status(nmap_output: bytes) -> dict:
+    """
+    Parse raw nmap XML to extract timedout status per host.
+    Returns {host_ip: True/False} for each <host> element.
+    Returns empty dict on parse failure.
+
+    Hosts are keyed by IPv4 address when present, falling back to
+    IPv6 — matching how python-nmap keys entries in all_hosts().
+    """
+    try:
+        dom = ET.fromstring(nmap_output)
+    except ET.ParseError:
+        return {}
+    result = {}
+    for host_el in dom.findall("host"):
+        addr_el = host_el.find("address[@addrtype='ipv4']")
+        if addr_el is None:
+            addr_el = host_el.find("address[@addrtype='ipv6']")
+        if addr_el is not None:
+            addr = addr_el.get("addr")
+            if addr:
+                result[addr] = host_el.get("timedout") == "true"
+    return result
+
 
 def port_scan(target: str, scan_type: str = "basic") -> dict:
     """
@@ -50,6 +77,14 @@ def port_scan(target: str, scan_type: str = "basic") -> dict:
                 "protocols": {}
             }
 
+            os_matches = scanner[host].get("osmatch", [])
+            if os_matches:
+                host_data["os_matches"] = [
+                    {"name": m["name"], "accuracy": m["accuracy"]}
+                    for m in os_matches
+                    if m.get("name") and m.get("accuracy")
+                ]
+
             for proto in scanner[host].all_protocols():
                 ports = []
                 for port, data in scanner[host][proto].items():
@@ -70,12 +105,30 @@ def port_scan(target: str, scan_type: str = "basic") -> dict:
 
             results.append(host_data)
 
+        duration = None
+        try:
+            raw = scanner.scanstats().get("elapsed")
+            if raw is not None:
+                duration = float(raw)
+        except Exception:
+            pass
+
+        host_timeout_status = {}
+        try:
+            raw_xml = scanner.get_nmap_last_output()
+            if raw_xml:
+                host_timeout_status = _extract_host_timeout_status(raw_xml)
+        except Exception:
+            pass
+
         return {
             "success": True,
             "target": target,
             "scan_type": scan_type,
             "hosts_found": len(results),
-            "results": results
+            "duration_seconds": duration,
+            "results": results,
+            "host_timeout_status": host_timeout_status or None,
         }
 
     except PORT_SCAN_TIMEOUT_ERRORS:
