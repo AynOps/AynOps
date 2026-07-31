@@ -1,9 +1,14 @@
 import requests
 from utils.helpers import is_valid_domain, normalize_domain
 
-def save_rule(rule: dict, rules: list) -> dict:
+def save_rule(rule: dict, rules: list) -> None:
     """Normalize a parsed rule group and append it to the collected rules."""
     if not rule["user_agents"]:
+        return
+
+    has_directives = (rule["allow"] or rule['disallow'] or rule['crawl_delay'] is not None)
+
+    if not has_directives:
         return
 
     if len(rule["user_agents"]) == 1:
@@ -74,6 +79,9 @@ def robots_txt_inspect(domain: str) -> dict:
             
             if line_lower.startswith("user-agent:"):
                 agent = line.split(":", 1)[1].strip()
+
+                if not agent:
+                    continue
 
                 # New group starts only after directives have appeared
                 if seen_directive_in_group:

@@ -48,6 +48,78 @@ def test_robots_txt_inspect_happy_path_https(mock_get):
     assert result["rules"][1]["disallow"] == ["/secret/"]
     assert result["rules"][1]["allow"] == []
 
+
+@patch("tools.robots_txt_tool.requests.get")
+def test_robots_txt_inspect_separates_groups_across_blank_lines(mock_get):
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.url = "https://example.com/robots.txt"
+    mock_response.text = (
+        "User-agent: Googlebot\n"
+        "Disallow: /private\n"
+        "\n"
+        "User-agent: Bingbot\n"
+        "Allow: /public\n"
+    )
+    mock_get.return_value = mock_response
+
+    result = robots_txt_inspect("example.com")
+
+    assert result["success"] is True
+    assert len(result["rules"]) == 2
+    assert result["rules"][0]["user_agent"] == "Googlebot"
+    assert result["rules"][0]["disallow"] == ["/private"]
+    assert result["rules"][0]["allow"] == []
+    assert result["rules"][1]["user_agent"] == "Bingbot"
+    assert result["rules"][1]["allow"] == ["/public"]
+    assert result["rules"][1]["disallow"] == []
+
+
+@patch("tools.robots_txt_tool.requests.get")
+def test_robots_txt_inspect_ignores_trailing_user_agent_without_directives(mock_get):
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.url = "https://example.com/robots.txt"
+    mock_response.text = (
+        "User-agent: *\n"
+        "Disallow: /private\n"
+        "User-agent: Googlebot\n"
+    )
+    mock_get.return_value = mock_response
+
+    result = robots_txt_inspect("example.com")
+
+    assert result["success"] is True
+    assert len(result["rules"]) == 1
+    assert result["rules"][0]["user_agent"] == "*"
+    assert result["rules"][0]["disallow"] == ["/private"]
+    assert result["disallowed_paths"] == ["/private"]
+
+
+@patch("tools.robots_txt_tool.requests.get")
+def test_robots_txt_inspect_ignores_directives_before_first_user_agent(mock_get):
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.url = "https://example.com/robots.txt"
+    mock_response.text = (
+        "Disallow: /private\n"
+        "Allow: /public\n"
+        "Crawl-delay: 10\n"
+        "User-agent: *\n"
+        "Disallow: /admin\n"
+    )
+    mock_get.return_value = mock_response
+
+    result = robots_txt_inspect("example.com")
+
+    assert result["success"] is True
+    assert len(result["rules"]) == 1
+    assert result["rules"][0]["user_agent"] == "*"
+    assert result["rules"][0]["disallow"] == ["/admin"]
+    assert result["allowed_paths"] == []
+    assert result["disallowed_paths"] == ["/admin"]
+    assert result["rules"][0]["crawl_delay"] is None
+
 @patch("tools.robots_txt_tool.requests.get")
 def test_robots_txt_inspect_fallback_to_http(mock_get):
     mock_response = MagicMock()
