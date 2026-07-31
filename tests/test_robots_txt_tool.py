@@ -14,15 +14,15 @@ def test_robots_txt_inspect_happy_path_https(mock_get):
     mock_response.status_code = 200
     mock_response.url = "https://example.com/robots.txt"
     mock_response.text = """
-User-agent: *
-Disallow: /admin # No admins allowed
-Allow: /admin/public
-Disallow: /backup/
+    User-agent: *
+    Disallow: /admin # No admins allowed
+    Allow: /admin/public
+    Disallow: /backup/
 
-User-agent: Googlebot
-Disallow: /secret/
-Sitemap: https://example.com/sitemap.xml
-"""
+    User-agent: Googlebot
+    Disallow: /secret/
+    Sitemap: https://example.com/sitemap.xml
+    """
     mock_get.return_value = mock_response
     
     result = robots_txt_inspect("example.com")
@@ -76,11 +76,6 @@ def test_robots_txt_inspect_failure(mock_get):
 
 @patch("tools.robots_txt_tool.requests.get")
 def test_robots_txt_inspect_parses_crawl_delay_and_host(mock_get):
-    """Crawl-delay and Host directives should be parsed, not always None.
-
-    Regression test for the bug introduced in PR #98 where the return shape
-    advertised crawl_delay/host fields but the parser never populated them.
-    """
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.url = "https://example.com/robots.txt"
@@ -95,17 +90,12 @@ def test_robots_txt_inspect_parses_crawl_delay_and_host(mock_get):
     result = robots_txt_inspect("example.com")
 
     assert result["success"] is True
-    assert result["crawl_delay"] == "10"
+    assert result["rules"][0]["crawl_delay"] == "10"
     assert result["host"] == "example.com"
     assert result["disallowed_paths"] == ["/private"]
 
 @patch("tools.robots_txt_tool.requests.get")
 def test_robots_txt_inspect_crawl_delay_and_host_absent_when_not_present(mock_get):
-    """crawl_delay and host remain None when the directives are absent.
-
-    Locks in the backward-compatible default for robots.txt files that do
-    not include Crawl-delay or Host directives.
-    """
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.url = "https://example.com/robots.txt"
@@ -115,17 +105,11 @@ def test_robots_txt_inspect_crawl_delay_and_host_absent_when_not_present(mock_ge
     result = robots_txt_inspect("example.com")
 
     assert result["success"] is True
-    assert result["crawl_delay"] is None
     assert result["host"] is None
+    assert result["rules"][0]["crawl_delay"] is None
 
 @patch("tools.robots_txt_tool.requests.get")
 def test_robots_txt_inspect_crawl_delay_uses_last_seen_value(mock_get):
-    """When multiple Crawl-delay directives appear, the last one wins.
-
-    The top-level return shape exposes a single crawl_delay value (it is
-    semantically per-User-agent per RFC 9309). The parser uses last-seen
-    as the pragmatic top-level summary.
-    """
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.url = "https://example.com/robots.txt"
@@ -140,4 +124,27 @@ def test_robots_txt_inspect_crawl_delay_uses_last_seen_value(mock_get):
     result = robots_txt_inspect("example.com")
 
     assert result["success"] is True
-    assert result["crawl_delay"] == "30"
+    assert result["rules"][0]["crawl_delay"] == "5"
+    assert result["rules"][1]["crawl_delay"] == "30"
+
+
+@patch("tools.robots_txt_tool.requests.get")
+def test_robots_txt_inspect_groups_multiple_user_agents(mock_get):
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.url = "https://example.com/robots.txt"
+    mock_response.text = (
+        "User-agent: Googlebot\n"
+        "User-agent: Bingbot\n"
+        "Disallow: /private\n"
+        "Allow: /public\n"
+    )
+    mock_get.return_value = mock_response
+
+    result = robots_txt_inspect("example.com")
+
+    assert result["success"] is True
+    assert len(result["rules"]) == 1
+    assert result["rules"][0]["user_agents"] == ["Googlebot", "Bingbot"]
+    assert result["rules"][0]["disallow"] == ["/private"]
+    assert result["rules"][0]["allow"] == ["/public"]

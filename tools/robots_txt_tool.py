@@ -1,6 +1,29 @@
 import requests
 from utils.helpers import is_valid_domain, normalize_domain
 
+def save_rule(rule: dict, rules: list) -> dict:
+    """Normalize a parsed rule group and append it to the collected rules."""
+    if not rule["user_agents"]:
+        return
+
+    if len(rule["user_agents"]) == 1:
+        data = {
+            "user_agent": rule["user_agents"][0],
+            "allow": list(dict.fromkeys(rule["allow"])),
+            "disallow": list(dict.fromkeys(rule["disallow"])),
+            "crawl_delay": rule["crawl_delay"],
+        }
+    else:
+        data = {
+            "user_agents": list(dict.fromkeys(rule["user_agents"])),
+            "allow": list(dict.fromkeys(rule["allow"])),
+            "disallow": list(dict.fromkeys(rule["disallow"])),
+            "crawl_delay": rule["crawl_delay"],
+        }
+
+    rules.append(data)
+
+
 def robots_txt_inspect(domain: str) -> dict:
     """
     Fetch and parse the robots.txt file for a given domain to reveal hidden directories and sitemaps.
@@ -14,7 +37,6 @@ def robots_txt_inspect(domain: str) -> dict:
         url_https = f"https://{domain}/robots.txt"
         url_http = f"http://{domain}/robots.txt"
         
-        response = None
         try:
             response = requests.get(url_https, timeout=10.0, headers=headers)
             response.raise_for_status()
@@ -26,14 +48,17 @@ def robots_txt_inspect(domain: str) -> dict:
         content = response.text
         robots_url = response.url
         
-        # We will parse robots.txt into rules by User-agent
         rules = []
-        current_agent = "*"
-        current_allow = []
-        current_disallow = []
-        
+        current_rule = {
+            "user_agents": [],
+            "allow": [],
+            "disallow": [],
+            "crawl_delay": None,
+        }
+
+        seen_directive_in_group = False
+
         sitemaps = []
-        crawl_delay = None
         host = None
 
         for line in content.splitlines():
@@ -48,27 +73,38 @@ def robots_txt_inspect(domain: str) -> dict:
             line_lower = line.lower()
             
             if line_lower.startswith("user-agent:"):
-                # If we were tracking a previous agent that had rules, save it
-                if current_allow or current_disallow:
-                    rules.append({
-                        "user_agent": current_agent,
-                        "allow": list(dict.fromkeys(current_allow)),
-                        "disallow": list(dict.fromkeys(current_disallow))
-                    })
-                    current_allow = []
-                    current_disallow = []
-                
-                current_agent = line.split(":", 1)[1].strip()
+                agent = line.split(":", 1)[1].strip()
+
+                # New group starts only after directives have appeared
+                if seen_directive_in_group:
+                    save_rule(current_rule, rules)
+
+                    current_rule = {
+                        "user_agents": [],
+                        "allow": [],
+                        "disallow": [],
+                        "crawl_delay": None,
+                    }
+
+                    seen_directive_in_group = False
+
+                current_rule["user_agents"].append(agent)
                 
             elif line_lower.startswith("disallow:"):
                 path = line.split(":", 1)[1].strip()
+
                 if path:
-                    current_disallow.append(path)
+                    current_rule["disallow"].append(path)
+
+                seen_directive_in_group = True
                     
             elif line_lower.startswith("allow:"):
                 path = line.split(":", 1)[1].strip()
+
                 if path:
-                    current_allow.append(path)
+                    current_rule["allow"].append(path)
+
+                seen_directive_in_group = True
                     
             elif line_lower.startswith("sitemap:"):
                 sitemap = line.split(":", 1)[1].strip()
@@ -76,11 +112,12 @@ def robots_txt_inspect(domain: str) -> dict:
                     sitemaps.append(sitemap)
 
             elif line_lower.startswith("crawl-delay:"):
-                # Crawl-delay is a non-standard (non-RFC 9309) directive that some crawlers honor.
-                # It's typically interpreted per User-agent; this tool exposes the last-seen value.
                 value = line.split(":", 1)[1].strip()
+
                 if value:
-                    crawl_delay = value
+                    current_rule["crawl_delay"] = value
+
+                seen_directive_in_group = True
 
             elif line_lower.startswith("host:"):
                 # `Host:` is a non-standard but widely-recognized directive
@@ -89,15 +126,7 @@ def robots_txt_inspect(domain: str) -> dict:
                 if value:
                     host = value
 
-        # Add the last rule block if it has anything
-        if current_allow or current_disallow or current_agent == "*":
-            # Avoid adding empty duplicate '*' rules if we haven't seen anything
-            if current_allow or current_disallow or not any(r["user_agent"] == "*" for r in rules):
-                rules.append({
-                    "user_agent": current_agent,
-                    "allow": list(dict.fromkeys(current_allow)),
-                    "disallow": list(dict.fromkeys(current_disallow))
-                })
+        save_rule(current_rule, rules)
 
         # For backward compatibility and top-level summary, aggregate all unique paths
         all_allowed = []
@@ -113,7 +142,6 @@ def robots_txt_inspect(domain: str) -> dict:
             "allowed_paths": list(dict.fromkeys(all_allowed)),
             "disallowed_paths": list(dict.fromkeys(all_disallowed)),
             "sitemaps": list(dict.fromkeys(sitemaps)),
-            "crawl_delay": crawl_delay,
             "host": host,
             "rules": rules
         }
