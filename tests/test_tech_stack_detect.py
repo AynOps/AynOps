@@ -51,30 +51,23 @@ class TestTechStackDetect(unittest.TestCase):
         self.assertIn("Next.js", result["technologies"]["javascript_frameworks"])
 
     @patch("tools.techstack_tool.requests.get")
-    def test_security_header_scoring(self, mock_get):
+    def test_no_security_analysis_in_output(self, mock_get):
         headers = {
+            "server": "nginx/1.18",
             "strict-transport-security": "max-age=31536000",
             "x-frame-options": "DENY",
-            "x-content-type-options": "nosniff",
-            "content-security-policy": "default-src 'self'",
-            "referrer-policy": "strict-origin",
-            "permissions-policy": "geolocation=()",
-            "x-xss-protection": "1; mode=block",
         }
-        mock_get.return_value = self._make_response(headers=headers)
+        html = '<link rel="stylesheet" href="/wp-content/themes/theme.css">'
+        mock_get.return_value = self._make_response(html=html, headers=headers)
         result = tech_stack_detect("example.com")
 
-        self.assertEqual(result["security_headers"]["score"], "100%")
-        self.assertEqual(result["security_headers"]["rating"], "Excellent")
-        self.assertEqual(result["security_headers"]["missing"], [])
-
-    @patch("tools.techstack_tool.requests.get")
-    def test_poor_security_header_rating(self, mock_get):
-        mock_get.return_value = self._make_response(headers={})
-        result = tech_stack_detect("example.com")
-
-        self.assertEqual(result["security_headers"]["score"], "0%")
-        self.assertEqual(result["security_headers"]["rating"], "Poor")
+        self.assertNotIn("security_headers", result)
+        self.assertEqual(
+            set(result.keys()),
+            {"success", "domain", "url", "status_code", "technologies"},
+        )
+        self.assertEqual(result["technologies"]["web_server"], "nginx/1.18")
+        self.assertIn("WordPress", result["technologies"]["cms"])
 
     @patch("tools.techstack_tool.requests.get", side_effect=Exception("Connection refused"))
     def test_connection_error_caught(self, _):

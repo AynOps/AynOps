@@ -4,7 +4,7 @@ from utils.helpers import is_valid_domain, normalize_domain
 def tech_stack_detect(domain: str) -> dict:
     """
     Detect technology stack of a website.
-    Identifies web server, frameworks, CMS, CDN, analytics, and security headers.
+    Identifies web server, frameworks, CMS, CDN, and analytics.
     """
     domain = normalize_domain(domain)
     if not is_valid_domain(domain):
@@ -82,38 +82,12 @@ def tech_stack_detect(domain: str) -> dict:
         if analytics_found:
             tech["analytics"] = analytics_found
 
-        # ── Security Headers ──
-        security_headers = [
-            "strict-transport-security",
-            "content-security-policy",
-            "x-frame-options",
-            "x-content-type-options",
-            "referrer-policy",
-            "permissions-policy",
-            "x-xss-protection"
-        ]
-        present = [h for h in security_headers if h in headers]
-        missing = [h for h in security_headers if h not in headers]
-
-        security_score = int((len(present) / len(security_headers)) * 100)
-
         return {
             "success": True,
             "domain": domain,
             "url": resp.url,
             "status_code": resp.status_code,
             "technologies": tech,
-            "security_headers": {
-                "present": present,
-                "missing": missing,
-                "score": f"{security_score}%",
-                "rating": (
-                    "Excellent" if security_score >= 85 else
-                    "Good"      if security_score >= 60 else
-                    "Fair"      if security_score >= 40 else
-                    "Poor"
-                )
-            }
         }
 
     except requests.exceptions.SSLError as e:
