@@ -46,7 +46,7 @@ It is also listed on glama mcp registry.
 | `port_scan` | Nmap-powered scanner with service/version detection and security warnings |
 | `ssl_inspect` | SSL/TLS certificate — issuer, expiry, cipher strength, SANs, TLS version |
 | `email_security_check` | Checks SPF, DKIM, and DMARC DNS records — returns a security_score, rating, and actionable recommendations for missing or weak configurations |
-| `tech_stack_detect` | Web server, CMS, JS frameworks, CDN, analytics, and security header scoring |
+| `tech_stack_detect` | Web server, CMS, JS frameworks, CDN, and analytics |
 | `cert_transparency` | Query crt.sh Certificate Transparency logs for a domain and extract certificate, subdomain, and wildcard information |
 | `asn_lookup` | Autonomous System Number (ASN) and network ownership lookup via Team Cymru WHOIS — identifies ASN, BGP prefix, organization, registry, country, and allocation date for domains or IP addresses (no API key required) |
 | `ip_reputation` | Check if an IP is flagged as malicious via AbuseIPDB (api key requied) |
