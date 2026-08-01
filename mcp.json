@@ -68,7 +68,7 @@
     },
     {
       "name": "tech_stack_detect",
-      "description": "Fingerprint web server, CMS, CDN, JS frameworks, and security headers",
+      "description": "Fingerprint web server, CMS, CDN, and JS frameworks",
       "input": {
         "domain": "string"
       },
