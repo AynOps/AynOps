@@ -36,7 +36,8 @@
       "description": "Nmap-powered port scanner with service and version detection",
       "input": {
         "target": "string",
-        "scan_type": "string"
+        "scan_type": "string",
+        "timeout": "integer"
       },
       "requires_api_key": false,
       "requires_system_dependency": "nmap"

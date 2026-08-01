@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 from tools.portscan_tool import port_scan
 
 class TestPortScan(unittest.TestCase):
@@ -31,7 +31,7 @@ class TestPortScan(unittest.TestCase):
         self.assertIn("results", result)
 
     @patch("tools.portscan_tool.nmap.PortScanner")
-    def test_scan_uses_nmap_and_application_timeouts(self, mock_cls):
+    def test_scan_uses_derived_default_timeout(self, mock_cls):
         scanner = self._make_scanner_mock()
         mock_cls.return_value = scanner
 
@@ -41,7 +41,19 @@ class TestPortScan(unittest.TestCase):
         scanner.scan.assert_called_once_with(
             hosts="example.com",
             arguments="-sV -F --host-timeout 120s",
-            timeout=130,
+            timeout=144,
+        )
+
+    @patch("tools.portscan_tool.nmap.PortScanner")
+    def test_custom_timeout_overrides_default(self, mock_cls):
+        scanner = self._make_scanner_mock()
+        mock_cls.return_value = scanner
+
+        port_scan("example.com", "service", timeout=300)
+        scanner.scan.assert_called_once_with(
+            hosts="example.com",
+            arguments="-sV -F --host-timeout 120s",
+            timeout=300,
         )
 
     @patch("tools.portscan_tool.nmap.PortScanner")
@@ -53,7 +65,7 @@ class TestPortScan(unittest.TestCase):
         scanner.scan.assert_called_once_with(
             hosts="example.com",
             arguments="-p- --host-timeout 15m",
-            timeout=950,
+            timeout=1080,
         )
 
     @patch("tools.portscan_tool.nmap.PortScanner")
@@ -65,7 +77,7 @@ class TestPortScan(unittest.TestCase):
         scanner.scan.assert_called_once_with(
             hosts="example.com",
             arguments="--script vuln -F --host-timeout 15m --script-timeout 5m",
-            timeout=950,
+            timeout=1080,
         )
 
     @patch("tools.portscan_tool.nmap.PortScanner")
@@ -224,7 +236,7 @@ class TestPortScan(unittest.TestCase):
         )
 
     @patch("tools.portscan_tool.nmap.PortScanner")
-    def test_osmatch_filters_incomplete_entries(self, mock_cls):
+    def test_os_scan_keeps_partial_os_matches(self, mock_cls):
         os_matches = [
             {"name": "Linux 4.19 - 5.15", "accuracy": "98"},
             {"name": "Linux 4.15", "line": "52791"},
@@ -236,8 +248,19 @@ class TestPortScan(unittest.TestCase):
 
         self.assertEqual(
             result["results"][0]["os_matches"],
-            [{"name": "Linux 4.19 - 5.15", "accuracy": "98"}],
+            [
+                {"name": "Linux 4.19 - 5.15", "accuracy": "98"},
+                {"name": "Linux 4.15"},
+            ],
         )
+
+    @patch("tools.portscan_tool.nmap.PortScanner")
+    def test_non_os_scan_omits_os_matches_even_when_present(self, mock_cls):
+        os_matches = [{"name": "Linux 4.19 - 5.15", "accuracy": "98"}]
+        mock_cls.return_value = self._make_scanner_mock(os_matches=os_matches)
+        result = port_scan("example.com", "service")
+
+        self.assertNotIn("os_matches", result["results"][0])
 
     @patch("tools.portscan_tool.nmap.PortScanner")
     def test_scan_no_hosts_found(self, mock_cls):
@@ -271,6 +294,14 @@ class TestPortScan(unittest.TestCase):
 
         self.assertFalse(result["success"])
         self.assertEqual(result["error"], "Port scan timed out")
+
+    @patch("tools.portscan_tool.nmap.PortScanner")
+    def test_invalid_timeout_returns_error(self, mock_cls):
+        result = port_scan("example.com", scan_type="basic", timeout=0)
+
+        self.assertFalse(result["success"])
+        self.assertIn("Invalid timeout", result["error"])
+        mock_cls.assert_not_called()
 
     @patch("tools.portscan_tool.nmap.PortScanner")
     def test_invalid_scan_type_returns_error(self, mock_cls):

@@ -1,15 +1,36 @@
+import re
 import xml.etree.ElementTree as ET
 import nmap
 
 SCAN_CONFIG = {
-    "basic": {"args": "-F --host-timeout 30s", "timeout": 35},
-    "service": {"args": "-sV -F --host-timeout 120s", "timeout": 130},
-    "os": {"args": "-O -F --host-timeout 60s", "timeout": 65},
-    "full": {"args": "-p- --host-timeout 15m", "timeout": 950},
-    "vuln": {"args": "--script vuln -F --host-timeout 15m --script-timeout 5m", "timeout": 950},
+    "basic": {"args": "-F --host-timeout 30s"},
+    "service": {"args": "-sV -F --host-timeout 120s"},
+    "os": {"args": "-O -F --host-timeout 60s"},
+    "full": {"args": "-p- --host-timeout 15m"},
+    "vuln": {"args": "--script vuln -F --host-timeout 15m --script-timeout 5m"},
 }
 
+TIMEOUT_MARGIN = 0.2
+
 PORT_SCAN_TIMEOUT_ERRORS = (TimeoutError, getattr(nmap, "PortScannerTimeout", TimeoutError))
+
+_DURATION_UNITS = {"s": 1, "m": 60, "h": 3600}
+
+
+def _host_timeout_seconds(args: str) -> int:
+    match = re.search(r"--host-timeout\s*[=]?\s*(\d+)\s*([smh])?", args)
+    if not match:
+        return 0
+    value = int(match.group(1))
+    unit = match.group(2) or "s"
+    return value * _DURATION_UNITS[unit]
+
+
+def _default_timeout(args: str) -> int:
+    host_timeout = _host_timeout_seconds(args)
+    if host_timeout <= 0:
+        raise ValueError(f"No parseable --host-timeout in args: {args!r}")
+    return int(host_timeout * (1 + TIMEOUT_MARGIN))
 
 
 def _extract_host_timeout_status(nmap_output: bytes) -> dict:
@@ -37,7 +58,7 @@ def _extract_host_timeout_status(nmap_output: bytes) -> dict:
     return result
 
 
-def port_scan(target: str, scan_type: str = "basic") -> dict:
+def port_scan(target: str, scan_type: str = "basic", timeout: int | None = None) -> dict:
     """
     Perform Nmap port scan on a target IP or domain.
 
@@ -47,6 +68,9 @@ def port_scan(target: str, scan_type: str = "basic") -> dict:
     - "os"      : OS detection, needs admin (-O -F)
     - "full"    : All 65535 ports, slow (-p-)
     - "vuln"    : Basic vulnerability scripts (--script vuln -F)
+
+    timeout overrides the application-level timeout in seconds. When omitted,
+    it defaults to the scan's --host-timeout plus a margin (TIMEOUT_MARGIN).
     """
     if scan_type not in SCAN_CONFIG:
         return {
@@ -58,14 +82,21 @@ def port_scan(target: str, scan_type: str = "basic") -> dict:
             "valid_scan_types": list(SCAN_CONFIG.keys()),
         }
 
+    if timeout is not None and timeout < 1:
+        return {
+            "success": False,
+            "error": f"Invalid timeout '{timeout}'. Must be a positive number of seconds.",
+        }
+
     try:
         scanner = nmap.PortScanner()
 
         config = SCAN_CONFIG[scan_type]
+        effective_timeout = timeout if timeout is not None else _default_timeout(config["args"])
         scanner.scan(
             hosts=target,
             arguments=config["args"],
-            timeout=config["timeout"],
+            timeout=effective_timeout,
         )
 
         results = []
@@ -78,11 +109,11 @@ def port_scan(target: str, scan_type: str = "basic") -> dict:
             }
 
             os_matches = scanner[host].get("osmatch", [])
-            if os_matches:
+            if scan_type == "os" and os_matches:
                 host_data["os_matches"] = [
-                    {"name": m["name"], "accuracy": m["accuracy"]}
+                    {k: m.get(k) for k in ("name", "accuracy") if m.get(k)}
                     for m in os_matches
-                    if m.get("name") and m.get("accuracy")
+                    if m.get("name") or m.get("accuracy")
                 ]
 
             for proto in scanner[host].all_protocols():
