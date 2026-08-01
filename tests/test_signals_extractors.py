@@ -8,6 +8,7 @@ ip_reputation_extractor (the AbuseIPDB-backed canonical source).
 """
 from tools.signals.asn import asn_extractor
 from tools.signals.ip_reputation import ip_reputation_extractor
+from tools.signals.tech_stack import techstack_extractor
 from tools.signals.extractor import extract_signals
 
 
@@ -248,4 +249,56 @@ def test_asn_extractor_skips_metadata_on_failure():
     assert signals["asn_org"] is None
     assert signals["asn_ip"] is None
     assert signals["asn_country"] is None
+
+
+# ── techstack_extractor ──────────────────────────────────────────────────
+
+def test_techstack_extractor_flattens_list_valued_technologies():
+    """List-valued technology entries must be flattened into individual names.
+
+    Regression test for #140: cms/analytics/javascript_frameworks are stored
+    as lists in the tech_stack_detect result. The extractor used to append
+    str(list), so the prompt line contained a literal Python repr such as
+    ``['WordPress']`` instead of the technology name.
+    """
+    result = {
+        "success": True,
+        "status_code": 200,
+        "security_headers": {"missing": []},
+        "technologies": {
+            "web_server": "nginx",
+            "cms": ["WordPress"],
+            "analytics": ["Google Analytics"],
+            "javascript_frameworks": ["React", "Vue.js"],
+        },
+    }
+    signals = _base_signals()
+    techstack_extractor(result, signals)
+
+    prompt_line = f"Software detected  : {', '.join(signals['software_detected'])}"
+    assert prompt_line == (
+        "Software detected  : nginx, WordPress, Google Analytics, React, Vue.js"
+    )
+    assert "['WordPress']" not in prompt_line
+    assert '"React"' not in prompt_line
+
+
+def test_techstack_extractor_skips_empty_and_none_technologies():
+    """Empty lists, None, 'Unknown' and 'None' values must not add entries."""
+    result = {
+        "success": True,
+        "status_code": 200,
+        "security_headers": {"missing": []},
+        "technologies": {
+            "web_server": "nginx",
+            "cms": [],
+            "analytics": None,
+            "powered_by": "Unknown",
+            "javascript_frameworks": ["React", None, "", "Unknown"],
+        },
+    }
+    signals = _base_signals()
+    techstack_extractor(result, signals)
+
+    assert signals["software_detected"] == ["nginx", "React"]
 

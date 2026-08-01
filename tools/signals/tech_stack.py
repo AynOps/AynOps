@@ -8,7 +8,11 @@ def techstack_extractor(result, signals):
         return
 
     for tech in technologies.values():
-        if tech and str(tech).strip() not in ("Unknown", "None", ""):
+        if isinstance(tech, list):
+            for item in tech:
+                if item and str(item).strip() not in ("Unknown", "None", ""):
+                    signals["software_detected"].append(str(item).strip())
+        elif tech and str(tech).strip() not in ("Unknown", "None", ""):
             signals["software_detected"].append(str(tech).strip())
 
     if not result.get("success"):
