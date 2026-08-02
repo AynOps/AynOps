@@ -254,13 +254,7 @@ def test_asn_extractor_skips_metadata_on_failure():
 # ── techstack_extractor ──────────────────────────────────────────────────
 
 def test_techstack_extractor_flattens_list_valued_technologies():
-    """List-valued technology entries must be flattened into individual names.
-
-    Regression test for #140: cms/analytics/javascript_frameworks are stored
-    as lists in the tech_stack_detect result. The extractor used to append
-    str(list), so the prompt line contained a literal Python repr such as
-    ``['WordPress']`` instead of the technology name.
-    """
+    """List-valued technology entries must be flattened into individual names."""
     result = {
         "success": True,
         "status_code": 200,
