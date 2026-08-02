@@ -51,7 +51,7 @@ def test_robots_txt_inspect_happy_path_https(mock_get):
 
 
 @patch("tools.robots_txt_tool.requests.get")
-def test_robots_txt_inspect_separates_groups_across_blank_lines(mock_get):
+def test_robots_txt_inspect_parses_blank_line_separated_rule_groups(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.url = "https://example.com/robots.txt"
