@@ -13,7 +13,14 @@ SUBDOMAIN_LIFETIME = 3
 RECORD_TYPES = ["A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA", "CAA"]
 
 # Common subdomains tried during brute-force discovery; adjust to taste.
-COMMON_SUBDOMAINS = ["www", "mail", "ftp", "admin", "api", "dev", "staging", "vpn", "remote", "portal"]
+COMMON_SUBDOMAINS = [
+    "www", "mail", "ftp", "admin", "api", "dev", "staging", "vpn", "remote", "portal",
+    "webmail", "smtp", "pop", "imap", "autodiscover", "autoconfig", "mx", "ns1", "ns2", "cpanel","whm", 
+    "blog", "store", "app", "shop", "mobile", "test", "demo", "beta", "testing","sandbox","local",
+    "cdn", "edge", "static", "proxy", "origin", "media", "assets", "images", "docs", "help","support","status",
+    "git", "jenkins", "jira", "wiki","pipeline","sso", "auth", "login", "gateway","secure", "files", "upload", "backup",
+    "db", "monitor", "dashboard","cloud", "chat", "forum", "cluster", "aws"
+]
 
 # A subdomain counts as found if any of these record types resolves for it.
 SUBDOMAIN_RECORD_TYPES = ("A", "AAAA", "CNAME")
