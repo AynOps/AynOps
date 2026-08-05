@@ -197,14 +197,30 @@
     }
   },
   "tags": [
+    "mcp",
     "cybersecurity",
     "reconnaissance",
     "whois",
+    "osint",
+    "pentesting",
+    "network-security",
+    "web-security",
     "dns",
+    "subdomain",
     "nmap",
+    "port-scanning",
     "ssl",
+    "tls",
+    "http",
     "cve",
-    "security"
+    "vulnerability-assessment",
+    "threat-intelligence",
+    "cloud-security",
+    "email-security",
+    "ip-reputation",
+    "certificate-transparency",
+    "technology-detection",
+    "breach-intelligence"
   ],
   "glama_url": "https://glama.ai/mcp/servers/gaoharimran29-glitch/AynOps"
 }
