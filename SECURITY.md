@@ -29,7 +29,7 @@ If you believe you've discovered a vulnerability that could put users at risk (f
 
 You can report privately through:
 
-- GitHub Private Security Advisory
+- GitHub: Open a [private security advisory](https://github.com/AynOps/AynOps/security/advisories/new)
 - Email: gaoharimran29@gmail.com
 
 When reporting, please include:
