@@ -3,50 +3,72 @@
 ## Supported Versions
 
 | Version | Supported |
-|---|---|
-| Latest (main branch) | ✅ Yes |
-| Older commits | ❌ No |
+| --- | --- |
+| Latest (`main` branch) | ✅ Yes |
+| Older releases/commits | ❌ No |
 
 ---
 
-## Reporting a Vulnerability
+## Reporting Security Issues
 
-**Please do not report security vulnerabilities through public GitHub issues.**
+Security contributions are always welcome.
 
-If you discover a security vulnerability in this project, please report it responsibly by contacting me directly:
+### Public GitHub Issues
 
-- **LinkedIn:** [Gaohar Imran](https://www.linkedin.com/in/gaohar-imran-5a4063379/)
-- **GitHub:** Open a [private security advisory](https://github.com/AynOps/AynOps/security/advisories/new)
-- **Email:** gaoharimran29@gmail.com
+Feel free to open a GitHub Issue or Pull Request for:
 
-Please include:
-- A description of the vulnerability
-- Steps to reproduce it
+- Security improvements or hardening suggestions
+- Dependency security updates
+- Documentation improvements related to security
+- Potential security concerns that are not immediately exploitable
+- Questions about the project's security
+
+### Private Disclosure
+
+If you believe you've discovered a vulnerability that could put users at risk (for example, arbitrary code execution, command injection, credential exposure, or another exploitable security issue), please report it privately instead of creating a public issue.
+
+You can report privately through:
+
+- GitHub: Open a [private security advisory](https://github.com/AynOps/AynOps/security/advisories/new)
+- Email: gaoharimran29@gmail.com
+
+When reporting, please include:
+
+- Description of the issue
+- Steps to reproduce
 - Potential impact
-- Any suggested fix if you have one
+- Suggested fix (if available)
 
-I will respond within **72 hours** and work with you to address the issue before any public disclosure.
+I aim to acknowledge reports within **72 hours** and will work toward a fix before public disclosure whenever possible.
 
 ---
 
 ## Scope
 
-This is a **local MCP server** — it runs on the user's own machine and does not expose any network services by default.
+This project is a local MCP server that runs on the user's own machine and does not expose network services by default.
 
-### In scope
-- Vulnerabilities in the tool logic that could lead to unintended code execution
-- Input validation bypasses that could harm the user's system
-- Dependency vulnerabilities with direct exploitability
+### In Scope
 
-### Out of scope
-- Issues with third-party APIs (NVD, AbuseIPDB, WHOIS servers)
-- Rate limiting or availability of external services
-- Security of the user's own Claude Desktop installation
+- Command injection or arbitrary code execution
+- Path traversal or unsafe file access
+- Input validation issues
+- Dependency vulnerabilities with practical exploitability
+- Security issues within the project's codebase and bundled MCP tools
+
+### Out of Scope
+
+- Security issues in third-party services or APIs
+- Availability or rate-limiting of external services
+- User-specific operating system or environment configuration
+- Security of third-party applications used alongside this project
+- Social engineering attacks
 
 ---
 
-## Ethical Usage
+## Responsible Use
 
-This tool is intended for **authorized security research and defensive purposes only.**
+This project is intended for authorized security research and defensive purposes only.
 
-Users are responsible for ensuring they have permission to scan any target domain or IP address. The maintainers are not responsible for misuse of this software.
+Always ensure you have permission before scanning or testing systems you do not own or administer.
+
+Thank you for helping make the project safer for everyone.
