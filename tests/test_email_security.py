@@ -20,7 +20,7 @@ class TestEmailSecurityScanner(unittest.TestCase):
         self.assertEqual(_spf_policy("v=spf1 include:spf.protection.outlook.com ~all"), "softfail")
         self.assertEqual(_spf_policy("v=spf1 ?all"), "neutral")
         self.assertEqual(_spf_policy("v=spf1 +all"), "pass")
-        self.assertEqual(_spf_policy("v=spf1 redirect=example.com"), "unknown")
+        self.assertEqual(_spf_policy("v=spf1 redirect=example.com"), "missing")
 
     @patch('dns.resolver.Resolver.resolve')
     def test_query_txt_fallback_mechanism(self, mock_resolve):
