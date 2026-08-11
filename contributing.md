@@ -236,6 +236,12 @@ pytest tests/ -v
 
 ---
 
+## Pull Request Template
+
+A pull request template at `.github/PULL_REQUEST_TEMPLATE.md` auto-fills the description box when you open a PR. Fill in its sections (Closes, Summary, What changed, Notes, Verification) and complete the verification checklist before requesting review.
+
+---
+
 ## PR Checklist
 
 - [ ] Tool follows the existing pattern in `tools/`
