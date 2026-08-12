@@ -430,7 +430,7 @@ Link:- https://pypi.org/project/AynOps/
 
 ## 🤝 Contributing
 
-Pull requests are welcome! Check [contributing.md](contributing.md) for guidelines and a list of open issues ready to pick up.
+Pull requests are welcome! Check [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and a list of open issues ready to pick up.
 
 ---
 
