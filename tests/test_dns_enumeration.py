@@ -72,7 +72,7 @@ class TestDnsEnumeration(unittest.TestCase):
                 return self._make_resolver_answer(["alias.example.com."])
             if rtype == "SOA":
                 return self._make_soa_answer()
-            raise Exception("no record")
+            raise real_dns.NoAnswer
 
         resolver.resolve.side_effect = side_effect
         result = dns_enumeration("example.com")
@@ -113,6 +113,84 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertTrue(result["success"])
         for rtype_records in result["records"].values():
             self.assertEqual(rtype_records, [])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_expected_dns_errors_leave_record_types_empty(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        # Every lookup failure dnspython documents for resolve() other than
+        # NXDOMAIN stays a per-record-type negative, not a scan failure.
+        for error in (real_dns.NoAnswer, real_dns.NoNameservers,
+                      real_dns.LifetimeTimeout, real_dns.YXDOMAIN):
+            with self.subTest(error=error.__name__):
+                resolver = Mock()
+                resolver.resolve.side_effect = error
+                mock_resolver_class.return_value = resolver
+
+                result = dns_enumeration("example.com")
+
+                self.assertTrue(result["success"])
+                self.assertEqual(
+                    set(result["records"]),
+                    {"A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA", "CAA"},
+                )
+                for rtype_records in result["records"].values():
+                    self.assertEqual(rtype_records, [])
+                self.assertEqual(result["subdomains_found"], [])
+                self.assertEqual(result["ttl"], {})
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_expected_dns_errors_skip_subdomain_candidate(self, mock_resolver_class):
+        import dns.name as real_name
+        import dns.resolver as real_dns
+
+        # NXDOMAIN is the ordinary outcome for a brute-forced name, and a
+        # candidate built by prefixing a label can exceed the 255-octet limit;
+        # neither may fail the scan the way NXDOMAIN does for the target.
+        for error in (real_dns.NoAnswer, real_dns.NXDOMAIN, real_dns.NoNameservers,
+                      real_dns.LifetimeTimeout, real_dns.YXDOMAIN, real_name.NameTooLong):
+            with self.subTest(error=error.__name__):
+                resolver = Mock()
+
+                def side_effect(domain, rtype, lifetime=5, tcp=False, _error=error):
+                    if domain == "example.com":
+                        raise real_dns.NoAnswer
+                    raise _error
+
+                resolver.resolve.side_effect = side_effect
+                mock_resolver_class.return_value = resolver
+
+                result = dns_enumeration("example.com")
+
+                self.assertTrue(result["success"])
+                self.assertEqual(result["subdomains_found"], [])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_unexpected_error_propagates_from_record_lookup(self, mock_resolver_class):
+        resolver = Mock()
+        resolver.resolve.side_effect = RuntimeError("unexpected resolver failure")
+        mock_resolver_class.return_value = resolver
+
+        # An unexpected error is a defect, not a domain with no records.
+        with self.assertRaises(RuntimeError):
+            dns_enumeration("example.com")
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_unexpected_error_propagates_from_subdomain_lookup(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if domain == "example.com":
+                raise real_dns.NoAnswer
+            raise RuntimeError("unexpected resolver failure")
+
+        resolver.resolve.side_effect = side_effect
+        mock_resolver_class.return_value = resolver
+
+        with self.assertRaises(RuntimeError):
+            dns_enumeration("example.com")
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_caa_records_parsed(self, mock_resolver_class):
