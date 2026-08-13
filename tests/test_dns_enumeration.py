@@ -167,8 +167,16 @@ class TestDnsEnumeration(unittest.TestCase):
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_unexpected_error_propagates_from_record_lookup(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
         resolver = Mock()
-        resolver.resolve.side_effect = RuntimeError("unexpected resolver failure")
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if domain == "example.com":
+                raise RuntimeError("unexpected resolver failure")
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
         mock_resolver_class.return_value = resolver
 
         # An unexpected error is a defect, not a domain with no records.
