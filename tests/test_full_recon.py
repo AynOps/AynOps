@@ -274,3 +274,42 @@ def test_full_recon_gets_missing_security_headers_from_headers_analyzer():
         "referrer-policy, permissions-policy"
     ) in result["signals_block"]
     assert result["tool_coverage"].get("headers") == "success"
+
+
+def _full_recon_over_one_hop(status_code):
+    """Run full_recon with headers_analyzer served one canned, header-less
+    response and every other tool stubbed out."""
+    hop = {
+        "url": "https://example.com/",
+        "status_code": status_code,
+        "headers": {},
+        "body": "",
+    }
+
+    with patch("tools.headers_tool._walk_redirect_chain", return_value=[hop]), \
+            patch("tools.fullrecon_tool.TOOL_REGISTRY", _registry_with_only_headers_live()):
+        return full_recon("example.com")
+
+
+def test_full_recon_reports_no_hardening_gap_from_a_4xx_page():
+    """Headers read off a 4xx error page describe that page, not the site, so
+    full_recon must report neither missing headers nor a warning."""
+    result = _full_recon_over_one_hop(403)
+
+    signals = result["pre_extracted_signals"]
+    assert signals["missing_security_headers"] == []
+    assert signals["auto_warnings"] == []
+    assert "Missing sec headers: 0 — none" in result["signals_block"]
+    assert "AUTO-WARNINGS" not in result["signals_block"]
+
+
+def test_full_recon_reports_no_hardening_gap_from_a_5xx_page():
+    """A 5xx response never reached page content, so full_recon must report
+    neither missing headers nor a warning."""
+    result = _full_recon_over_one_hop(503)
+
+    signals = result["pre_extracted_signals"]
+    assert signals["missing_security_headers"] == []
+    assert signals["auto_warnings"] == []
+    assert "Missing sec headers: 0 — none" in result["signals_block"]
+    assert "AUTO-WARNINGS" not in result["signals_block"]

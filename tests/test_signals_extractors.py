@@ -391,6 +391,26 @@ def test_extract_signals_reports_no_missing_headers_when_all_present():
     assert signals["missing_security_headers"] == []
 
 
+def test_extract_signals_ignores_headers_from_a_4xx_final_hop():
+    """A 4xx response is an error page, not the site, so its absent headers
+    must not become a finding or a warning."""
+    results = _registry_results(headers=_headers_result({}, status_code=403))
+    signals = extract_signals(results)
+
+    assert signals["missing_security_headers"] == []
+    assert signals["auto_warnings"] == []
+
+
+def test_extract_signals_ignores_headers_from_a_5xx_final_hop():
+    """A 5xx response never reached page content, so its absent headers must
+    not become a finding or a warning."""
+    results = _registry_results(headers=_headers_result({}, status_code=503))
+    signals = extract_signals(results)
+
+    assert signals["missing_security_headers"] == []
+    assert signals["auto_warnings"] == []
+
+
 def test_techstack_success_does_not_clear_the_headers_signal():
     """tech_stack_detect no longer analyses headers, so its extractor must
     not overwrite what headers_analyzer found (extractors run in registry
