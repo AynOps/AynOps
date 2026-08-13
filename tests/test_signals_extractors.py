@@ -324,16 +324,25 @@ def _registry_entry(name):
     return entry
 
 
-def _headers_result(raw_headers, status_code=200):
-    """Run the real headers_analyzer over one canned HTTP response."""
-    hop = {
-        "url": "https://example.com/",
+def _headers_result_over(hops):
+    """Run the real headers_analyzer over a canned redirect chain."""
+    with patch("tools.headers_tool._walk_redirect_chain", return_value=hops):
+        return headers_analyzer("example.com")
+
+
+def _hop(url, status_code, raw_headers):
+    """One canned HTTP response, shaped as _walk_redirect_chain returns it."""
+    return {
+        "url": url,
         "status_code": status_code,
         "headers": dict(raw_headers),
         "body": "",
     }
-    with patch("tools.headers_tool._walk_redirect_chain", return_value=[hop]):
-        return headers_analyzer("example.com")
+
+
+def _headers_result(raw_headers, status_code=200):
+    """Run the real headers_analyzer over one canned HTTP response."""
+    return _headers_result_over([_hop("https://example.com/", status_code, raw_headers)])
 
 
 def _raw_headers_without(*omitted):
@@ -382,6 +391,20 @@ def test_extract_signals_reports_no_missing_headers_when_all_present():
     signals = extract_signals(results)
 
     assert signals["missing_security_headers"] == []
+
+
+def test_extract_signals_reads_the_headers_of_the_final_redirect_hop():
+    """A chain that resolves to a 2xx page did reach the site, so the page's
+    absent headers must still reach the signal."""
+    results = _registry_results(
+        headers=_headers_result_over([
+            _hop("https://example.com/", 301, {"Location": "https://www.example.com/"}),
+            _hop("https://www.example.com/", 200, _raw_headers_without("Content-Security-Policy")),
+        ])
+    )
+    signals = extract_signals(results)
+
+    assert signals["missing_security_headers"] == ["content-security-policy"]
 
 
 def test_extract_signals_ignores_headers_from_a_4xx_final_hop():
