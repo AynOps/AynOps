@@ -6,18 +6,33 @@ fingerprints (GitHub Pages, Heroku, S3, Azure, Ghost, Shopify, Fastly), and
 confirms the takeover with an HTTP request checking for the service's
 takeover-indicating response.
 """
+import re
+
 import dns.resolver
 import requests
 
 from tools.dns_tool import PUBLIC_RESOLVERS, dns_enumeration
 from utils.helpers import is_valid_domain, normalize_domain
 
-# (cname_contains, service, takeover indicator)
+# Actual S3 endpoint hosts end in an s3 service label under amazonaws.com:
+# bucket.s3.<region>, bucket.s3-<region> (legacy dash), bucket.s3 (legacy
+# global), s3.dualstack.<region>, and the s3-website[.-]<region> website
+# endpoints (https://docs.aws.amazon.com/general/latest/gr/s3.html,
+# https://docs.aws.amazon.com/AmazonS3/latest/userguide/WebsiteEndpoints.html,
+# https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html).
+# Anchoring on that label keeps other amazonaws.com services (API Gateway,
+# ELB, ...) from being matched as S3.
+_S3_ENDPOINT_RE = re.compile(
+    r"(?:^|\.)s3(?:-website)?(?:[.-]dualstack)?[.-][a-z0-9-]+\.amazonaws\.com$"
+    r"|(?:^|\.)s3\.amazonaws\.com$"
+)
+
+# (cname_contains or cname_pattern, service, takeover indicator)
 # indicator key "status" matches on the HTTP status code, "body" on response text.
 VULNERABLE_FINGERPRINTS = [
     {"cname_contains": "github.io", "service": "GitHub Pages", "indicator": {"body": "There isn't a GitHub Pages site here."}},
     {"cname_contains": "herokuapp.com", "service": "Heroku", "indicator": {"body": "No such app"}},
-    {"cname_contains": "amazonaws.com", "service": "AWS S3", "indicator": {"body": "NoSuchBucket"}},
+    {"cname_pattern": _S3_ENDPOINT_RE, "service": "AWS S3", "indicator": {"body": "NoSuchBucket"}},
     {"cname_contains": "azurewebsites.net", "service": "Azure", "indicator": {"body": "404 Web Site not found"}},
     {"cname_contains": "ghost.io", "service": "Ghost", "indicator": {"body": "404 Domain Not Found"}},
     {"cname_contains": "myshopify.com", "service": "Shopify", "indicator": {"body": "Sorry, this shop"}},
@@ -46,9 +61,13 @@ def _resolve_cname(subdomain: str, resolver) -> str | None:
 
 
 def _match_fingerprint(cname: str) -> dict | None:
-    cname = cname.lower()
+    cname = cname.lower().rstrip(".")
     for fingerprint in VULNERABLE_FINGERPRINTS:
-        if fingerprint["cname_contains"] in cname:
+        pattern = fingerprint.get("cname_pattern")
+        if pattern is not None:
+            if pattern.search(cname):
+                return fingerprint
+        elif fingerprint["cname_contains"] in cname:
             return fingerprint
     return None
 
