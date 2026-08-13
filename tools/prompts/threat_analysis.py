@@ -81,7 +81,7 @@ signals_block ( Add signals_block from the tool output )
 
 EVIDENCE QUALITY RULES — follow these strictly:
 • Never report a vulnerability solely because data is missing from a tool.
-• IF the headers scan failed, was blocked by a bot-detection/WAF challenge, or collected no security headers, classify security headers as "Insufficient data" rather than "Missing". Do not penalize the domain for blocked or failed requests.
+• IF the headers scan failed, was blocked by a bot-detection/WAF challenge, returned an HTTP status of 4xx/5xx, or collected no security headers, classify security headers as "Insufficient data" rather than "Missing". Do not penalize the domain for blocked or failed requests.
 • Use this language:
     - "Confirmed" — tool returned explicit evidence
     - "Likely" — strong indirect evidence from correlated tools
