@@ -220,7 +220,7 @@ def test_full_recon_skips_and_failures(mock_is_valid, mock_registry, mock_extrac
     skipped_fn.assert_not_called()
 
 # ==========================================
-# TESTS FOR THE SECURITY-HEADER SIGNAL (issue #139)
+# TESTS FOR THE SECURITY-HEADER SIGNAL
 # ==========================================
 
 def _stub_fn(name):

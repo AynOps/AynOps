@@ -302,14 +302,7 @@ def test_techstack_extractor_skips_empty_and_none_technologies():
 
 
 
-# ── headers signal (issue #139) ──────────────────────────────────────────
-#
-# full_recon's `missing_security_headers` signal must come from
-# headers_analyzer, the tool that owns header analysis. These tests drive
-# the real TOOL_REGISTRY and the real headers_analyzer (only the HTTP hop
-# is canned), so they fail if the tool is unregistered, registered under a
-# different name, wired to the wrong function, or given an extractor that
-# does not populate the signal.
+# ── headers_extractor ────────────────────────────────────────────────────
 
 _RAW_HEADERS_ALL_PRESENT = {
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
@@ -412,9 +405,7 @@ def test_extract_signals_ignores_headers_from_a_5xx_final_hop():
 
 
 def test_techstack_success_does_not_clear_the_headers_signal():
-    """tech_stack_detect no longer analyses headers, so its extractor must
-    not overwrite what headers_analyzer found (extractors run in registry
-    order, so a stale techstack write silently wins)."""
+    """A successful techstack run must leave headers_analyzer's signal intact."""
     results = _registry_results(
         headers=_headers_result(_raw_headers_without("Content-Security-Policy")),
         techstack={
