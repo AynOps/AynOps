@@ -250,18 +250,27 @@ def test_both_schemes_fail_is_safe(mock_enum, mock_resolver_class, mock_get):
 @patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
 @patch("tools.subdomain_takeover_tool.dns_enumeration")
 def test_s3_fingerprint_matches_only_s3_endpoints(mock_enum, mock_resolver_class, mock_get):
-    """Only actual S3 endpoint CNAMEs select the AWS S3 fingerprint; other amazonaws.com services are safe and unprobed."""
+    """Only actual S3 bucket endpoint CNAMEs select the AWS S3 fingerprint; other AWS endpoints are safe and unprobed."""
     mock_enum.return_value = _enumeration_result(["static.example.com"])
     resolver = Mock()
     mock_resolver_class.return_value = resolver
 
     s3_cnames = [
-        "static-example-com.s3.amazonaws.com.",
-        "static-example-com.s3.us-east-1.amazonaws.com.",
-        "static-example-com.s3-us-west-2.amazonaws.com.",
-        "static-example-com.s3.dualstack.us-east-1.amazonaws.com.",
-        "static-example-com.s3-website-us-east-1.amazonaws.com.",
-        "static-example-com.s3-website.eu-west-1.amazonaws.com.",
+        "static-example-com.s3.amazonaws.com.",  # legacy global
+        "static-example-com.s3.us-east-1.amazonaws.com.",  # virtual-hosted regional
+        "static-example-com.s3-us-west-2.amazonaws.com.",  # legacy dash region
+        "static-example-com.s3.dualstack.us-east-1.amazonaws.com.",  # dual-stack
+        "static-example-com.s3-fips.us-east-1.amazonaws.com.",  # FIPS
+        "static-example-com.s3-fips.dualstack.us-east-1.amazonaws.com.",  # FIPS dual-stack
+        "static-example-com.s3-accelerate.amazonaws.com.",  # Transfer Acceleration
+        "static-example-com.s3-accelerate.dualstack.amazonaws.com.",  # Acceleration dual-stack
+        "static-example-com.s3-website-us-east-1.amazonaws.com.",  # website, dash form
+        "static-example-com.s3-website.eu-west-1.amazonaws.com.",  # website, dot form
+        "static-example-com.s3.us-gov-west-1.amazonaws.com.",  # GovCloud
+        "static-example-com.s3.cn-north-1.amazonaws.com.cn.",  # China regional
+        "static-example-com.s3-cn-northwest-1.amazonaws.com.cn.",  # China legacy dash
+        "static-example-com.s3.amazonaws.com.cn.",  # China legacy global
+        "static-example-com.s3-website.cn-north-1.amazonaws.com.cn.",  # China website
         "Static-Example-Com.S3.Us-East-1.Amazonaws.Com.",
     ]
     non_s3_cnames = [
@@ -269,8 +278,17 @@ def test_s3_fingerprint_matches_only_s3_endpoints(mock_enum, mock_resolver_class
         "my-alb-1234567890.us-east-1.elb.amazonaws.com.",  # Elastic Load Balancing
         "dualstack.my-alb-1234567890.us-west-2.elb.amazonaws.com.",  # ELB dualstack
         "ABC123DEF4.EXECUTE-API.US-EAST-1.AMAZONAWS.COM.",  # uppercase API Gateway
+        "123456789012.s3-control.us-east-1.amazonaws.com.",  # S3 Control
+        "my-ap-123456789012.s3-accesspoint.us-east-1.amazonaws.com.",  # access point
+        "my-olap-123456789012.s3-object-lambda.us-east-1.amazonaws.com.",  # Object Lambda
+        "my-ap-123456789012.s3-outposts.us-east-1.amazonaws.com.",  # S3 on Outposts
+        "bucket-base--use1-az5--x-s3.s3express-use1-az5.us-east-1.amazonaws.com.",  # S3 Express zonal
+        "s3express-control.us-east-1.amazonaws.com.",  # S3 Express control
+        "static-example-com.s3.not-a-real-region.amazonaws.com.",  # fabricated region token
+        "static-example-com.s3-website.dualstack.us-east-1.amazonaws.com.",  # website has no dual-stack form
     ]
 
+    failures = []
     for cname, is_s3 in [(c, True) for c in s3_cnames] + [(c, False) for c in non_s3_cnames]:
         mock_get.reset_mock()
         resolver.resolve.return_value = [_cname_record(cname)]
@@ -283,14 +301,24 @@ def test_s3_fingerprint_matches_only_s3_endpoints(mock_enum, mock_resolver_class
 
         assert result["success"] is True
         if is_s3:
-            assert result["total_vulnerable"] == 1, f"{cname} is an actual S3 endpoint and must match"
-            assert result["vulnerable"][0]["service"] == "AWS S3"
-            assert result["vulnerable"][0]["cname"] == cname.rstrip(".")
-            assert mock_get.call_count == 1
+            matched = (
+                result["total_vulnerable"] == 1
+                and result["vulnerable"][0]["service"] == "AWS S3"
+                and result["vulnerable"][0]["cname"] == cname.rstrip(".")
+                and mock_get.call_count == 1
+            )
+            if not matched:
+                failures.append(f"actual S3 bucket endpoint must match and be probed: {cname}")
         else:
-            assert result["vulnerable"] == [], f"{cname} is not an S3 endpoint and must not match"
-            assert result["safe"] == ["static.example.com"]
-            mock_get.assert_not_called()
+            ignored = (
+                result["vulnerable"] == []
+                and result["safe"] == ["static.example.com"]
+                and mock_get.call_count == 0
+            )
+            if not ignored:
+                failures.append(f"non-bucket endpoint must not match or be probed: {cname}")
+
+    assert failures == [], "wrong AWS S3 fingerprint selection:\n" + "\n".join(failures)
 
 
 @patch("tools.subdomain_takeover_tool.dns_enumeration")
