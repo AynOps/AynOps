@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 # Import the functions to test. Adjust 'tools.fullrecon_tool' to match your actual module layout.
 from tools.fullrecon_tool import _format_signals_block, full_recon
+from tools.signals.registry import TOOL_REGISTRY
 
 
 # ==========================================
@@ -217,3 +218,59 @@ def test_full_recon_skips_and_failures(mock_is_valid, mock_registry, mock_extrac
     
     # Ensure skipped target functions never entered execution path
     skipped_fn.assert_not_called()
+
+# ==========================================
+# TESTS FOR THE SECURITY-HEADER SIGNAL (issue #139)
+# ==========================================
+
+def _stub_fn(name):
+    """A registered tool replaced by a no-network failure result."""
+    def _fn(*_args, **_kwargs):
+        return {"success": False, "error": f"{name} not exercised by this test"}
+    return _fn
+
+
+def _registry_with_only_headers_live():
+    """The real TOOL_REGISTRY with every tool but headers_analyzer stubbed.
+
+    Keeps full_recon's real wave scheduling, real registry entries and the
+    real extractor wiring, while making the run offline.
+    """
+    entries = []
+    for tool in TOOL_REGISTRY:
+        entry = dict(tool)
+        if entry["name"] != "headers":
+            entry["fn"] = _stub_fn(entry["name"])
+        entries.append(entry)
+    return entries
+
+
+def test_full_recon_gets_missing_security_headers_from_headers_analyzer():
+    """full_recon must surface headers_analyzer's findings in the signal
+    and in the block handed to the threat-analysis prompt."""
+    hop = {
+        "url": "https://example.com/",
+        "status_code": 200,
+        "headers": {
+            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+            "X-Content-Type-Options": "nosniff",
+        },
+        "body": "",
+    }
+
+    with patch("tools.headers_tool._walk_redirect_chain", return_value=[hop]), \
+            patch("tools.fullrecon_tool.TOOL_REGISTRY", _registry_with_only_headers_live()):
+        result = full_recon("example.com")
+
+    signals = result["pre_extracted_signals"]
+    assert signals["missing_security_headers"] == [
+        "content-security-policy",
+        "x-frame-options",
+        "referrer-policy",
+        "permissions-policy",
+    ]
+    assert (
+        "Missing sec headers: 4 — content-security-policy, x-frame-options, "
+        "referrer-policy, permissions-policy"
+    ) in result["signals_block"]
+    assert result["tool_coverage"].get("headers") == "success"
