@@ -14,17 +14,37 @@ import requests
 from tools.dns_tool import PUBLIC_RESOLVERS, dns_enumeration
 from utils.helpers import is_valid_domain, normalize_domain
 
-# Actual S3 endpoint hosts end in an s3 service label under amazonaws.com:
-# bucket.s3.<region>, bucket.s3-<region> (legacy dash), bucket.s3 (legacy
-# global), s3.dualstack.<region>, and the s3-website[.-]<region> website
-# endpoints (https://docs.aws.amazon.com/general/latest/gr/s3.html,
-# https://docs.aws.amazon.com/AmazonS3/latest/userguide/WebsiteEndpoints.html,
-# https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html).
-# Anchoring on that label keeps other amazonaws.com services (API Gateway,
-# ELB, ...) from being matched as S3.
+# Region codes are matched by shape - an area prefix, alphabetic segments and a
+# trailing number - which covers commercial, GovCloud, China and ISO regions
+# (us-east-1, us-gov-west-1, cn-north-1, us-iso-east-1) without freezing a list
+# that AWS keeps extending. Matching them by shape is also what separates a
+# bucket host from the sibling s3-* endpoint families that are not buckets
+# (s3-control, s3-accesspoint, s3-object-lambda, s3-outposts, s3express-*,
+# s3tables), whose service label can never be read as a region.
+_AWS_REGION = r"[a-z]{2}(?:-[a-z]+)+-\d+"
+
+# The documented S3 bucket endpoint hosts, i.e. the ones a dangling CNAME can
+# leave answering NoSuchBucket. Under amazonaws.com: bucket.s3.<region>,
+# bucket.s3-<region> (legacy dash), bucket.s3 (legacy global),
+# s3.dualstack.<region>, s3-fips[.dualstack].<region>, the Transfer
+# Acceleration s3-accelerate[.dualstack] endpoints, and the
+# s3-website[.-]<region> website endpoints. The China partition documents the
+# regional, legacy dash, legacy global and s3-website.<region> forms under
+# amazonaws.com.cn. Anchoring on these keeps every other AWS service (API
+# Gateway, ELB, ...) from being matched as S3.
+# https://docs.aws.amazon.com/general/latest/gr/s3.html
+# https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html
+# https://docs.aws.amazon.com/AmazonS3/latest/userguide/WebsiteEndpoints.html
+# https://docs.aws.amazon.com/AmazonS3/latest/userguide/transfer-acceleration-getting-started.html
+# https://docs.amazonaws.cn/en_us/AmazonS3/latest/userguide/VirtualHosting.html
+# https://docs.amazonaws.cn/en_us/AmazonS3/latest/userguide/static-website-hosting-china.html
 _S3_ENDPOINT_RE = re.compile(
-    r"(?:^|\.)s3(?:-website)?(?:[.-]dualstack)?[.-][a-z0-9-]+\.amazonaws\.com$"
-    r"|(?:^|\.)s3\.amazonaws\.com$"
+    rf"(?:^|\.)(?:s3(?:[.-]{_AWS_REGION}|\.dualstack\.{_AWS_REGION})?"
+    rf"|s3-fips(?:\.dualstack)?\.{_AWS_REGION}"
+    rf"|s3-accelerate(?:\.dualstack)?"
+    rf"|s3-website[.-]{_AWS_REGION})\.amazonaws\.com$"
+    rf"|(?:^|\.)(?:s3(?:[.-]{_AWS_REGION})?"
+    rf"|s3-website\.{_AWS_REGION})\.amazonaws\.com\.cn$"
 )
 
 # (cname_contains or cname_pattern, service, takeover indicator)
