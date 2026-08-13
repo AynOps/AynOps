@@ -246,6 +246,53 @@ def test_both_schemes_fail_is_safe(mock_enum, mock_resolver_class, mock_get):
     assert mock_get.call_count == 2
 
 
+@patch("tools.subdomain_takeover_tool.requests.get")
+@patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
+@patch("tools.subdomain_takeover_tool.dns_enumeration")
+def test_s3_fingerprint_matches_only_s3_endpoints(mock_enum, mock_resolver_class, mock_get):
+    """Only actual S3 endpoint CNAMEs select the AWS S3 fingerprint; other amazonaws.com services are safe and unprobed."""
+    mock_enum.return_value = _enumeration_result(["static.example.com"])
+    resolver = Mock()
+    mock_resolver_class.return_value = resolver
+
+    s3_cnames = [
+        "static-example-com.s3.amazonaws.com.",
+        "static-example-com.s3.us-east-1.amazonaws.com.",
+        "static-example-com.s3-us-west-2.amazonaws.com.",
+        "static-example-com.s3.dualstack.us-east-1.amazonaws.com.",
+        "static-example-com.s3-website-us-east-1.amazonaws.com.",
+        "static-example-com.s3-website.eu-west-1.amazonaws.com.",
+        "Static-Example-Com.S3.Us-East-1.Amazonaws.Com.",
+    ]
+    non_s3_cnames = [
+        "abc123def4.execute-api.us-east-1.amazonaws.com.",  # API Gateway
+        "my-alb-1234567890.us-east-1.elb.amazonaws.com.",  # Elastic Load Balancing
+        "dualstack.my-alb-1234567890.us-west-2.elb.amazonaws.com.",  # ELB dualstack
+        "ABC123DEF4.EXECUTE-API.US-EAST-1.AMAZONAWS.COM.",  # uppercase API Gateway
+    ]
+
+    for cname, is_s3 in [(c, True) for c in s3_cnames] + [(c, False) for c in non_s3_cnames]:
+        mock_get.reset_mock()
+        resolver.resolve.return_value = [_cname_record(cname)]
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_response.text = "NoSuchBucket"
+        mock_get.return_value = mock_response
+
+        result = subdomain_takeover("example.com")
+
+        assert result["success"] is True
+        if is_s3:
+            assert result["total_vulnerable"] == 1, f"{cname} is an actual S3 endpoint and must match"
+            assert result["vulnerable"][0]["service"] == "AWS S3"
+            assert result["vulnerable"][0]["cname"] == cname.rstrip(".")
+            assert mock_get.call_count == 1
+        else:
+            assert result["vulnerable"] == [], f"{cname} is not an S3 endpoint and must not match"
+            assert result["safe"] == ["static.example.com"]
+            mock_get.assert_not_called()
+
+
 @patch("tools.subdomain_takeover_tool.dns_enumeration")
 def test_invalid_domain(mock_enum):
     result = subdomain_takeover("bad_domain")
