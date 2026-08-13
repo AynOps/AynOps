@@ -29,21 +29,22 @@ _AWS_REGION = r"[a-z]{2}(?:-[a-z]+)+-\d+"
 # s3.dualstack.<region>, s3-fips[.dualstack].<region>, the Transfer
 # Acceleration s3-accelerate[.dualstack] endpoints, and the
 # s3-website[.-]<region> website endpoints. The China partition documents the
-# regional, legacy dash, legacy global and s3-website.<region> forms under
-# amazonaws.com.cn. Anchoring on these keeps every other AWS service (API
-# Gateway, ELB, ...) from being matched as S3.
+# regional, legacy dash, legacy global, dual-stack and s3-website.<region>
+# forms under amazonaws.com.cn. Anchoring on these keeps every other AWS
+# service (API Gateway, ELB, ...) from being matched as S3.
 # https://docs.aws.amazon.com/general/latest/gr/s3.html
 # https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html
 # https://docs.aws.amazon.com/AmazonS3/latest/userguide/WebsiteEndpoints.html
 # https://docs.aws.amazon.com/AmazonS3/latest/userguide/transfer-acceleration-getting-started.html
 # https://docs.amazonaws.cn/en_us/AmazonS3/latest/userguide/VirtualHosting.html
 # https://docs.amazonaws.cn/en_us/AmazonS3/latest/userguide/static-website-hosting-china.html
+# https://github.com/boto/botocore/blob/develop/botocore/data/endpoints.json
 _S3_ENDPOINT_RE = re.compile(
     rf"(?:^|\.)(?:s3(?:[.-]{_AWS_REGION}|\.dualstack\.{_AWS_REGION})?"
     rf"|s3-fips(?:\.dualstack)?\.{_AWS_REGION}"
     rf"|s3-accelerate(?:\.dualstack)?"
     rf"|s3-website[.-]{_AWS_REGION})\.amazonaws\.com$"
-    rf"|(?:^|\.)(?:s3(?:[.-]{_AWS_REGION})?"
+    rf"|(?:^|\.)(?:s3(?:[.-]{_AWS_REGION}|\.dualstack\.{_AWS_REGION})?"
     rf"|s3-website\.{_AWS_REGION})\.amazonaws\.com\.cn$"
 )
 
