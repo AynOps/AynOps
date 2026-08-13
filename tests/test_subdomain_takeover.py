@@ -270,6 +270,8 @@ def test_s3_fingerprint_matches_only_s3_endpoints(mock_enum, mock_resolver_class
         "static-example-com.s3.cn-north-1.amazonaws.com.cn.",  # China regional
         "static-example-com.s3-cn-northwest-1.amazonaws.com.cn.",  # China legacy dash
         "static-example-com.s3.amazonaws.com.cn.",  # China legacy global
+        "static-example-com.s3.dualstack.cn-north-1.amazonaws.com.cn.",  # China dual-stack
+        "static-example-com.s3.dualstack.cn-northwest-1.amazonaws.com.cn.",  # China dual-stack
         "static-example-com.s3-website.cn-north-1.amazonaws.com.cn.",  # China website
         "Static-Example-Com.S3.Us-East-1.Amazonaws.Com.",
     ]
@@ -286,6 +288,12 @@ def test_s3_fingerprint_matches_only_s3_endpoints(mock_enum, mock_resolver_class
         "s3express-control.us-east-1.amazonaws.com.",  # S3 Express control
         "static-example-com.s3.not-a-real-region.amazonaws.com.",  # fabricated region token
         "static-example-com.s3-website.dualstack.us-east-1.amazonaws.com.",  # website has no dual-stack form
+        "static-example-com.s3-fips.cn-north-1.amazonaws.com.cn.",  # China has no FIPS form
+        "static-example-com.s3-accelerate.amazonaws.com.cn.",  # China has no accelerate form
+        "static-example-com.s3-website-cn-north-1.amazonaws.com.cn.",  # China website is dot-separated only
+        "static-example-com.s3.us-east-1.amazonaws.com.evil.com.",  # lookalike suffix, not an AWS host
+        "static-example-com.s3.amazonaws.com.cn.evil.com.",  # lookalike suffix, not an AWS host
+        "nots3.amazonaws.com.",  # s3 substring inside a label, not an s3 label
     ]
 
     failures = []
