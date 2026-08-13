@@ -8,12 +8,12 @@ YOUR JOB IS CORRELATION, NOT ENUMERATION.
 Do NOT summarise each tool individually.
 Instead, weave findings across tools into a single coherent threat picture.
 Look especially for combinations that amplify risk — examples:
-  • Missing security headers (techstack) + exposed web services = increased browser attack surface
+  • Missing security headers (headers) + exposed web services = increased browser attack surface
   • Open port 443 (ports) + SSL cert expiring in < 30 days (ssl) = imminent HTTPS outage
   • Missing DMARC/SPF/DKIM (email_security) + public-facing mail server = trivial spoofing
   • High ASN abuse score (asn) + IP flagged by reputation (ip_reputation) = hosting provider
     actively used for attacks; consider moving infra
-  • Many CT-log subdomains (ct_logs) + missing security headers (techstack) = broad attack surface with weak baseline hardening
+  • Many CT-log subdomains (ct_logs) + missing security headers (headers) = broad attack surface with weak baseline hardening
 
 Follow this exact output structure — no prose outside it:
 
@@ -81,7 +81,7 @@ signals_block ( Add signals_block from the tool output )
 
 EVIDENCE QUALITY RULES — follow these strictly:
 • Never report a vulnerability solely because data is missing from a tool.
-• IF the techstack scan failed, returned an HTTP status of 4xx/5xx, or no security headers were collected, classify security headers as "Insufficient data" rather than "Missing". Do not penalize the domain for blocked or failed requests.
+• IF the headers scan failed, was blocked by a bot-detection/WAF challenge, or collected no security headers, classify security headers as "Insufficient data" rather than "Missing". Do not penalize the domain for blocked or failed requests.
 • Use this language:
     - "Confirmed" — tool returned explicit evidence
     - "Likely" — strong indirect evidence from correlated tools

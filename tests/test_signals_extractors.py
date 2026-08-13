@@ -193,6 +193,7 @@ def test_extract_signals_populates_ip_abuse_score_from_ip_reputation():
         },
         "ports": {"success": False},
         "techstack": {"success": False},
+        "headers": {"success": False},
         "ct_logs": {"success": False},
         "ip_reputation": {
             "success": True,
@@ -220,6 +221,7 @@ def test_extract_signals_leaves_ip_abuse_score_at_zero_when_ip_reputation_missin
         },
         "ports": {"success": False},
         "techstack": {"success": False},
+        "headers": {"success": False},
         "ct_logs": {"success": False},
         "ip_reputation": {"success": False, "error": "API down"},
     }
@@ -262,7 +264,6 @@ def test_techstack_extractor_flattens_list_valued_technologies():
     result = {
         "success": True,
         "status_code": 200,
-        "security_headers": {"missing": []},
         "technologies": {
             "web_server": "nginx",
             "cms": ["WordPress"],
@@ -286,7 +287,6 @@ def test_techstack_extractor_skips_empty_and_none_technologies():
     result = {
         "success": True,
         "status_code": 200,
-        "security_headers": {"missing": []},
         "technologies": {
             "web_server": "nginx",
             "cms": [],
@@ -476,4 +476,25 @@ def test_headers_extractor_does_not_warn_on_a_single_missing_header():
     extractor(_headers_result(_raw_headers_without("Permissions-Policy")), signals)
 
     assert signals["missing_security_headers"] == ["permissions-policy"]
+    assert signals["auto_warnings"] == []
+
+
+def test_techstack_extractor_does_not_touch_the_headers_signal():
+    """tech_stack_detect no longer returns security_headers, so its
+    extractor must not write missing_security_headers at all — whatever
+    order the registry runs the extractors in."""
+    signals = _base_signals()
+    signals["missing_security_headers"] = ["content-security-policy"]
+    techstack_extractor(
+        {
+            "success": True,
+            "domain": "example.com",
+            "url": "https://example.com",
+            "status_code": 200,
+            "technologies": {"web_server": "nginx"},
+        },
+        signals,
+    )
+
+    assert signals["missing_security_headers"] == ["content-security-policy"]
     assert signals["auto_warnings"] == []

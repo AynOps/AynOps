@@ -154,7 +154,7 @@ TOOL_REGISTRY = [
 
 - `wave`: waves run in order (1 -> 2 -> 3), tools within a wave run in parallel. Pick by category, not just by whether the tool needs `domain`:
   - **Wave 1**, lightweight API and infrastructure record lookups (`whois`, `dns`, `ssl`, `email_security`, `asn`).
-  - **Wave 2**, aggressive port/tech scans and throttled log aggregators (`ports`, `techstack`, `ct_logs`; crt.sh rate-limits).
+  - **Wave 2**, aggressive port/tech scans and throttled log aggregators (`ports`, `techstack`, `headers`, `ct_logs`; crt.sh rate-limits).
   - **Wave 3**, tools that depend on Wave 1/2 output (`ip_reputation`, which needs an IP resolved by `asn`/`dns`).
 - `should_run` / `skip_reason`: use when the tool can't run without another tool's successful output, e.g. `ip_reputation` needs an IP address, so it only runs if `asn`/`dns` resolved one. If `should_run` returns `False`, `fn` is never called and the tool is recorded as skipped with `skip_reason` instead of a result.
 

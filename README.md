@@ -50,13 +50,13 @@ It is also listed on glama mcp registry.
 | `cert_transparency` | Query crt.sh Certificate Transparency logs for a domain and extract certificate, subdomain, and wildcard information |
 | `asn_lookup` | Autonomous System Number (ASN) and network ownership lookup via Team Cymru WHOIS — identifies ASN, BGP prefix, organization, registry, country, and allocation date for domains or IP addresses (no API key required) |
 | `ip_reputation` | Check if an IP is flagged as malicious via AbuseIPDB (api key requied) |
+| `headers_analyzer` | Analyzes HTTP security headers — checks HSTS, CSP, X-Frame-Options, and more with severity ratings and misconfiguration details |
 | `full_recon` | Runs all core tools in parallel and returns combined result |
 
 ### Standalone Tools
 
 | Tool | Description |
 |---|---|
-| `headers_analyzer` | Analyzes HTTP security headers — checks HSTS, CSP, X-Frame-Options, and more with severity ratings and misconfiguration details |
 | `cve_lookup` | Search NVD for known CVEs by software name and version (no API key required) |
 | `cloud_exposure_check` | Checks for publicly accessible AWS S3, Azure Blob Storage, and Google Cloud Storage buckets using common bucket naming patterns derived from the target domain |
 | `trace_redirects` | Traces the full HTTP redirect chain hop by hop — flags TLS downgrades, private-IP leaks, redirect loops, cross-domain hops, and overly long chains |
