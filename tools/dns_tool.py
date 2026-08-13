@@ -1,3 +1,5 @@
+import dns.exception
+import dns.name
 import dns.resolver
 from utils.helpers import is_valid_domain, normalize_domain
 
@@ -24,6 +26,25 @@ COMMON_SUBDOMAINS = [
 
 # A subdomain counts as found if any of these record types resolves for it.
 SUBDOMAIN_RECORD_TYPES = ("A", "AAAA", "CNAME")
+
+# Lookup failures dnspython documents for Resolver.resolve(): the name has no
+# RRset of the requested type, no nameserver could answer, the resolution
+# lifetime expired, or the name is too long after DNAME substitution. NXDOMAIN
+# is documented too but handled separately, because a target domain that does
+# not exist ends the whole enumeration. Anything outside this set is a defect
+# rather than a DNS answer, and is left to propagate.
+LOOKUP_ERRORS = (
+    dns.resolver.NoAnswer,
+    dns.resolver.NoNameservers,
+    dns.resolver.YXDOMAIN,
+    # dns.resolver.Timeout is dns.resolver.LifetimeTimeout, a subclass of this.
+    dns.exception.Timeout,
+)
+
+# On the brute-force path NXDOMAIN is the ordinary result for a name that does
+# not exist, and a candidate built by prefixing a label to a long target can
+# exceed the 255-octet limit; both mean "no such subdomain", not a failed scan.
+SUBDOMAIN_LOOKUP_ERRORS = LOOKUP_ERRORS + (dns.resolver.NXDOMAIN, dns.name.NameTooLong)
 
 
 def _clean_name(value) -> str:
@@ -119,11 +140,9 @@ def dns_enumeration(domain: str) -> dict:
                 records[rtype] = [_clean_name(r) for r in answers]
             else:
                 records[rtype] = [str(r) for r in answers]
-        except dns.resolver.NoAnswer:
-            records[rtype] = []
         except dns.resolver.NXDOMAIN:
             return {"success": False, "error": f"Domain {domain} does not exist"}
-        except Exception:
+        except LOOKUP_ERRORS:
             records[rtype] = []
 
     # Subdomain brute-force (common subdomains); a subdomain counts as found
@@ -138,7 +157,7 @@ def dns_enumeration(domain: str) -> dict:
                 resolver.resolve(full, rtype, lifetime=SUBDOMAIN_LIFETIME, tcp=True)
                 found_subdomains.append(full)
                 break
-            except Exception:
+            except SUBDOMAIN_LOOKUP_ERRORS:
                 continue
 
     return {
