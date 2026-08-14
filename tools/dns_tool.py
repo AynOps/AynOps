@@ -157,7 +157,7 @@ def dns_enumeration(domain: str) -> dict:
                 # guaranteed UTF-8. Keep this record type's failure visible
                 # without swallowing defects in our own formatting logic.
                 records[rtype] = []
-                errors[rtype] = f"unexpected: {type(exc).__name__}"
+                errors[rtype] = type(exc).__name__
                 ttls.pop(rtype, None)
 
     # Subdomain brute-force (common subdomains); a subdomain counts as found
@@ -172,6 +172,9 @@ def dns_enumeration(domain: str) -> dict:
             try:
                 resolver.resolve(full, rtype, lifetime=SUBDOMAIN_LIFETIME, tcp=True)
                 found_subdomains.append(full)
+                # A name that resolves on any record type is found, so an
+                # error recorded for an earlier record type no longer applies.
+                subdomain_errors.pop(full, None)
                 break
             except SUBDOMAIN_LOOKUP_ERRORS:
                 continue

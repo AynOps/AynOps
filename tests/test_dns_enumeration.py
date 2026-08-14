@@ -324,6 +324,47 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertNotIn("mail.example.com", result["subdomain_errors"])
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_resolved_subdomain_is_absent_from_subdomain_errors(
+        self, mock_resolver_class
+    ):
+        import dns.resolver as real_dns
+
+        # A hostname that resolves on ANY record type must not appear in
+        # subdomain_errors, regardless of which record type failed earlier or
+        # which (unexpected) exception that lookup raised.
+        cases = (
+            ("A", "AAAA", RuntimeError),
+            ("A", "CNAME", ValueError),
+            ("AAAA", "CNAME", OSError),
+        )
+        for error_rtype, success_rtype, error_kind in cases:
+            with self.subTest(error_rtype=error_rtype,
+                              success_rtype=success_rtype,
+                              error=error_kind.__name__):
+                resolver = Mock()
+                mock_resolver_class.return_value = resolver
+
+                def side_effect(domain, rtype, lifetime=5, tcp=False,
+                                _error_rtype=error_rtype,
+                                _success_rtype=success_rtype,
+                                _error_kind=error_kind):
+                    if domain == "example.com":
+                        raise real_dns.NoAnswer
+                    if domain == "www.example.com":
+                        if rtype == _error_rtype:
+                            raise _error_kind("resolver blew up")
+                        if rtype == _success_rtype:
+                            return self._make_resolver_answer(["192.0.2.1"])
+                    raise real_dns.NoAnswer
+
+                resolver.resolve.side_effect = side_effect
+
+                result = dns_enumeration("example.com")
+
+                self.assertIn("www.example.com", result["subdomains_found"])
+                self.assertNotIn("www.example.com", result["subdomain_errors"])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_record_parsing_errors_propagate(self, mock_resolver_class):
         import dns.resolver as real_dns
 
@@ -375,7 +416,7 @@ class TestDnsEnumeration(unittest.TestCase):
 
         self.assertTrue(result["success"])
         self.assertEqual(result["records"]["TXT"], [])
-        self.assertEqual(result["errors"]["TXT"], "unexpected: UnicodeDecodeError")
+        self.assertEqual(result["errors"]["TXT"], "UnicodeDecodeError")
         self.assertNotIn("TXT", result["ttl"])
         self.assertEqual(result["records"]["A"], ["192.0.2.1"])
         self.assertEqual(result["ttl"]["A"], 120)
@@ -410,7 +451,7 @@ class TestDnsEnumeration(unittest.TestCase):
 
         self.assertTrue(result["success"])
         self.assertEqual(result["records"]["CAA"], [])
-        self.assertEqual(result["errors"]["CAA"], "unexpected: UnicodeDecodeError")
+        self.assertEqual(result["errors"]["CAA"], "UnicodeDecodeError")
         self.assertNotIn("CAA", result["ttl"])
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
