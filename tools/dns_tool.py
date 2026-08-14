@@ -31,8 +31,8 @@ SUBDOMAIN_RECORD_TYPES = ("A", "AAAA", "CNAME")
 # RRset of the requested type, no nameserver could answer, the resolution
 # lifetime expired, or the name is too long after DNAME substitution. NXDOMAIN
 # is documented too but handled separately, because a target domain that does
-# not exist ends the whole enumeration. Anything outside this set is a defect
-# rather than a DNS answer, and is left to propagate.
+# not exist ends the whole enumeration. Anything outside this set is recorded
+# as an unexpected lookup error so the rest of the scan can continue.
 LOOKUP_ERRORS = (
     dns.resolver.NoAnswer,
     dns.resolver.NoNameservers,
@@ -98,15 +98,16 @@ def dns_enumeration(domain: str) -> dict:
     """
     Enumerate DNS records for a domain.
     Returns A, AAAA, MX, NS, TXT, CNAME, SOA, CAA records (CAA surfaces
-    certificate authority restrictions), TTL per record type when available,
-    common subdomains discovered via A/AAAA/CNAME lookups, and metadata about
-    the resolver used.
+    certificate authority restrictions), per-record-type errors, TTL per record
+    type when available, common subdomains discovered via A/AAAA/CNAME
+    lookups, subdomain lookup errors, and metadata about the resolver used.
     """
     domain = normalize_domain(domain)
     if not is_valid_domain(domain):
         return {"success": False, "error": "Invalid domain format"}
 
     records = {}
+    errors = {}
     ttls = {}
     resolver = _make_resolver()
 
@@ -142,13 +143,18 @@ def dns_enumeration(domain: str) -> dict:
                 records[rtype] = [str(r) for r in answers]
         except dns.resolver.NXDOMAIN:
             return {"success": False, "error": f"Domain {domain} does not exist"}
-        except LOOKUP_ERRORS:
+        except LOOKUP_ERRORS as exc:
             records[rtype] = []
+            errors[rtype] = type(exc).__name__
+        except Exception as exc:
+            records[rtype] = []
+            errors[rtype] = f"unexpected: {type(exc).__name__}"
 
     # Subdomain brute-force (common subdomains); a subdomain counts as found
     # when any of A/AAAA/CNAME resolves, so IPv6-only and aliased hosts are
     # not missed.
     found_subdomains = []
+    subdomain_errors = {}
 
     for sub in COMMON_SUBDOMAINS:
         full = f"{sub}.{domain}"
@@ -157,14 +163,22 @@ def dns_enumeration(domain: str) -> dict:
                 resolver.resolve(full, rtype, lifetime=SUBDOMAIN_LIFETIME, tcp=True)
                 found_subdomains.append(full)
                 break
-            except SUBDOMAIN_LOOKUP_ERRORS:
+            except SUBDOMAIN_LOOKUP_ERRORS as exc:
+                subdomain_errors.setdefault(full, {})[rtype] = type(exc).__name__
+                continue
+            except Exception as exc:
+                subdomain_errors.setdefault(full, {})[rtype] = (
+                    f"unexpected: {type(exc).__name__}"
+                )
                 continue
 
     return {
         "success": True,
         "domain": domain,
+        "errors": errors,
         "records": records,
         "subdomains_found": found_subdomains,
+        "subdomain_errors": subdomain_errors,
         "ttl": ttls,
         "resolver": _resolver_metadata(resolver)
     }

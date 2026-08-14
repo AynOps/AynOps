@@ -85,6 +85,7 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertEqual(result["records"]["CNAME"], ["alias.example.com"])
         self.assertEqual(result["records"]["SOA"]["mname"], "ns1.example.com")
         self.assertEqual(result["records"]["SOA"]["rname"], "hostmaster.example.com")
+        self.assertEqual(result["errors"]["CAA"], "NoAnswer")
         self.assertIn("subdomains_found", result)
         self.assertEqual(resolver.nameservers, ["1.1.1.1", "8.8.8.8"])
         resolver.resolve.assert_any_call("example.com", "TXT", lifetime=5, tcp=True)
@@ -113,6 +114,8 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertTrue(result["success"])
         for rtype_records in result["records"].values():
             self.assertEqual(rtype_records, [])
+        for rtype in result["records"]:
+            self.assertEqual(result["errors"][rtype], real_dns.NoAnswer.__name__)
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_expected_dns_errors_leave_record_types_empty(self, mock_resolver_class):
@@ -136,6 +139,8 @@ class TestDnsEnumeration(unittest.TestCase):
                 )
                 for rtype_records in result["records"].values():
                     self.assertEqual(rtype_records, [])
+                for rtype in result["records"]:
+                    self.assertEqual(result["errors"][rtype], error.__name__)
                 self.assertEqual(result["subdomains_found"], [])
                 self.assertEqual(result["ttl"], {})
 
@@ -164,9 +169,13 @@ class TestDnsEnumeration(unittest.TestCase):
 
                 self.assertTrue(result["success"])
                 self.assertEqual(result["subdomains_found"], [])
+                self.assertEqual(
+                    result["subdomain_errors"]["www.example.com"]["A"],
+                    error.__name__,
+                )
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
-    def test_unexpected_error_propagates_from_record_lookup(self, mock_resolver_class):
+    def test_unexpected_error_is_recorded_for_record_lookup(self, mock_resolver_class):
         import dns.resolver as real_dns
 
         resolver = Mock()
@@ -179,12 +188,14 @@ class TestDnsEnumeration(unittest.TestCase):
         resolver.resolve.side_effect = side_effect
         mock_resolver_class.return_value = resolver
 
-        # An unexpected error is a defect, not a domain with no records.
-        with self.assertRaises(RuntimeError):
-            dns_enumeration("example.com")
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["records"]["A"], [])
+        self.assertEqual(result["errors"]["A"], "unexpected: RuntimeError")
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
-    def test_unexpected_error_propagates_from_subdomain_lookup(self, mock_resolver_class):
+    def test_unexpected_error_is_recorded_for_subdomain_lookup(self, mock_resolver_class):
         import dns.resolver as real_dns
 
         resolver = Mock()
@@ -197,8 +208,14 @@ class TestDnsEnumeration(unittest.TestCase):
         resolver.resolve.side_effect = side_effect
         mock_resolver_class.return_value = resolver
 
-        with self.assertRaises(RuntimeError):
-            dns_enumeration("example.com")
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["errors"]["A"], "NoAnswer")
+        self.assertEqual(
+            result["subdomain_errors"]["www.example.com"]["A"],
+            "unexpected: RuntimeError",
+        )
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_caa_records_parsed(self, mock_resolver_class):
