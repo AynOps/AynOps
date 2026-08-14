@@ -100,7 +100,8 @@ def dns_enumeration(domain: str) -> dict:
     Returns A, AAAA, MX, NS, TXT, CNAME, SOA, CAA records (CAA surfaces
     certificate authority restrictions), per-record-type errors, TTL per record
     type when available, common subdomains discovered via A/AAAA/CNAME
-    lookups, subdomain lookup errors, and metadata about the resolver used.
+    lookups, unexpected subdomain lookup errors, and metadata about the
+    resolver used.
     """
     domain = normalize_domain(domain)
     if not is_valid_domain(domain):
@@ -114,33 +115,6 @@ def dns_enumeration(domain: str) -> dict:
     for rtype in RECORD_TYPES:
         try:
             answers = resolver.resolve(domain, rtype, lifetime=RESOLVER_LIFETIME, tcp=True)
-            ttl = _record_ttl(answers)
-            if ttl is not None:
-                ttls[rtype] = ttl
-            if rtype == "MX":
-                records[rtype] = [
-                    {"preference": r.preference, "exchange": _clean_name(r.exchange)}
-                    for r in answers
-                ]
-            elif rtype == "SOA":
-                r = answers[0]
-                records[rtype] = {
-                    "mname": _clean_name(r.mname),
-                    "rname": _clean_name(r.rname),
-                    "serial": r.serial,
-                    "refresh": r.refresh,
-                    "retry": r.retry,
-                    "expire": r.expire,
-                    "minimum": r.minimum
-                }
-            elif rtype == "TXT":
-                records[rtype] = [_format_txt_record(r) for r in answers]
-            elif rtype == "CAA":
-                records[rtype] = [_format_caa_record(r) for r in answers]
-            elif rtype in {"NS", "CNAME"}:
-                records[rtype] = [_clean_name(r) for r in answers]
-            else:
-                records[rtype] = [str(r) for r in answers]
         except dns.resolver.NXDOMAIN:
             return {"success": False, "error": f"Domain {domain} does not exist"}
         except LOOKUP_ERRORS as exc:
@@ -149,6 +123,42 @@ def dns_enumeration(domain: str) -> dict:
         except Exception as exc:
             records[rtype] = []
             errors[rtype] = f"unexpected: {type(exc).__name__}"
+        else:
+            ttl = _record_ttl(answers)
+            if ttl is not None:
+                ttls[rtype] = ttl
+            try:
+                if rtype == "MX":
+                    records[rtype] = [
+                        {"preference": r.preference, "exchange": _clean_name(r.exchange)}
+                        for r in answers
+                    ]
+                elif rtype == "SOA":
+                    r = answers[0]
+                    records[rtype] = {
+                        "mname": _clean_name(r.mname),
+                        "rname": _clean_name(r.rname),
+                        "serial": r.serial,
+                        "refresh": r.refresh,
+                        "retry": r.retry,
+                        "expire": r.expire,
+                        "minimum": r.minimum
+                    }
+                elif rtype == "TXT":
+                    records[rtype] = [_format_txt_record(r) for r in answers]
+                elif rtype == "CAA":
+                    records[rtype] = [_format_caa_record(r) for r in answers]
+                elif rtype in {"NS", "CNAME"}:
+                    records[rtype] = [_clean_name(r) for r in answers]
+                else:
+                    records[rtype] = [str(r) for r in answers]
+            except UnicodeDecodeError as exc:
+                # TXT chunks and CAA values are arbitrary remote octets, not
+                # guaranteed UTF-8. Keep this record type's failure visible
+                # without swallowing defects in our own formatting logic.
+                records[rtype] = []
+                errors[rtype] = type(exc).__name__
+                ttls.pop(rtype, None)
 
     # Subdomain brute-force (common subdomains); a subdomain counts as found
     # when any of A/AAAA/CNAME resolves, so IPv6-only and aliased hosts are
@@ -162,9 +172,11 @@ def dns_enumeration(domain: str) -> dict:
             try:
                 resolver.resolve(full, rtype, lifetime=SUBDOMAIN_LIFETIME, tcp=True)
                 found_subdomains.append(full)
+                # A name that resolves on any record type is found, so an
+                # error recorded for an earlier record type no longer applies.
+                subdomain_errors.pop(full, None)
                 break
-            except SUBDOMAIN_LOOKUP_ERRORS as exc:
-                subdomain_errors.setdefault(full, {})[rtype] = type(exc).__name__
+            except SUBDOMAIN_LOOKUP_ERRORS:
                 continue
             except Exception as exc:
                 subdomain_errors.setdefault(full, {})[rtype] = (

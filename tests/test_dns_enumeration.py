@@ -1,6 +1,20 @@
-from unittest.mock import MagicMock, Mock, patch
 import unittest
+from types import SimpleNamespace
+from unittest.mock import MagicMock, Mock, patch
+
+import dns.rdata
+import dns.rdataclass
+import dns.rdatatype
 from tools.dns_tool import dns_enumeration
+
+
+class _ResolverAnswer(list):
+    """Minimal resolver answer carrying the rrset TTL used by the tool."""
+
+    def __init__(self, records, ttl):
+        super().__init__(records)
+        self.rrset = SimpleNamespace(ttl=ttl)
+
 
 class TestDnsEnumeration(unittest.TestCase):
 
@@ -169,10 +183,7 @@ class TestDnsEnumeration(unittest.TestCase):
 
                 self.assertTrue(result["success"])
                 self.assertEqual(result["subdomains_found"], [])
-                self.assertEqual(
-                    result["subdomain_errors"]["www.example.com"]["A"],
-                    error.__name__,
-                )
+                self.assertEqual(result["subdomain_errors"], {})
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_unexpected_error_is_recorded_for_record_lookup(self, mock_resolver_class):
@@ -286,10 +297,162 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertIn("www.example.com", result["subdomains_found"])
         self.assertIn("mail.example.com", result["subdomains_found"])
         self.assertNotIn("ftp.example.com", result["subdomains_found"])
+        self.assertNotIn("www.example.com", result["subdomain_errors"])
         self.assertEqual(result["subdomains_found"].count("www.example.com"), 1)
         resolver.resolve.assert_any_call("www.example.com", "A", lifetime=3, tcp=True)
         resolver.resolve.assert_any_call("www.example.com", "AAAA", lifetime=3, tcp=True)
         resolver.resolve.assert_any_call("mail.example.com", "CNAME", lifetime=3, tcp=True)
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_aaaa_found_subdomain_has_no_expected_a_error(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if domain == "example.com":
+                raise real_dns.NoAnswer
+            if domain == "mail.example.com" and rtype == "AAAA":
+                return self._make_resolver_answer(["2001:db8::20"])
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertIn("mail.example.com", result["subdomains_found"])
+        self.assertNotIn("mail.example.com", result["subdomain_errors"])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_resolved_subdomain_is_absent_from_subdomain_errors(
+        self, mock_resolver_class
+    ):
+        import dns.resolver as real_dns
+
+        # A hostname that resolves on ANY record type must not appear in
+        # subdomain_errors, regardless of which record type failed earlier or
+        # which (unexpected) exception that lookup raised.
+        cases = (
+            ("A", "AAAA", RuntimeError),
+            ("A", "CNAME", ValueError),
+            ("AAAA", "CNAME", OSError),
+        )
+        for error_rtype, success_rtype, error_kind in cases:
+            with self.subTest(error_rtype=error_rtype,
+                              success_rtype=success_rtype,
+                              error=error_kind.__name__):
+                resolver = Mock()
+                mock_resolver_class.return_value = resolver
+
+                def side_effect(domain, rtype, lifetime=5, tcp=False,
+                                _error_rtype=error_rtype,
+                                _success_rtype=success_rtype,
+                                _error_kind=error_kind):
+                    if domain == "example.com":
+                        raise real_dns.NoAnswer
+                    if domain == "www.example.com":
+                        if rtype == _error_rtype:
+                            raise _error_kind("resolver blew up")
+                        if rtype == _success_rtype:
+                            return self._make_resolver_answer(["192.0.2.1"])
+                    raise real_dns.NoAnswer
+
+                resolver.resolve.side_effect = side_effect
+
+                result = dns_enumeration("example.com")
+
+                self.assertIn("www.example.com", result["subdomains_found"])
+                self.assertNotIn("www.example.com", result["subdomain_errors"])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_record_parsing_errors_propagate(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if domain == "example.com" and rtype == "MX":
+                return [object()]
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        mock_resolver_class.return_value = resolver
+
+        with self.assertRaises(AttributeError):
+            dns_enumeration("example.com")
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_invalid_utf8_txt_is_recorded_without_damaging_other_records(
+        self, mock_resolver_class
+    ):
+        import dns.resolver as real_dns
+
+        txt_record = dns.rdata.from_wire(
+            dns.rdataclass.IN,
+            dns.rdatatype.TXT,
+            bytes([4, 0xff, 0xfe, 0x41, 0x42]),
+            0,
+            5,
+        )
+        a_record = dns.rdata.from_text(
+            dns.rdataclass.IN, dns.rdatatype.A, "192.0.2.1"
+        )
+        resolver = Mock()
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if domain == "example.com" and rtype == "TXT":
+                return _ResolverAnswer([txt_record], 300)
+            if domain == "example.com" and rtype == "A":
+                return _ResolverAnswer([a_record], 120)
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        mock_resolver_class.return_value = resolver
+
+        try:
+            result = dns_enumeration("example.com")
+        except Exception as exc:
+            self.fail(f"dns_enumeration raised {type(exc).__name__}: {exc}")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["records"]["TXT"], [])
+        self.assertEqual(result["errors"]["TXT"], "UnicodeDecodeError")
+        self.assertNotIn("TXT", result["ttl"])
+        self.assertEqual(result["records"]["A"], ["192.0.2.1"])
+        self.assertEqual(result["ttl"]["A"], 120)
+        self.assertNotIn("A", result["errors"])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_invalid_utf8_caa_value_is_recorded_without_ttl(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        caa_wire = bytes([0, 5]) + b"issue" + bytes([0xff, 0xfe])
+        caa_record = dns.rdata.from_wire(
+            dns.rdataclass.IN,
+            dns.rdatatype.CAA,
+            caa_wire,
+            0,
+            len(caa_wire),
+        )
+        resolver = Mock()
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if domain == "example.com" and rtype == "CAA":
+                return _ResolverAnswer([caa_record], 301)
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        mock_resolver_class.return_value = resolver
+
+        try:
+            result = dns_enumeration("example.com")
+        except Exception as exc:
+            self.fail(f"dns_enumeration raised {type(exc).__name__}: {exc}")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["records"]["CAA"], [])
+        self.assertEqual(result["errors"]["CAA"], "UnicodeDecodeError")
+        self.assertNotIn("CAA", result["ttl"])
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_resolver_metadata_in_output(self, mock_resolver_class):

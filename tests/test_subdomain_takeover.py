@@ -1,8 +1,19 @@
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 from urllib.parse import urlparse
 
+import dns.rdata
+import dns.rdataclass
+import dns.rdatatype
+
 from tools.subdomain_takeover_tool import subdomain_takeover
+
+
+class _ResolverAnswer(list):
+    def __init__(self, records, ttl):
+        super().__init__(records)
+        self.rrset = SimpleNamespace(ttl=ttl)
 
 
 def _enumeration_result(subdomains):
@@ -260,6 +271,38 @@ def test_enumeration_failure_propagates(mock_enum):
     result = subdomain_takeover("example.com")
     assert result["success"] is False
     assert "does not exist" in result["error"]
+
+
+@patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
+def test_invalid_utf8_dns_record_does_not_escape_enumeration(mock_resolver_class):
+    """A malformed TXT payload must not abort takeover checking."""
+    import dns.resolver as real_dns
+
+    txt_record = dns.rdata.from_wire(
+        dns.rdataclass.IN,
+        dns.rdatatype.TXT,
+        bytes([4, 0xff, 0xfe, 0x41, 0x42]),
+        0,
+        5,
+    )
+    resolver = Mock()
+
+    def side_effect(domain, rtype, lifetime=5, tcp=False):
+        if domain == "example.com" and rtype == "TXT":
+            return _ResolverAnswer([txt_record], 300)
+        raise real_dns.NoAnswer
+
+    resolver.resolve.side_effect = side_effect
+    mock_resolver_class.return_value = resolver
+
+    try:
+        result = subdomain_takeover("example.com")
+    except Exception as exc:
+        assert False, f"subdomain_takeover raised {type(exc).__name__}: {exc}"
+
+    assert result["success"] is True
+    assert result["domain"] == "example.com"
+    assert result["subdomains_checked"] == 0
 
 
 if __name__ == "__main__":
