@@ -127,30 +127,38 @@ def dns_enumeration(domain: str) -> dict:
             ttl = _record_ttl(answers)
             if ttl is not None:
                 ttls[rtype] = ttl
-            if rtype == "MX":
-                records[rtype] = [
-                    {"preference": r.preference, "exchange": _clean_name(r.exchange)}
-                    for r in answers
-                ]
-            elif rtype == "SOA":
-                r = answers[0]
-                records[rtype] = {
-                    "mname": _clean_name(r.mname),
-                    "rname": _clean_name(r.rname),
-                    "serial": r.serial,
-                    "refresh": r.refresh,
-                    "retry": r.retry,
-                    "expire": r.expire,
-                    "minimum": r.minimum
-                }
-            elif rtype == "TXT":
-                records[rtype] = [_format_txt_record(r) for r in answers]
-            elif rtype == "CAA":
-                records[rtype] = [_format_caa_record(r) for r in answers]
-            elif rtype in {"NS", "CNAME"}:
-                records[rtype] = [_clean_name(r) for r in answers]
-            else:
-                records[rtype] = [str(r) for r in answers]
+            try:
+                if rtype == "MX":
+                    records[rtype] = [
+                        {"preference": r.preference, "exchange": _clean_name(r.exchange)}
+                        for r in answers
+                    ]
+                elif rtype == "SOA":
+                    r = answers[0]
+                    records[rtype] = {
+                        "mname": _clean_name(r.mname),
+                        "rname": _clean_name(r.rname),
+                        "serial": r.serial,
+                        "refresh": r.refresh,
+                        "retry": r.retry,
+                        "expire": r.expire,
+                        "minimum": r.minimum
+                    }
+                elif rtype == "TXT":
+                    records[rtype] = [_format_txt_record(r) for r in answers]
+                elif rtype == "CAA":
+                    records[rtype] = [_format_caa_record(r) for r in answers]
+                elif rtype in {"NS", "CNAME"}:
+                    records[rtype] = [_clean_name(r) for r in answers]
+                else:
+                    records[rtype] = [str(r) for r in answers]
+            except UnicodeDecodeError as exc:
+                # TXT chunks and CAA values are arbitrary remote octets, not
+                # guaranteed UTF-8. Keep this record type's failure visible
+                # without swallowing defects in our own formatting logic.
+                records[rtype] = []
+                errors[rtype] = f"unexpected: {type(exc).__name__}"
+                ttls.pop(rtype, None)
 
     # Subdomain brute-force (common subdomains); a subdomain counts as found
     # when any of A/AAAA/CNAME resolves, so IPv6-only and aliased hosts are
