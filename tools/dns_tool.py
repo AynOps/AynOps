@@ -57,6 +57,11 @@ LOOKUP_ERRORS = (
 # exceed the 255-octet limit; both mean "no such subdomain", not a failed scan.
 SUBDOMAIN_LOOKUP_ERRORS = LOOKUP_ERRORS + (dns.resolver.NXDOMAIN, dns.name.NameTooLong)
 
+# An SRV owner name is built by prefixing a service label to the target, so a
+# target near the length limit pushes the queried name past 255 octets; like
+# the brute-force path, that means "no such service name", not a failed scan.
+SRV_LOOKUP_ERRORS = LOOKUP_ERRORS + (dns.name.NameTooLong,)
+
 
 def _clean_name(value) -> str:
     return str(value).rstrip(".")
@@ -187,7 +192,7 @@ def dns_enumeration(domain: str) -> dict:
             answers = resolver.resolve(srv_name, "SRV", lifetime=RESOLVER_LIFETIME, tcp=True)
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
             srv_records[service] = []
-        except LOOKUP_ERRORS as exc:
+        except SRV_LOOKUP_ERRORS as exc:
             srv_records[service] = []
             srv_errors[service] = type(exc).__name__
         except Exception as exc:

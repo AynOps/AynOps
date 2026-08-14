@@ -512,6 +512,56 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertEqual(srv_errors["_autodiscover._tcp"], "NoNameservers")
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_srv_anticipated_lookup_errors_are_never_unexpected(
+        self, mock_resolver_class
+    ):
+        import dns.name as real_name
+        import dns.resolver as real_dns
+        from utils.helpers import is_valid_domain
+
+        # A 251-octet domain passes is_valid_domain (<=253 octets, labels <=63),
+        # but prefixing an SRV service owner name pushes the queried name past
+        # the 255-octet limit, so a real resolver raises dns.name.NameTooLong.
+        long_domain = ".".join(["a" * 63, "b" * 63, "c" * 63, "d" * 56 + "com"])
+        self.assertEqual(len(long_domain), 251)
+        self.assertTrue(is_valid_domain(long_domain))
+
+        # Whichever anticipated lookup failure the SRV path hits, it must be
+        # recorded by its bare exception name, never as "unexpected: ...".
+        for error in (real_dns.NoNameservers, real_dns.YXDOMAIN,
+                      real_dns.LifetimeTimeout, real_name.NameTooLong):
+            with self.subTest(error=error.__name__):
+                resolver = Mock()
+
+                def side_effect(name, rtype, lifetime=5, tcp=False,
+                                _error=error):
+                    if _error is real_name.NameTooLong:
+                        # Mirror the real resolver: only over-long names raise.
+                        if len(name) > 255:
+                            raise real_name.NameTooLong
+                    elif rtype == "SRV":
+                        raise _error
+                    raise real_dns.NoAnswer
+
+                resolver.resolve.side_effect = side_effect
+                mock_resolver_class.return_value = resolver
+
+                domain = long_domain if error is real_name.NameTooLong else "example.com"
+                result = dns_enumeration(domain)
+
+                self.assertTrue(result["success"])
+                for service in ("_sip._tcp", "_ldap._tcp", "_xmpp-client._tcp",
+                                "_kerberos._tcp", "_autodiscover._tcp"):
+                    resolver.resolve.assert_any_call(
+                        f"{service}.{domain}", "SRV", lifetime=5, tcp=True
+                    )
+                    self.assertEqual(result["srv_records"][service], [])
+                    self.assertEqual(result["srv_errors"][service], error.__name__)
+                    self.assertFalse(
+                        result["srv_errors"][service].startswith("unexpected:")
+                    )
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_resolver_metadata_in_output(self, mock_resolver_class):
         import dns.resolver as real_dns
 
