@@ -455,6 +455,63 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertNotIn("CAA", result["ttl"])
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_srv_records_enumerated_for_issue_services(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if rtype == "SRV":
+                if domain == "_sip._tcp.example.com":
+                    record = Mock()
+                    record.priority = 10
+                    record.weight = 60
+                    record.port = 5060
+                    record.target = "sip.example.com."
+                    return [record]
+                if domain == "_ldap._tcp.example.com":
+                    raise real_dns.NoAnswer  # service publishes no SRV record
+                if domain == "_xmpp-client._tcp.example.com":
+                    raise real_dns.NXDOMAIN  # service publishes no SRV record
+                raise real_dns.NoNameservers  # lookup genuinely failed
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        # Every service named in issue #144 item 6 (SIP, LDAP, XMPP, Kerberos,
+        # Autodiscover) is probed and represented in the output.
+        expected_services = {
+            "_sip._tcp", "_ldap._tcp", "_xmpp-client._tcp",
+            "_kerberos._tcp", "_autodiscover._tcp",
+        }
+        srv_records = result.get("srv_records", {})
+        srv_errors = result.get("srv_errors", {})
+        self.assertEqual(set(srv_records), expected_services)
+        for service in expected_services:
+            resolver.resolve.assert_any_call(
+                f"{service}.example.com", "SRV", lifetime=5, tcp=True
+            )
+        # A published SRV record is parsed into its fields.
+        self.assertEqual(
+            srv_records["_sip._tcp"],
+            [{"priority": 10, "weight": 60, "port": 5060,
+              "target": "sip.example.com"}],
+        )
+        # A service with no SRV record is an empty list with no error...
+        self.assertEqual(srv_records["_ldap._tcp"], [])
+        self.assertNotIn("_ldap._tcp", srv_errors)
+        self.assertEqual(srv_records["_xmpp-client._tcp"], [])
+        self.assertNotIn("_xmpp-client._tcp", srv_errors)
+        # ...which must not collapse into the same output as an errored lookup.
+        self.assertEqual(srv_records["_kerberos._tcp"], [])
+        self.assertEqual(srv_errors["_kerberos._tcp"], "NoNameservers")
+        self.assertEqual(srv_records["_autodiscover._tcp"], [])
+        self.assertEqual(srv_errors["_autodiscover._tcp"], "NoNameservers")
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_resolver_metadata_in_output(self, mock_resolver_class):
         import dns.resolver as real_dns
 
