@@ -169,10 +169,7 @@ class TestDnsEnumeration(unittest.TestCase):
 
                 self.assertTrue(result["success"])
                 self.assertEqual(result["subdomains_found"], [])
-                self.assertEqual(
-                    result["subdomain_errors"]["www.example.com"]["A"],
-                    error.__name__,
-                )
+                self.assertEqual(result["subdomain_errors"], {})
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_unexpected_error_is_recorded_for_record_lookup(self, mock_resolver_class):
@@ -193,6 +190,7 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(result["records"]["A"], [])
         self.assertEqual(result["errors"]["A"], "unexpected: RuntimeError")
+        self.assertNotIn("A", result["ttl"])
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_unexpected_error_is_recorded_for_subdomain_lookup(self, mock_resolver_class):
@@ -286,10 +284,48 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertIn("www.example.com", result["subdomains_found"])
         self.assertIn("mail.example.com", result["subdomains_found"])
         self.assertNotIn("ftp.example.com", result["subdomains_found"])
+        self.assertNotIn("www.example.com", result["subdomain_errors"])
         self.assertEqual(result["subdomains_found"].count("www.example.com"), 1)
         resolver.resolve.assert_any_call("www.example.com", "A", lifetime=3, tcp=True)
         resolver.resolve.assert_any_call("www.example.com", "AAAA", lifetime=3, tcp=True)
         resolver.resolve.assert_any_call("mail.example.com", "CNAME", lifetime=3, tcp=True)
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_aaaa_found_subdomain_has_no_expected_a_error(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if domain == "example.com":
+                raise real_dns.NoAnswer
+            if domain == "mail.example.com" and rtype == "AAAA":
+                return self._make_resolver_answer(["2001:db8::20"])
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertIn("mail.example.com", result["subdomains_found"])
+        self.assertNotIn("mail.example.com", result["subdomain_errors"])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_record_parsing_errors_propagate(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if domain == "example.com" and rtype == "MX":
+                return [object()]
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        mock_resolver_class.return_value = resolver
+
+        with self.assertRaises(AttributeError):
+            dns_enumeration("example.com")
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_resolver_metadata_in_output(self, mock_resolver_class):

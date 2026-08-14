@@ -100,7 +100,8 @@ def dns_enumeration(domain: str) -> dict:
     Returns A, AAAA, MX, NS, TXT, CNAME, SOA, CAA records (CAA surfaces
     certificate authority restrictions), per-record-type errors, TTL per record
     type when available, common subdomains discovered via A/AAAA/CNAME
-    lookups, subdomain lookup errors, and metadata about the resolver used.
+    lookups, unexpected subdomain lookup errors, and metadata about the
+    resolver used.
     """
     domain = normalize_domain(domain)
     if not is_valid_domain(domain):
@@ -114,6 +115,15 @@ def dns_enumeration(domain: str) -> dict:
     for rtype in RECORD_TYPES:
         try:
             answers = resolver.resolve(domain, rtype, lifetime=RESOLVER_LIFETIME, tcp=True)
+        except dns.resolver.NXDOMAIN:
+            return {"success": False, "error": f"Domain {domain} does not exist"}
+        except LOOKUP_ERRORS as exc:
+            records[rtype] = []
+            errors[rtype] = type(exc).__name__
+        except Exception as exc:
+            records[rtype] = []
+            errors[rtype] = f"unexpected: {type(exc).__name__}"
+        else:
             ttl = _record_ttl(answers)
             if ttl is not None:
                 ttls[rtype] = ttl
@@ -141,14 +151,6 @@ def dns_enumeration(domain: str) -> dict:
                 records[rtype] = [_clean_name(r) for r in answers]
             else:
                 records[rtype] = [str(r) for r in answers]
-        except dns.resolver.NXDOMAIN:
-            return {"success": False, "error": f"Domain {domain} does not exist"}
-        except LOOKUP_ERRORS as exc:
-            records[rtype] = []
-            errors[rtype] = type(exc).__name__
-        except Exception as exc:
-            records[rtype] = []
-            errors[rtype] = f"unexpected: {type(exc).__name__}"
 
     # Subdomain brute-force (common subdomains); a subdomain counts as found
     # when any of A/AAAA/CNAME resolves, so IPv6-only and aliased hosts are
@@ -163,8 +165,7 @@ def dns_enumeration(domain: str) -> dict:
                 resolver.resolve(full, rtype, lifetime=SUBDOMAIN_LIFETIME, tcp=True)
                 found_subdomains.append(full)
                 break
-            except SUBDOMAIN_LOOKUP_ERRORS as exc:
-                subdomain_errors.setdefault(full, {})[rtype] = type(exc).__name__
+            except SUBDOMAIN_LOOKUP_ERRORS:
                 continue
             except Exception as exc:
                 subdomain_errors.setdefault(full, {})[rtype] = (
