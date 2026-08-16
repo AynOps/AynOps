@@ -14,24 +14,15 @@ import requests
 from tools.dns_tool import PUBLIC_RESOLVERS, dns_enumeration
 from utils.helpers import is_valid_domain, normalize_domain
 
-# Region codes are matched by shape - an area prefix, alphabetic segments and a
-# trailing number - which covers commercial, GovCloud, China and ISO regions
-# (us-east-1, us-gov-west-1, cn-north-1, us-iso-east-1) without freezing a list
-# that AWS keeps extending. Matching them by shape is also what separates a
-# bucket host from the sibling s3-* endpoint families that are not buckets
-# (s3-control, s3-accesspoint, s3-object-lambda, s3-outposts, s3express-*,
-# s3tables), whose service label can never be read as a region.
+# Match region labels by shape rather than a fixed list so newly added AWS
+# regions stay covered. Keeping service-specific labels out of this slot
+# prevents non-bucket AWS endpoints from being interpreted as bucket regions.
 _AWS_REGION = r"[a-z]{2}(?:-[a-z]+)+-\d+"
 
-# The documented S3 bucket endpoint hosts, i.e. the ones a dangling CNAME can
-# leave answering NoSuchBucket. Under amazonaws.com: bucket.s3.<region>,
-# bucket.s3-<region> (legacy dash), bucket.s3 (legacy global),
-# s3.dualstack.<region>, s3-fips[.dualstack].<region>, the Transfer
-# Acceleration s3-accelerate[.dualstack] endpoints, and the
-# s3-website[.-]<region> website endpoints. The China partition documents the
-# regional, legacy dash, legacy global, dual-stack and s3-website.<region>
-# forms under amazonaws.com.cn. Anchoring on these keeps every other AWS
-# service (API Gateway, ELB, ...) from being matched as S3.
+# Restrict the fingerprint to documented S3 bucket endpoint families that can
+# return NoSuchBucket for an unclaimed bucket. Anchoring the hostname prevents
+# unrelated AWS services from being treated as S3.
+# References:
 # https://docs.aws.amazon.com/general/latest/gr/s3.html
 # https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html
 # https://docs.aws.amazon.com/AmazonS3/latest/userguide/WebsiteEndpoints.html
