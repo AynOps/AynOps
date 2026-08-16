@@ -27,6 +27,17 @@ COMMON_SUBDOMAINS = [
 # A subdomain counts as found if any of these record types resolves for it.
 SUBDOMAIN_RECORD_TYPES = ("A", "AAAA", "CNAME")
 
+# SRV services probed for the target domain (issue #144, item 6: SIP, LDAP,
+# XMPP, Kerberos and Autodiscover), as the owner-name prefixes queried with
+# the SRV record type.
+SRV_SERVICES = [
+    "_sip._tcp",
+    "_ldap._tcp",
+    "_xmpp-client._tcp",
+    "_kerberos._tcp",
+    "_autodiscover._tcp",
+]
+
 # Lookup failures dnspython documents for Resolver.resolve(): the name has no
 # RRset of the requested type, no nameserver could answer, the resolution
 # lifetime expired, or the name is too long after DNAME substitution. NXDOMAIN
@@ -45,6 +56,11 @@ LOOKUP_ERRORS = (
 # not exist, and a candidate built by prefixing a label to a long target can
 # exceed the 255-octet limit; both mean "no such subdomain", not a failed scan.
 SUBDOMAIN_LOOKUP_ERRORS = LOOKUP_ERRORS + (dns.resolver.NXDOMAIN, dns.name.NameTooLong)
+
+# An SRV owner name is built by prefixing a service label to the target, so a
+# target near the length limit pushes the queried name past 255 octets; like
+# the brute-force path, that means "no such service name", not a failed scan.
+SRV_LOOKUP_ERRORS = LOOKUP_ERRORS + (dns.name.NameTooLong,)
 
 
 def _clean_name(value) -> str:
@@ -99,7 +115,8 @@ def dns_enumeration(domain: str) -> dict:
     Enumerate DNS records for a domain.
     Returns A, AAAA, MX, NS, TXT, CNAME, SOA, CAA records (CAA surfaces
     certificate authority restrictions), per-record-type errors, TTL per record
-    type when available, common subdomains discovered via A/AAAA/CNAME
+    type when available, SRV records for common enterprise services, common
+    subdomains discovered via A/AAAA/CNAME
     lookups, unexpected subdomain lookup errors, and metadata about the
     resolver used.
     """
@@ -160,6 +177,38 @@ def dns_enumeration(domain: str) -> dict:
                 errors[rtype] = type(exc).__name__
                 ttls.pop(rtype, None)
 
+    # SRV enumeration for common enterprise services. Unlike the target
+    # domain itself, an SRV owner name that does not exist (NXDOMAIN) or has
+    # no SRV RRset (NoAnswer) is the ordinary "service not published" outcome,
+    # so it stays an empty list with no error; other anticipated lookup
+    # failures and genuine surprises follow the same error conventions as the
+    # record-type loop above.
+    srv_records = {}
+    srv_errors = {}
+
+    for service in SRV_SERVICES:
+        srv_name = f"{service}.{domain}"
+        try:
+            answers = resolver.resolve(srv_name, "SRV", lifetime=RESOLVER_LIFETIME, tcp=True)
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+            srv_records[service] = []
+        except SRV_LOOKUP_ERRORS as exc:
+            srv_records[service] = []
+            srv_errors[service] = type(exc).__name__
+        except Exception as exc:
+            srv_records[service] = []
+            srv_errors[service] = f"unexpected: {type(exc).__name__}"
+        else:
+            srv_records[service] = [
+                {
+                    "priority": r.priority,
+                    "weight": r.weight,
+                    "port": r.port,
+                    "target": _clean_name(r.target),
+                }
+                for r in answers
+            ]
+
     # Subdomain brute-force (common subdomains); a subdomain counts as found
     # when any of A/AAAA/CNAME resolves, so IPv6-only and aliased hosts are
     # not missed.
@@ -189,6 +238,8 @@ def dns_enumeration(domain: str) -> dict:
         "domain": domain,
         "errors": errors,
         "records": records,
+        "srv_records": srv_records,
+        "srv_errors": srv_errors,
         "subdomains_found": found_subdomains,
         "subdomain_errors": subdomain_errors,
         "ttl": ttls,
