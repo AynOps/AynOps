@@ -42,7 +42,7 @@ It is also listed on glama mcp registry.
 | Tool | Description |
 |---|---|
 | `whois_lookup` | Domain registration data — owner, registrar, creation date, expiry, name servers |
-| `dns_enumeration` | A, AAAA, MX, NS, TXT, CNAME, SOA records + common subdomain brute-forcing |
+| `dns_enumeration` | A, AAAA, MX, NS, TXT, CNAME, SOA, CAA, and common SRV records (SIP, LDAP, XMPP, Kerberos, Autodiscover) + common subdomain brute-forcing |
 | `port_scan` | Nmap-powered scanner with service/version detection and security warnings |
 | `ssl_inspect` | SSL/TLS certificate — issuer, expiry, cipher strength, SANs, TLS version |
 | `email_security_check` | Checks SPF, DKIM, and DMARC DNS records — returns a security_score, rating, and actionable recommendations for missing or weak configurations |

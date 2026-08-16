@@ -25,7 +25,7 @@
     },
     {
       "name": "dns_enumeration",
-      "description": "Enumerate DNS records and brute-force common subdomains",
+      "description": "A, AAAA, MX, NS, TXT, CNAME, SOA, CAA, and common SRV records (SIP, LDAP, XMPP, Kerberos, Autodiscover) + common subdomain brute-forcing",
       "input": {
         "domain": "string"
       },
