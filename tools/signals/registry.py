@@ -7,6 +7,7 @@ from tools.asn_tool import asn_lookup
 from tools.crt_sh_tool import cert_transparency
 from tools.iprep_tool import ip_reputation
 from tools.email_security_tool import email_security_check
+from tools.headers_tool import headers_analyzer
 
 from tools.signals.whois import whois_extractor
 from tools.signals.dns import dns_extractor
@@ -17,6 +18,7 @@ from tools.signals.asn import asn_extractor
 from tools.signals.crtsh import crt_extractor
 from tools.signals.ip_reputation import ip_reputation_extractor
 from tools.signals.email_security import email_security_extractor
+from tools.signals.headers import headers_extractor
 from tools.signals.ip_reputation import extract_ip
 
 TOOL_REGISTRY = [
@@ -73,6 +75,13 @@ TOOL_REGISTRY = [
         "wave": 2,
         "args": lambda domain, results: (domain,),
         "extractor": techstack_extractor,
+    },
+    {
+        "name": "headers",
+        "fn": headers_analyzer,
+        "wave": 2,
+        "args": lambda domain, results: (domain,),
+        "extractor": headers_extractor,
     },
     {
         "name": "ct_logs",

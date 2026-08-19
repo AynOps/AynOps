@@ -64,6 +64,7 @@ def test_extract_signals_includes_asn_fields():
         },
         "ports": {"success": False},
         "techstack": {"success": False},
+        "headers": {"success": False},
         "ct_logs": {"success": False},
         "ip_reputation": {"success": False},
     }

@@ -6,10 +6,14 @@ especially important for the ip_abuse_score signal, which was silently
 always 0 between PR #84 and the fix that moved the assignment into
 ip_reputation_extractor (the AbuseIPDB-backed canonical source).
 """
+from unittest.mock import patch
+
+from tools.headers_tool import headers_analyzer
 from tools.signals.asn import asn_extractor
 from tools.signals.ip_reputation import ip_reputation_extractor
 from tools.signals.tech_stack import techstack_extractor
 from tools.signals.extractor import extract_signals
+from tools.signals.registry import TOOL_REGISTRY
 
 
 def _base_signals():
@@ -189,6 +193,7 @@ def test_extract_signals_populates_ip_abuse_score_from_ip_reputation():
         },
         "ports": {"success": False},
         "techstack": {"success": False},
+        "headers": {"success": False},
         "ct_logs": {"success": False},
         "ip_reputation": {
             "success": True,
@@ -216,6 +221,7 @@ def test_extract_signals_leaves_ip_abuse_score_at_zero_when_ip_reputation_missin
         },
         "ports": {"success": False},
         "techstack": {"success": False},
+        "headers": {"success": False},
         "ct_logs": {"success": False},
         "ip_reputation": {"success": False, "error": "API down"},
     }
@@ -258,7 +264,6 @@ def test_techstack_extractor_flattens_list_valued_technologies():
     result = {
         "success": True,
         "status_code": 200,
-        "security_headers": {"missing": []},
         "technologies": {
             "web_server": "nginx",
             "cms": ["WordPress"],
@@ -282,7 +287,6 @@ def test_techstack_extractor_skips_empty_and_none_technologies():
     result = {
         "success": True,
         "status_code": 200,
-        "security_headers": {"missing": []},
         "technologies": {
             "web_server": "nginx",
             "cms": [],
@@ -296,3 +300,235 @@ def test_techstack_extractor_skips_empty_and_none_technologies():
 
     assert signals["software_detected"] == ["nginx", "React"]
 
+
+
+# ── headers_extractor ────────────────────────────────────────────────────
+
+_RAW_HEADERS_ALL_PRESENT = {
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Content-Security-Policy": "default-src 'self'",
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=()",
+}
+
+
+def _registry_entry(name):
+    """Return the TOOL_REGISTRY entry called `name`, asserting it exists."""
+    entry = next((t for t in TOOL_REGISTRY if t.get("name") == name), None)
+    assert entry is not None, (
+        f"no {name!r} entry in TOOL_REGISTRY — registered tools: "
+        f"{[t.get('name') for t in TOOL_REGISTRY]}"
+    )
+    return entry
+
+
+def _headers_result_over(hops):
+    """Run the real headers_analyzer over a canned redirect chain."""
+    with patch("tools.headers_tool._walk_redirect_chain", return_value=hops):
+        return headers_analyzer("example.com")
+
+
+def _hop(url, status_code, raw_headers):
+    """One canned HTTP response, shaped as _walk_redirect_chain returns it."""
+    return {
+        "url": url,
+        "status_code": status_code,
+        "headers": dict(raw_headers),
+        "body": "",
+    }
+
+
+def _headers_result(raw_headers, status_code=200):
+    """Run the real headers_analyzer over one canned HTTP response."""
+    return _headers_result_over([_hop("https://example.com/", status_code, raw_headers)])
+
+
+def _raw_headers_without(*omitted):
+    """The fully hardened header set minus the named headers."""
+    dropped = {h.lower() for h in omitted}
+    return {k: v for k, v in _RAW_HEADERS_ALL_PRESENT.items() if k.lower() not in dropped}
+
+
+def _registry_results(**overrides):
+    """A full_recon-shaped results dict: every registered tool failed,
+    except the ones overridden here."""
+    results = {t["name"]: {"success": False, "error": "not run in this test"}
+               for t in TOOL_REGISTRY}
+    results.update(overrides)
+    return results
+
+
+def test_headers_analyzer_is_registered_for_full_recon():
+    """full_recon can only collect security headers if headers_analyzer is
+    in the signal registry with an extractor."""
+    entry = _registry_entry("headers")
+    assert entry["fn"] is headers_analyzer
+    assert callable(entry.get("extractor")), "headers entry has no extractor"
+    assert entry["args"]("example.com", {}) == ("example.com",)
+    assert entry["wave"] == 2
+
+
+def test_extract_signals_populates_missing_headers_from_headers_analyzer():
+    """The signal must carry exactly the headers headers_analyzer reports absent."""
+    results = _registry_results(
+        headers=_headers_result(
+            _raw_headers_without("Content-Security-Policy", "X-Frame-Options")
+        )
+    )
+    signals = extract_signals(results)
+
+    assert signals["missing_security_headers"] == [
+        "content-security-policy",
+        "x-frame-options",
+    ]
+
+
+def test_extract_signals_reports_no_missing_headers_when_all_present():
+    """A fully hardened site must not be reported as missing headers."""
+    results = _registry_results(headers=_headers_result(_RAW_HEADERS_ALL_PRESENT))
+    signals = extract_signals(results)
+
+    assert signals["missing_security_headers"] == []
+
+
+def test_extract_signals_reads_the_headers_of_the_final_redirect_hop():
+    """A chain that resolves to a 2xx page did reach the site, so the page's
+    absent headers must still reach the signal."""
+    results = _registry_results(
+        headers=_headers_result_over([
+            _hop("https://example.com/", 301, {"Location": "https://www.example.com/"}),
+            _hop("https://www.example.com/", 200, _raw_headers_without("Content-Security-Policy")),
+        ])
+    )
+    signals = extract_signals(results)
+
+    assert signals["missing_security_headers"] == ["content-security-policy"]
+
+
+def test_extract_signals_ignores_headers_from_a_4xx_final_hop():
+    """A 4xx response is an error page, not the site, so its absent headers
+    must not become a finding or a warning."""
+    results = _registry_results(headers=_headers_result({}, status_code=403))
+    signals = extract_signals(results)
+
+    assert signals["missing_security_headers"] == []
+    assert signals["auto_warnings"] == []
+
+
+def test_extract_signals_ignores_headers_from_a_5xx_final_hop():
+    """A 5xx response never reached page content, so its absent headers must
+    not become a finding or a warning."""
+    results = _registry_results(headers=_headers_result({}, status_code=503))
+    signals = extract_signals(results)
+
+    assert signals["missing_security_headers"] == []
+    assert signals["auto_warnings"] == []
+
+
+def test_techstack_success_does_not_clear_the_headers_signal():
+    """A successful techstack run must leave headers_analyzer's signal intact."""
+    results = _registry_results(
+        headers=_headers_result(_raw_headers_without("Content-Security-Policy")),
+        techstack={
+            "success": True,
+            "domain": "example.com",
+            "url": "https://example.com",
+            "status_code": 200,
+            "technologies": {"web_server": "nginx"},
+        },
+    )
+    signals = extract_signals(results)
+
+    assert signals["missing_security_headers"] == ["content-security-policy"]
+    assert signals["software_detected"] == ["nginx"]
+
+
+def test_headers_extractor_ignores_failed_runs():
+    """A failed headers_analyzer run must leave the signal at its default,
+    so the prompt's 'Insufficient data' rule can still apply."""
+    extractor = _registry_entry("headers")["extractor"]
+    signals = _base_signals()
+    extractor({"success": False, "error": "Connection failed"}, signals)
+
+    assert signals["missing_security_headers"] == []
+    assert signals["auto_warnings"] == []
+
+
+def test_headers_extractor_ignores_malformed_results():
+    """A success without a usable headers analysis must not crash or invent data."""
+    extractor = _registry_entry("headers")["extractor"]
+    signals = _base_signals()
+    extractor({"success": True, "domain": "example.com"}, signals)
+
+    assert signals["missing_security_headers"] == []
+    assert signals["auto_warnings"] == []
+
+
+def test_headers_extractor_warns_hard_on_four_or_more_missing():
+    """Four or more absent headers is the 'significant hardening gap' tier."""
+    extractor = _registry_entry("headers")["extractor"]
+    signals = _base_signals()
+    extractor(
+        _headers_result(
+            _raw_headers_without(
+                "Content-Security-Policy",
+                "X-Frame-Options",
+                "Referrer-Policy",
+                "Permissions-Policy",
+            )
+        ),
+        signals,
+    )
+
+    assert len(signals["missing_security_headers"]) == 4
+    assert len(signals["auto_warnings"]) == 1
+    assert "4 security headers missing" in signals["auto_warnings"][0]
+    assert "significant hardening gap" in signals["auto_warnings"][0]
+
+
+def test_headers_extractor_warns_softly_on_two_missing():
+    """Two or three absent headers is the plain-listing tier."""
+    extractor = _registry_entry("headers")["extractor"]
+    signals = _base_signals()
+    extractor(
+        _headers_result(_raw_headers_without("Content-Security-Policy", "Referrer-Policy")),
+        signals,
+    )
+
+    assert len(signals["auto_warnings"]) == 1
+    assert signals["auto_warnings"][0] == (
+        "2 security headers missing: content-security-policy, referrer-policy"
+    )
+
+
+def test_headers_extractor_does_not_warn_on_a_single_missing_header():
+    """One absent header is reported in the signal but is not a warning."""
+    extractor = _registry_entry("headers")["extractor"]
+    signals = _base_signals()
+    extractor(_headers_result(_raw_headers_without("Permissions-Policy")), signals)
+
+    assert signals["missing_security_headers"] == ["permissions-policy"]
+    assert signals["auto_warnings"] == []
+
+
+def test_techstack_extractor_does_not_touch_the_headers_signal():
+    """tech_stack_detect no longer returns security_headers, so its
+    extractor must not write missing_security_headers at all — whatever
+    order the registry runs the extractors in."""
+    signals = _base_signals()
+    signals["missing_security_headers"] = ["content-security-policy"]
+    techstack_extractor(
+        {
+            "success": True,
+            "domain": "example.com",
+            "url": "https://example.com",
+            "status_code": 200,
+            "technologies": {"web_server": "nginx"},
+        },
+        signals,
+    )
+
+    assert signals["missing_security_headers"] == ["content-security-policy"]
+    assert signals["auto_warnings"] == []
