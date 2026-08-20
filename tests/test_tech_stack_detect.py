@@ -6,6 +6,30 @@ import requests
 from tools.fingerprint import fingerprint
 from tools.techstack_tool import tech_stack_detect
 
+
+class ItemsDrainedHeaders:
+    """Headers mapping that drains correctly only via ``.items()``.
+
+    ``dict(mapping)`` drains through ``keys()`` + ``__getitem__``; this
+    double raises on ``__getitem__``. A caller that snapshots headers with
+    ``dict(resp.headers)`` therefore fails before the body is ever read,
+    while the base's ``{k.lower(): v for k, v in resp.headers.items()}``
+    drain succeeds.
+    """
+
+    def __init__(self, data):
+        self._data = dict(data)
+
+    def items(self):
+        return list(self._data.items())
+
+    def keys(self):
+        return list(self._data.keys())
+
+    def __getitem__(self, key):
+        raise KeyError(key)
+
+
 class TestTechStackDetect(unittest.TestCase):
 
     def _make_response(self, html="", headers=None, url="https://example.com", status=200):
@@ -149,6 +173,58 @@ class TestTechStackDetect(unittest.TestCase):
             expected,
             "header deleted by the text read must not leak into the fingerprint",
         )
+
+    @patch("tools.techstack_tool.requests.get")
+    def test_snapshot_uses_items_drain_before_mutating_text_read(self, mock_get):
+        # The headers mapping only drains via .items(); the text getter then
+        # mutates the mapping. The caller must build the normalised snapshot
+        # with an .items() drain BEFORE touching `text`, exactly as the base
+        # implementation did.
+        initial_headers = {"server": "nginx/1.18", "x-powered-by": "PHP/8.1"}
+        initial_text = "plain response body"
+        expected = fingerprint(initial_headers, initial_text)
+
+        class TextReadMutatesItemsDrainedHeaders:
+            def __init__(self):
+                self.headers = ItemsDrainedHeaders(initial_headers)
+                self.url = "https://example.com"
+                self.status_code = 200
+
+            @property
+            def text(self):
+                self.headers._data["cf-ray"] = "injected-by-text-read"
+                return initial_text
+
+        mock_get.return_value = TextReadMutatesItemsDrainedHeaders()
+        result = tech_stack_detect("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(
+            result["technologies"],
+            expected,
+            "header added by the text read must not leak into the fingerprint",
+        )
+
+    @patch("tools.techstack_tool.requests.get")
+    def test_text_read_error_is_reported_not_snapshot_error(self, mock_get):
+        # The headers mapping only drains via .items(); the text getter
+        # raises. Base snapshots the headers first and then surfaces the
+        # text-read error; the caller must not fail earlier on the snapshot.
+        class TextReadRaises:
+            def __init__(self):
+                self.headers = ItemsDrainedHeaders({"server": "nginx/1.18"})
+                self.url = "https://example.com"
+                self.status_code = 200
+
+            @property
+            def text(self):
+                raise RuntimeError("body decode exploded")
+
+        mock_get.return_value = TextReadRaises()
+        result = tech_stack_detect("example.com")
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "body decode exploded")
 
     @patch("tools.techstack_tool.requests.get", side_effect=Exception("Connection refused"))
     def test_connection_error_caught(self, _):
@@ -405,8 +481,9 @@ class TestTechStackDetectCharacterization(unittest.TestCase):
 
         result = tech_stack_detect("example.com")
 
-        # raw headers and raw text: normalisation belongs to the engine
-        mock_fingerprint.assert_called_once_with(headers, html)
+        # normalised headers and raw text: the caller owns the header-name
+        # snapshot/normalisation, the engine owns the body normalisation
+        mock_fingerprint.assert_called_once_with({"server": "nginx/1.18"}, html)
         self.assertEqual(result["technologies"], {"sentinel": True})
 
 

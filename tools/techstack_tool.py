@@ -15,7 +15,8 @@ def tech_stack_detect(domain: str) -> dict:
         url = f"https://{domain}"
         resp = requests.get(url, timeout=10, allow_redirects=True,
                             headers={"User-Agent": "Mozilla/5.0 (compatible; SecurityScanner/1.0)"})
-        technologies = fingerprint(dict(resp.headers), resp.text)
+        headers = {k.lower(): v for k, v in resp.headers.items()}
+        technologies = fingerprint(headers, resp.text)
 
         return {
             "success": True,
