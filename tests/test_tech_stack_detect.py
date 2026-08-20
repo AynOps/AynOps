@@ -107,6 +107,49 @@ class TestTechStackDetect(unittest.TestCase):
             "fingerprint must use headers/text as fetched, before assembly reads",
         )
 
+    @patch("tools.techstack_tool.requests.get")
+    def test_fingerprints_headers_snapshot_before_text_read(self, mock_get):
+        # The response double's `text` getter mutates the headers mapping when
+        # read. The caller must snapshot the headers before touching `text`,
+        # so the fingerprint reflects the response state at fetch time.
+        initial_headers = {"server": "nginx/1.18", "x-powered-by": "PHP/8.1"}
+        initial_text = "plain response body"
+        expected = fingerprint(initial_headers, initial_text)
+
+        class TextReadMutatesHeaders:
+            def __init__(self, mutate):
+                self.headers = dict(initial_headers)
+                self.url = "https://example.com"
+                self.status_code = 200
+                self._mutate = mutate
+
+            @property
+            def text(self):
+                self._mutate(self.headers)
+                return initial_text
+
+        # Reading `text` ADDS a header.
+        mock_get.return_value = TextReadMutatesHeaders(
+            lambda headers: headers.update({"cf-ray": "injected-by-text-read"})
+        )
+        result = tech_stack_detect("example.com")
+        self.assertEqual(
+            result["technologies"],
+            expected,
+            "header added by the text read must not leak into the fingerprint",
+        )
+
+        # Reading `text` DELETES a header.
+        mock_get.return_value = TextReadMutatesHeaders(
+            lambda headers: headers.pop("x-powered-by")
+        )
+        result = tech_stack_detect("example.com")
+        self.assertEqual(
+            result["technologies"],
+            expected,
+            "header deleted by the text read must not leak into the fingerprint",
+        )
+
     @patch("tools.techstack_tool.requests.get", side_effect=Exception("Connection refused"))
     def test_connection_error_caught(self, _):
         result = tech_stack_detect("example.com")
