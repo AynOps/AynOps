@@ -313,6 +313,24 @@ class TestTechStackDetectCharacterization(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual(result["error"], "Could not connect to the domain")
 
+    # ── the seam ──
+
+    @patch("tools.techstack_tool.fingerprint")
+    @patch("tools.techstack_tool.requests.get")
+    def test_detection_is_delegated_to_the_fingerprint_engine(
+        self, mock_get, mock_fingerprint
+    ):
+        headers = {"Server": "nginx/1.18"}
+        html = "<html>/wp-content/</html>"
+        mock_get.return_value = make_response(html=html, headers=headers)
+        mock_fingerprint.return_value = {"sentinel": True}
+
+        result = tech_stack_detect("example.com")
+
+        # raw headers and raw text: normalisation belongs to the engine
+        mock_fingerprint.assert_called_once_with(headers, html)
+        self.assertEqual(result["technologies"], {"sentinel": True})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
