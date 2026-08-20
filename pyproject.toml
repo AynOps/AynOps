@@ -1,27 +1,10 @@
-[project]
-name = "AynOps"
-version = "1.1.2"
-description = "A Model Context Protocol server that gives AI Clients real-time cybersecurity reconnaissance capabilities — WHOIS, DNS enumeration, port scanning, SSL inspection, CVE lookup, IP reputation, ASN lookup and more."
-readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
-    "curl-cffi>=0.15.0",
-    "datetime>=6.0",
-    "dnspython>=2.8.0",
-    "fastmcp>=3.3.1",
-    "packaging>=26.2",
-    "pip>=26.1.2",
-    "pytest==9.0.3",
-    "python-dotenv>=1.2.2",
-    "python-nmap>=0.7.1",
-    "python-whois>=0.9.6",
-    "reportlab>=4.5.1",
-    "requests>=2.34.2",
-    "tldextract>=5.3.1",
-]
+[tool.poetry.dependencies]
+click = "^8.1.7"
+colorama = "^0.4.6"
+pyyaml = "^6.0.1"
+requests = "^2.31.0"
+rich = "^13.7.0"
 
-[tool.pytest.ini_options]
-pythonpath = ["."]
-
-[tool.mcp]
-name = "io.github.AynOps/AynOps"
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
