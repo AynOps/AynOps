@@ -131,7 +131,7 @@ def dns_enumeration(domain: str) -> dict:
 
     for rtype in RECORD_TYPES:
         try:
-            answers = resolver.resolve(domain, rtype, lifetime=RESOLVER_LIFETIME, tcp=True)
+            answers = resolver.resolve(domain, rtype, lifetime=RESOLVER_LIFETIME)
         except dns.resolver.NXDOMAIN:
             return {"success": False, "error": f"Domain {domain} does not exist"}
         except LOOKUP_ERRORS as exc:
@@ -189,7 +189,7 @@ def dns_enumeration(domain: str) -> dict:
     for service in SRV_SERVICES:
         srv_name = f"{service}.{domain}"
         try:
-            answers = resolver.resolve(srv_name, "SRV", lifetime=RESOLVER_LIFETIME, tcp=True)
+            answers = resolver.resolve(srv_name, "SRV", lifetime=RESOLVER_LIFETIME)
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
             srv_records[service] = []
         except SRV_LOOKUP_ERRORS as exc:
@@ -219,7 +219,7 @@ def dns_enumeration(domain: str) -> dict:
         full = f"{sub}.{domain}"
         for rtype in SUBDOMAIN_RECORD_TYPES:
             try:
-                resolver.resolve(full, rtype, lifetime=SUBDOMAIN_LIFETIME, tcp=True)
+                resolver.resolve(full, rtype, lifetime=SUBDOMAIN_LIFETIME)
                 found_subdomains.append(full)
                 # A name that resolves on any record type is found, so an
                 # error recorded for an earlier record type no longer applies.
