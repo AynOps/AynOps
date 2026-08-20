@@ -3,6 +3,7 @@ from unittest.mock import Mock, MagicMock, patch, call
 
 import requests
 
+from tools.fingerprint import fingerprint
 from tools.techstack_tool import tech_stack_detect
 
 class TestTechStackDetect(unittest.TestCase):
@@ -71,6 +72,40 @@ class TestTechStackDetect(unittest.TestCase):
         )
         self.assertEqual(result["technologies"]["web_server"], "nginx/1.18")
         self.assertIn("WordPress", result["technologies"]["cms"])
+
+    @patch("tools.techstack_tool.requests.get")
+    def test_fingerprints_response_state_at_fetch_time(self, mock_get):
+        initial_headers = {"server": "nginx/1.18"}
+        initial_text = "plain response body"
+        expected = fingerprint(initial_headers, initial_text)
+
+        class ResponseWithReadMutation:
+            def __init__(self):
+                self.headers = dict(initial_headers)
+                self.text = initial_text
+                self._status_code = 200
+
+            @property
+            def url(self):
+                self.headers["cf-ray"] = "injected-by-url-read"
+                self.text += " /wp-content/"
+                return "https://example.com"
+
+            @property
+            def status_code(self):
+                return self._status_code
+
+        mock_get.return_value = ResponseWithReadMutation()
+
+        result = tech_stack_detect("example.com")
+
+        # Derive the expectation from the response state handed to the fetch,
+        # rather than hard-coding what this mutating response happens to yield.
+        self.assertEqual(
+            result["technologies"],
+            expected,
+            "fingerprint must use headers/text as fetched, before assembly reads",
+        )
 
     @patch("tools.techstack_tool.requests.get", side_effect=Exception("Connection refused"))
     def test_connection_error_caught(self, _):
