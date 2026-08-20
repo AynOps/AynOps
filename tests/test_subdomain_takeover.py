@@ -64,6 +64,7 @@ def test_vulnerable_subdomain_is_flagged(mock_enum, mock_resolver_class, mock_ge
     assert result["vulnerable"][0]["severity"] == "HIGH"
     assert "reason" in result["vulnerable"][0]
     assert result["safe"] == ["www.example.com"]
+    assert result.get("unknown") == []
     mock_get.assert_called_once()
 
 
@@ -89,6 +90,7 @@ def test_fingerprint_match_without_indicator_is_safe(mock_enum, mock_resolver_cl
     assert result["vulnerable"] == []
     assert result["total_vulnerable"] == 0
     assert result["safe"] == ["blog.example.com"]
+    assert result.get("unknown") == []
 
 
 @patch("tools.subdomain_takeover_tool.requests.get")
@@ -164,6 +166,7 @@ def test_aggregate_counts(mock_enum, mock_resolver_class, mock_get):
     assert result["vulnerable"][0]["subdomain"] == "dev.example.com"
     assert result["vulnerable"][0]["service"] == "GitHub Pages"
     assert result["safe"] == ["blog.example.com", "www.example.com"]
+    assert result.get("unknown") == []
 
 
 @patch("tools.subdomain_takeover_tool.requests.get")
@@ -189,6 +192,7 @@ def test_azure_vulnerable_matches_body(mock_enum, mock_resolver_class, mock_get)
     assert result["total_vulnerable"] == 1
     assert result["vulnerable"][0]["subdomain"] == "app.example.com"
     assert result["vulnerable"][0]["service"] == "Azure"
+    assert result.get("unknown") == []
     # HTTPS is attempted first and succeeded, so exactly one request is made to https://.
     assert mock_get.call_count == 1
     first_url = urlparse(mock_get.call_args_list[0].args[0])
@@ -237,8 +241,8 @@ def test_https_failure_falls_back_to_http(mock_enum, mock_resolver_class, mock_g
 @patch("tools.subdomain_takeover_tool.requests.get")
 @patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
 @patch("tools.subdomain_takeover_tool.dns_enumeration")
-def test_both_schemes_fail_is_safe(mock_enum, mock_resolver_class, mock_get):
-    """Neither HTTPS nor HTTP connects => not confirmed => safe."""
+def test_both_schemes_fail_is_unknown(mock_enum, mock_resolver_class, mock_get):
+    """Neither HTTPS nor HTTP connects => the probe outcome is unknown."""
     import requests as real_requests
 
     mock_enum.return_value = _enumeration_result(["app.example.com"])
@@ -253,8 +257,69 @@ def test_both_schemes_fail_is_safe(mock_enum, mock_resolver_class, mock_get):
 
     assert result["success"] is True
     assert result["total_vulnerable"] == 0
-    assert result["safe"] == ["app.example.com"]
+    assert result["safe"] == []
+    assert result["unknown"][0]["subdomain"] == "app.example.com"
+    assert result["unknown"][0]["reason"] == "Unable to complete HTTP probe over HTTPS or HTTP"
+    assert [error["scheme"] for error in result["unknown"][0]["probe_errors"]] == [
+        "https",
+        "http",
+    ]
+    assert all("ConnectionError: unreachable" in error["error"] for error in result["unknown"][0]["probe_errors"])
     assert mock_get.call_count == 2
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+@patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
+@patch("tools.subdomain_takeover_tool.dns_enumeration")
+def test_mixed_probe_outcomes_are_disjoint_and_total(mock_enum, mock_resolver_class, mock_get):
+    """Every probed subdomain lands in exactly one of vulnerable, safe, or unknown."""
+    import requests as real_requests
+
+    subdomains = [
+        "vulnerable.example.com",
+        "safe.example.com",
+        "unknown.example.com",
+    ]
+    mock_enum.return_value = _enumeration_result(subdomains)
+
+    resolver = Mock()
+    resolver.resolve.side_effect = lambda name, rtype, **kwargs: [
+        _cname_record("vulnerable.ghost.io." if name.startswith("vulnerable") else "safe.ghost.io.")
+    ]
+    mock_resolver_class.return_value = resolver
+
+    def http_side_effect(url, **kwargs):
+        host = (urlparse(url).hostname or "").lower()
+        if host.startswith("unknown"):
+            raise real_requests.exceptions.Timeout("probe timed out")
+        response = Mock()
+        response.status_code = 200
+        response.text = (
+            "404 Domain Not Found"
+            if host.startswith("vulnerable")
+            else "Welcome to a live site"
+        )
+        return response
+
+    mock_get.side_effect = http_side_effect
+
+    result = subdomain_takeover("example.com")
+
+    assert result.get("unknown") is not None
+    bucket_subdomains = {
+        "vulnerable": {item["subdomain"] for item in result["vulnerable"]},
+        "safe": set(result["safe"]),
+        "unknown": {item["subdomain"] for item in result.get("unknown", [])},
+    }
+    assert set.union(*bucket_subdomains.values()) == set(subdomains)
+    assert sum(len(bucket) for bucket in bucket_subdomains.values()) == len(subdomains)
+    for left_name, left_bucket in bucket_subdomains.items():
+        for right_name, right_bucket in bucket_subdomains.items():
+            if left_name != right_name:
+                assert left_bucket.isdisjoint(right_bucket)
+    assert bucket_subdomains["vulnerable"] == {"vulnerable.example.com"}
+    assert bucket_subdomains["safe"] == {"safe.example.com"}
+    assert bucket_subdomains["unknown"] == {"unknown.example.com"}
 
 
 @patch("tools.subdomain_takeover_tool.requests.get")
