@@ -78,6 +78,8 @@ def _discover_dynamic_selectors(domain: str) -> List[str]:
 def _spf_policy(record: str) -> str:
     parts = record.lower().split()
     for part in parts:
+        if part.startswith("redirect="):
+            return "redirect"
         if part in ("-all", "~all", "?all", "+all", "all"):
             if part == "-all":
                 return "fail"
@@ -113,6 +115,9 @@ def _check_spf(domain: str, recommendations: List[str]) -> Dict[str, Any]:
     if policy == "softfail":
         spf_score = 20
         recommendations.append("SPF uses softfail (~all) — consider a hard fail (-all) for stronger protection")
+    elif policy == "redirect":
+        spf_score = 30
+        recommendations.append("SPF policy uses 'redirect' — ensure the target domain has a strict policy.")
     elif policy in ("neutral", "pass"):
         spf_score = 10
         recommendations.append(f"SPF policy is '{policy}' — provides little protection.")
@@ -138,7 +143,7 @@ def _check_dmarc(domain: str, recommendations: List[str]) -> Dict[str, Any]:
 
     if len(dmarc_records) > 1:
         recommendations.append("Multiple DMARC records found — DMARC configuration is ambiguous. Publish a single DMARC policy record.")
-        return {"found": True, "valid": False, "records": dmarc_records, "score": 0}
+        return {"found": True, "valid": False, "policy": "invalid", "record": None, "records": dmarc_records, "score": 0}
 
     record = dmarc_records[0]
     tags = {}
@@ -169,6 +174,26 @@ def _check_dmarc(domain: str, recommendations: List[str]) -> Dict[str, Any]:
     return {"found": True, "valid": True, "record": record, "policy": policy, "score": dmarc_score}
 
 
+def _is_valid_dkim_record(record: str) -> str:
+    """Standalone validator for DKIM records to determine their active state."""
+    if not record.lower().startswith("v=dkim1"):
+        return "invalid"
+    
+    tags = {}
+    for part in record.split(";"):
+        part = part.strip()
+        if "=" in part:
+            k, v = part.split("=", 1)
+            tags[k.strip().lower()] = v.strip()
+            
+    if "p" not in tags:
+        return "malformed"
+        
+    if tags["p"] == "":
+        return "revoked"
+        
+    return "active"
+
 def _check_dkim(domain: str, recommendations: List[str]) -> Dict[str, Any]:
     # Combine baseline guesses with dynamically generated infrastructure keys
     dynamic_keys = _discover_dynamic_selectors(domain)
@@ -177,21 +202,9 @@ def _check_dkim(domain: str, recommendations: List[str]) -> Dict[str, Any]:
     def check_selector(selector: str):
         records, _failed = _query_txt(f"{selector}._domainkey.{domain}")
         for r in records:
-            if not r.lower().startswith("v=dkim1"):
-                continue
-            tags = {}
-            for part in r.split(";"):
-                part = part.strip()
-                if "=" in part:
-                    k, v = part.split("=", 1)
-                    tags[k.strip().lower()] = v.strip()
-            
-            p_val = tags.get("p")
-            if p_val is not None:
-                if p_val == "":
-                    return (selector, "revoked")
-                else:
-                    return (selector, "active")
+            state = _is_valid_dkim_record(r)
+            if state in ("active", "revoked", "malformed"):
+                return (selector, state)
         return None
 
     # Threading prevents the added dynamic keys from slowing down execution time
@@ -201,18 +214,25 @@ def _check_dkim(domain: str, recommendations: List[str]) -> Dict[str, Any]:
 
     active_selectors = [r[0] for r in found_results if r[1] == "active"]
     revoked_selectors = [r[0] for r in found_results if r[1] == "revoked"]
+    malformed_selectors = [r[0] for r in found_results if r[1] == "malformed"]
 
     found = len(active_selectors) > 0
     dkim_score = 35 if found else 0
 
     if not found:
-        recommendations.append("DKIM not found — add DKIM record to prevent spoofing")
+        if revoked_selectors:
+            recommendations.append("DKIM found but revoked — update DKIM record to prevent spoofing")
+        elif malformed_selectors:
+            recommendations.append("DKIM found but malformed (missing p= tag) — fix DKIM record")
+        else:
+            recommendations.append("DKIM not found — add DKIM record to prevent spoofing")
 
     return {
         "found": found, 
         "selectors_checked": selectors_to_check,
         "found_selectors": active_selectors,
         "revoked_selectors": revoked_selectors,
+        "malformed_selectors": malformed_selectors,
         "score": dkim_score
     }
 

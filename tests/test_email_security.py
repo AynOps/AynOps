@@ -20,7 +20,7 @@ class TestEmailSecurityScanner(unittest.TestCase):
         self.assertEqual(_spf_policy("v=spf1 include:spf.protection.outlook.com ~all"), "softfail")
         self.assertEqual(_spf_policy("v=spf1 ?all"), "neutral")
         self.assertEqual(_spf_policy("v=spf1 +all"), "pass")
-        self.assertEqual(_spf_policy("v=spf1 redirect=example.com"), "missing")
+        self.assertEqual(_spf_policy("v=spf1 redirect=example.com"), "redirect")
 
     @patch('dns.resolver.Resolver.resolve')
     def test_query_txt_fallback_mechanism(self, mock_resolve):
@@ -126,6 +126,55 @@ class TestEmailSecurityScanner(unittest.TestCase):
         self.assertEqual(result["security_score"], "60%")
         self.assertEqual(result["rating"], "Fair")
 
+    @patch('tools.email_security_tool._query_txt')
+    @patch('tools.email_security_tool._discover_dynamic_selectors')
+    @patch('tools.email_security_tool.is_valid_domain', return_value=True)
+    def test_multiple_spf_and_dmarc_records(self, mock_valid, mock_discover, mock_query):
+        """Verify that multiple SPF or DMARC records yield zero scores and invalid flags."""
+        mock_discover.return_value = []
+        
+        def side_effect_query(name):
+            if name == "test.com":
+                return ["v=spf1 -all", "v=spf1 ~all"], False
+            elif name == "_dmarc.test.com":
+                return ["v=DMARC1; p=reject", "v=DMARC1; p=none"], False
+            return [], False
+            
+        mock_query.side_effect = side_effect_query
+
+        result = email_security_check("test.com")
+        self.assertIn("Multiple SPF records found — SPF configuration is invalid. Consolidate the SPF mechanisms into a single SPF record.", result["recommendations"])
+        self.assertIn("Multiple DMARC records found — DMARC configuration is ambiguous. Publish a single DMARC policy record.", result["recommendations"])
+        self.assertEqual(result["security_score"], "0%")
+
+    @patch('tools.email_security_tool._query_txt')
+    @patch('tools.email_security_tool._discover_dynamic_selectors')
+    @patch('tools.email_security_tool.is_valid_domain', return_value=True)
+    def test_dkim_revoked_and_malformed(self, mock_valid, mock_discover, mock_query):
+        """Ensure revoked and malformed DKIM records trigger the appropriate recommendations."""
+        mock_discover.return_value = []
+        
+        def side_effect_query(name):
+            if name == "test.com":
+                return ["v=spf1 -all"], False
+            elif name == "_dmarc.test.com":
+                return ["v=DMARC1; p=reject; rua=mailto:a@a.com"], False
+            elif "google._domainkey.test.com" in name:
+                return ["v=dkim1; p="], False  # revoked
+            elif "default._domainkey.test.com" in name:
+                return ["v=dkim1; k=rsa"], False  # malformed (no p=)
+            return [], False
+            
+        mock_query.side_effect = side_effect_query
+
+        result = email_security_check("test.com")
+        # SPF(30) + DMARC(35) + DKIM(0) = 65%
+        self.assertEqual(result["security_score"], "65%")
+        self.assertIn("DKIM found but revoked — update DKIM record to prevent spoofing", result["recommendations"])
+
+    def test_missing_all_spf(self):
+        """Test SPF missing 'all' mechanism."""
+        self.assertEqual(_spf_policy("v=spf1 include:example.com"), "missing")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
