@@ -178,7 +178,7 @@
       "git clone https://github.com/AynOps/AynOps.git",
       "cd AynOps",
       "python -m venv .venv",
-      "pip install -r requirements.txt",
+      "uv sync",
       "Install Nmap from nmap.org/download.html"
     ]
   },
