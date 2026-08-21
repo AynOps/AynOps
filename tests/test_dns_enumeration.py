@@ -102,8 +102,88 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertEqual(result["errors"]["CAA"], "NoAnswer")
         self.assertIn("subdomains_found", result)
         self.assertEqual(resolver.nameservers, ["1.1.1.1", "8.8.8.8"])
-        resolver.resolve.assert_any_call("example.com", "TXT", lifetime=5, tcp=True)
-        resolver.resolve.assert_any_call("www.example.com", "A", lifetime=3, tcp=True)
+        resolver.resolve.assert_any_call("example.com", "TXT", lifetime=5)
+        resolver.resolve.assert_any_call("www.example.com", "A", lifetime=3)
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_udp_first_preserves_result_shape_and_content(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(name, rtype, lifetime=5, tcp=False):
+            if name == "example.com" and rtype == "A":
+                return _ResolverAnswer(["192.0.2.10"], 60)
+            if name == "_sip._tcp.example.com" and rtype == "SRV":
+                record = Mock()
+                record.priority = 10
+                record.weight = 20
+                record.port = 5060
+                record.target = "sip.example.com."
+                return [record]
+            if name == "www.example.com" and rtype == "A":
+                return _ResolverAnswer(["192.0.2.20"], 30)
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+
+        result = dns_enumeration("example.com")
+
+        self.assertEqual(
+            result,
+            {
+                "success": True,
+                "domain": "example.com",
+                "errors": {
+                    "AAAA": "NoAnswer",
+                    "MX": "NoAnswer",
+                    "NS": "NoAnswer",
+                    "TXT": "NoAnswer",
+                    "CNAME": "NoAnswer",
+                    "SOA": "NoAnswer",
+                    "CAA": "NoAnswer",
+                },
+                "records": {
+                    "A": ["192.0.2.10"],
+                    "AAAA": [],
+                    "MX": [],
+                    "NS": [],
+                    "TXT": [],
+                    "CNAME": [],
+                    "SOA": [],
+                    "CAA": [],
+                },
+                "srv_records": {
+                    "_sip._tcp": [
+                        {
+                            "priority": 10,
+                            "weight": 20,
+                            "port": 5060,
+                            "target": "sip.example.com",
+                        }
+                    ],
+                    "_ldap._tcp": [],
+                    "_xmpp-client._tcp": [],
+                    "_kerberos._tcp": [],
+                    "_autodiscover._tcp": [],
+                },
+                "srv_errors": {},
+                "subdomains_found": ["www.example.com"],
+                "subdomain_errors": {},
+                "ttl": {"A": 60},
+                "resolver": {
+                    "nameservers": ["1.1.1.1", "8.8.8.8"],
+                    "timeout": 2.0,
+                    "lifetime": 5,
+                },
+            },
+        )
+        resolver.resolve.assert_any_call("example.com", "A", lifetime=5)
+        resolver.resolve.assert_any_call(
+            "_sip._tcp.example.com", "SRV", lifetime=5
+        )
+        resolver.resolve.assert_any_call("www.example.com", "A", lifetime=3)
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_dns_nxdomain_returns_failure(self, mock_resolver_class):
@@ -299,9 +379,9 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertNotIn("ftp.example.com", result["subdomains_found"])
         self.assertNotIn("www.example.com", result["subdomain_errors"])
         self.assertEqual(result["subdomains_found"].count("www.example.com"), 1)
-        resolver.resolve.assert_any_call("www.example.com", "A", lifetime=3, tcp=True)
-        resolver.resolve.assert_any_call("www.example.com", "AAAA", lifetime=3, tcp=True)
-        resolver.resolve.assert_any_call("mail.example.com", "CNAME", lifetime=3, tcp=True)
+        resolver.resolve.assert_any_call("www.example.com", "A", lifetime=3)
+        resolver.resolve.assert_any_call("www.example.com", "AAAA", lifetime=3)
+        resolver.resolve.assert_any_call("mail.example.com", "CNAME", lifetime=3)
 
     @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_aaaa_found_subdomain_has_no_expected_a_error(self, mock_resolver_class):
@@ -492,7 +572,7 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertEqual(set(srv_records), expected_services)
         for service in expected_services:
             resolver.resolve.assert_any_call(
-                f"{service}.example.com", "SRV", lifetime=5, tcp=True
+                f"{service}.example.com", "SRV", lifetime=5
             )
         # A published SRV record is parsed into its fields.
         self.assertEqual(
@@ -553,7 +633,7 @@ class TestDnsEnumeration(unittest.TestCase):
                 for service in ("_sip._tcp", "_ldap._tcp", "_xmpp-client._tcp",
                                 "_kerberos._tcp", "_autodiscover._tcp"):
                     resolver.resolve.assert_any_call(
-                        f"{service}.{domain}", "SRV", lifetime=5, tcp=True
+                        f"{service}.{domain}", "SRV", lifetime=5
                     )
                     self.assertEqual(result["srv_records"][service], [])
                     self.assertEqual(result["srv_errors"][service], error.__name__)
