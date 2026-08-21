@@ -5,19 +5,21 @@ description = "A Model Context Protocol server that gives AI Clients real-time c
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "cryptography>=42.0.0",
     "curl-cffi>=0.15.0",
-    "datetime>=6.0",
     "dnspython>=2.8.0",
     "fastmcp>=3.3.1",
     "packaging>=26.2",
-    "pip>=26.1.2",
-    "pytest==9.0.3",
     "python-dotenv>=1.2.2",
     "python-nmap>=0.7.1",
     "python-whois>=0.9.6",
-    "reportlab>=4.5.1",
     "requests>=2.34.2",
     "tldextract>=5.3.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.0.3",
 ]
 
 [tool.pytest.ini_options]
