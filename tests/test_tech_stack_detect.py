@@ -431,10 +431,17 @@ class TestTechStackDetectCharacterization(unittest.TestCase):
         saga = self._detect(html="the saga(s) of vega(1)", headers={})
         self.assertEqual(saga["technologies"], {"analytics": ["Google Analytics"]})
 
-        # "wix.com" matches inside an unrelated word, and Segment's
-        # "analytics.js" matches any script with that filename.
+        # Segment's "analytics.js" signature matches any script with that
+        # filename.
         prose = self._detect(html="phoenix.community and /js/analytics.js", headers={})
         self.assertEqual(prose["technologies"], {"analytics": ["Segment"]})
+
+    def test_wix_substring_false_positive_is_preserved(self):
+        # The Wix signature "wix.com" is a bare substring match, so it fires
+        # inside unrelated words. Pinned here as a known false positive (the
+        # kind issue #130 §3 calls out), NOT fixed in this change.
+        result = self._detect(html="visit somewix.company for details", headers={})
+        self.assertEqual(result["technologies"], {"cms": ["Wix"]})
 
     # ── passthrough and error paths ──
 
