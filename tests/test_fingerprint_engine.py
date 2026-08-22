@@ -61,7 +61,7 @@ class TestFingerprintEngine(unittest.TestCase):
         self.assertEqual(headers_layer({}), {})
         self.assertEqual(html_layer(""), {})
 
-    def test_signature_tables_are_intact(self):
+    def test_signature_tables_have_expected_shape(self):
         self.assertEqual(len(CDN_SIGNATURES), 6)
         self.assertEqual(len(CMS_SIGNATURES), 7)
         self.assertEqual(len(JS_SIGNATURES), 8)
