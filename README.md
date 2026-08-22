@@ -395,6 +395,9 @@ Intended for:
 ├── .github/              # GitHub Actions workflows and templates
 ├── tests/                # Unit tests
 ├── tools/                # MCP tool implementations
+  ├── fingerprint/        # Technology fingerprinting engine used by tech_stack_detect
+    ├── signatures.py     # Signature tables (CDN, CMS, JS frameworks, analytics)
+    └── engine.py         # Detection layers and the fingerprint() entry point
   ├── prompts/            # AI prompt templates
   ├── signals/            # Signal extraction framework used by full_recon
     ├── registry.py       # Registers tools and their signal extractors
