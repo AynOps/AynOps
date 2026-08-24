@@ -95,7 +95,7 @@ class TestWhoisLookup(unittest.TestCase):
         for summary_path in summary_paths:
             summary = next(
                 line
-                for line in summary_path.read_text().splitlines()
+                for line in summary_path.read_text(encoding="utf-8").splitlines()
                 if "whois_lookup" in line and "whois_lookup.md" in line
             )
             self.assertIn("registrant organization", summary.lower())
