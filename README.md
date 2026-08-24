@@ -37,11 +37,14 @@ It is also listed on glama mcp registry.
 
 ## Tools Available
 
+See the [tools documentation index](docs/tools/README.md) for detailed
+reference pages and the current registration inventory.
+
 ### Included in `full_recon`
 
 | Tool | Description |
 |---|---|
-| `whois_lookup` | Domain registration data — owner, registrar, creation date, expiry, name servers |
+| [`whois_lookup`](docs/tools/whois_lookup.md) | Domain registration data — registrant organization, registrar, creation date, expiry, name servers |
 | `dns_enumeration` | A, AAAA, MX, NS, TXT, CNAME, SOA, CAA, and common SRV records (SIP, LDAP, XMPP, Kerberos, Autodiscover) + common subdomain brute-forcing |
 | `port_scan` | Nmap-powered scanner with service/version detection and security warnings |
 | `ssl_inspect` | SSL/TLS certificate — issuer, expiry, cipher strength, SANs, TLS version |
