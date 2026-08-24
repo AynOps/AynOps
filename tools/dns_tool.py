@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 import dns.exception
 import dns.name
 import dns.resolver
@@ -10,6 +12,7 @@ PUBLIC_RESOLVERS = ["1.1.1.1", "8.8.8.8"]
 RESOLVER_TIMEOUT = 2.0
 RESOLVER_LIFETIME = 5
 SUBDOMAIN_LIFETIME = 3
+MAX_CONCURRENT_LOOKUPS = 10
 
 # Record types enumerated for the target domain.
 RECORD_TYPES = ["A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA", "CAA"]
@@ -110,6 +113,19 @@ def _resolver_metadata(resolver) -> dict:
     }
 
 
+def _lookup_subdomain(resolver, full: str) -> tuple[bool, dict]:
+    errors = {}
+    for rtype in SUBDOMAIN_RECORD_TYPES:
+        try:
+            resolver.resolve(full, rtype, lifetime=SUBDOMAIN_LIFETIME)
+            return True, {}
+        except SUBDOMAIN_LOOKUP_ERRORS:
+            continue
+        except Exception as exc:
+            errors[rtype] = f"unexpected: {type(exc).__name__}"
+    return False, errors
+
+
 def dns_enumeration(domain: str) -> dict:
     """
     Enumerate DNS records for a domain.
@@ -129,109 +145,117 @@ def dns_enumeration(domain: str) -> dict:
     ttls = {}
     resolver = _make_resolver()
 
-    for rtype in RECORD_TYPES:
-        try:
-            answers = resolver.resolve(domain, rtype, lifetime=RESOLVER_LIFETIME)
-        except dns.resolver.NXDOMAIN:
-            return {"success": False, "error": f"Domain {domain} does not exist"}
-        except LOOKUP_ERRORS as exc:
-            records[rtype] = []
-            errors[rtype] = type(exc).__name__
-        except Exception as exc:
-            records[rtype] = []
-            errors[rtype] = f"unexpected: {type(exc).__name__}"
-        else:
-            ttl = _record_ttl(answers)
-            if ttl is not None:
-                ttls[rtype] = ttl
+    lookup_count = len(RECORD_TYPES) + len(SRV_SERVICES) + len(COMMON_SUBDOMAINS)
+    max_workers = max(1, min(MAX_CONCURRENT_LOOKUPS, lookup_count))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        record_futures = [
+            executor.submit(
+                resolver.resolve, domain, rtype, lifetime=RESOLVER_LIFETIME
+            )
+            for rtype in RECORD_TYPES
+        ]
+        srv_futures = [
+            executor.submit(
+                resolver.resolve,
+                f"{service}.{domain}",
+                "SRV",
+                lifetime=RESOLVER_LIFETIME,
+            )
+            for service in SRV_SERVICES
+        ]
+        subdomain_futures = [
+            executor.submit(_lookup_subdomain, resolver, f"{sub}.{domain}")
+            for sub in COMMON_SUBDOMAINS
+        ]
+
+        for rtype, future in zip(RECORD_TYPES, record_futures):
             try:
-                if rtype == "MX":
-                    records[rtype] = [
-                        {"preference": r.preference, "exchange": _clean_name(r.exchange)}
-                        for r in answers
-                    ]
-                elif rtype == "SOA":
-                    r = answers[0]
-                    records[rtype] = {
-                        "mname": _clean_name(r.mname),
-                        "rname": _clean_name(r.rname),
-                        "serial": r.serial,
-                        "refresh": r.refresh,
-                        "retry": r.retry,
-                        "expire": r.expire,
-                        "minimum": r.minimum
-                    }
-                elif rtype == "TXT":
-                    records[rtype] = [_format_txt_record(r) for r in answers]
-                elif rtype == "CAA":
-                    records[rtype] = [_format_caa_record(r) for r in answers]
-                elif rtype in {"NS", "CNAME"}:
-                    records[rtype] = [_clean_name(r) for r in answers]
-                else:
-                    records[rtype] = [str(r) for r in answers]
-            except UnicodeDecodeError as exc:
-                # TXT chunks and CAA values are arbitrary remote octets, not
-                # guaranteed UTF-8. Keep this record type's failure visible
-                # without swallowing defects in our own formatting logic.
+                answers = future.result()
+            except dns.resolver.NXDOMAIN:
+                return {"success": False, "error": f"Domain {domain} does not exist"}
+            except LOOKUP_ERRORS as exc:
                 records[rtype] = []
                 errors[rtype] = type(exc).__name__
-                ttls.pop(rtype, None)
-
-    # SRV enumeration for common enterprise services. Unlike the target
-    # domain itself, an SRV owner name that does not exist (NXDOMAIN) or has
-    # no SRV RRset (NoAnswer) is the ordinary "service not published" outcome,
-    # so it stays an empty list with no error; other anticipated lookup
-    # failures and genuine surprises follow the same error conventions as the
-    # record-type loop above.
-    srv_records = {}
-    srv_errors = {}
-
-    for service in SRV_SERVICES:
-        srv_name = f"{service}.{domain}"
-        try:
-            answers = resolver.resolve(srv_name, "SRV", lifetime=RESOLVER_LIFETIME)
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-            srv_records[service] = []
-        except SRV_LOOKUP_ERRORS as exc:
-            srv_records[service] = []
-            srv_errors[service] = type(exc).__name__
-        except Exception as exc:
-            srv_records[service] = []
-            srv_errors[service] = f"unexpected: {type(exc).__name__}"
-        else:
-            srv_records[service] = [
-                {
-                    "priority": r.priority,
-                    "weight": r.weight,
-                    "port": r.port,
-                    "target": _clean_name(r.target),
-                }
-                for r in answers
-            ]
-
-    # Subdomain brute-force (common subdomains); a subdomain counts as found
-    # when any of A/AAAA/CNAME resolves, so IPv6-only and aliased hosts are
-    # not missed.
-    found_subdomains = []
-    subdomain_errors = {}
-
-    for sub in COMMON_SUBDOMAINS:
-        full = f"{sub}.{domain}"
-        for rtype in SUBDOMAIN_RECORD_TYPES:
-            try:
-                resolver.resolve(full, rtype, lifetime=SUBDOMAIN_LIFETIME)
-                found_subdomains.append(full)
-                # A name that resolves on any record type is found, so an
-                # error recorded for an earlier record type no longer applies.
-                subdomain_errors.pop(full, None)
-                break
-            except SUBDOMAIN_LOOKUP_ERRORS:
-                continue
             except Exception as exc:
-                subdomain_errors.setdefault(full, {})[rtype] = (
-                    f"unexpected: {type(exc).__name__}"
-                )
-                continue
+                records[rtype] = []
+                errors[rtype] = f"unexpected: {type(exc).__name__}"
+            else:
+                ttl = _record_ttl(answers)
+                if ttl is not None:
+                    ttls[rtype] = ttl
+                try:
+                    if rtype == "MX":
+                        records[rtype] = [
+                            {
+                                "preference": r.preference,
+                                "exchange": _clean_name(r.exchange),
+                            }
+                            for r in answers
+                        ]
+                    elif rtype == "SOA":
+                        r = answers[0]
+                        records[rtype] = {
+                            "mname": _clean_name(r.mname),
+                            "rname": _clean_name(r.rname),
+                            "serial": r.serial,
+                            "refresh": r.refresh,
+                            "retry": r.retry,
+                            "expire": r.expire,
+                            "minimum": r.minimum,
+                        }
+                    elif rtype == "TXT":
+                        records[rtype] = [_format_txt_record(r) for r in answers]
+                    elif rtype == "CAA":
+                        records[rtype] = [_format_caa_record(r) for r in answers]
+                    elif rtype in {"NS", "CNAME"}:
+                        records[rtype] = [_clean_name(r) for r in answers]
+                    else:
+                        records[rtype] = [str(r) for r in answers]
+                except UnicodeDecodeError as exc:
+                    # TXT chunks and CAA values are arbitrary remote octets,
+                    # not guaranteed UTF-8. Keep this record type's failure
+                    # visible without swallowing defects in our formatting.
+                    records[rtype] = []
+                    errors[rtype] = type(exc).__name__
+                    ttls.pop(rtype, None)
+
+        # SRV enumeration for common enterprise services. Unlike the target
+        # domain itself, an absent SRV owner or RRset is an ordinary negative.
+        srv_records = {}
+        srv_errors = {}
+        for service, future in zip(SRV_SERVICES, srv_futures):
+            try:
+                answers = future.result()
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                srv_records[service] = []
+            except SRV_LOOKUP_ERRORS as exc:
+                srv_records[service] = []
+                srv_errors[service] = type(exc).__name__
+            except Exception as exc:
+                srv_records[service] = []
+                srv_errors[service] = f"unexpected: {type(exc).__name__}"
+            else:
+                srv_records[service] = [
+                    {
+                        "priority": r.priority,
+                        "weight": r.weight,
+                        "port": r.port,
+                        "target": _clean_name(r.target),
+                    }
+                    for r in answers
+                ]
+
+        # Aggregate completed subdomain work in configured order so execution
+        # timing cannot alter the public result.
+        found_subdomains = []
+        subdomain_errors = {}
+        for sub, future in zip(COMMON_SUBDOMAINS, subdomain_futures):
+            full = f"{sub}.{domain}"
+            found, lookup_errors = future.result()
+            if found:
+                found_subdomains.append(full)
+            elif lookup_errors:
+                subdomain_errors[full] = lookup_errors
 
     return {
         "success": True,

@@ -1,3 +1,4 @@
+import threading
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
@@ -56,6 +57,67 @@ class TestDnsEnumeration(unittest.TestCase):
         answer.__iter__.return_value = iter(records)
         answer.rrset.ttl = ttl
         return answer
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_independent_lookup_categories_can_overlap(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+        lookup_gate = threading.Event()
+        all_categories_started = threading.Event()
+        calls = []
+        calls_lock = threading.Lock()
+        result = {}
+        failure = {}
+
+        def side_effect(name, rtype, lifetime=5, tcp=False):
+            with calls_lock:
+                calls.append((name, rtype))
+                if len(calls) == 3:
+                    all_categories_started.set()
+            if not lookup_gate.wait(timeout=10):
+                raise AssertionError("lookup synchronization gate was not released")
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+
+        def enumerate_domain():
+            try:
+                result.update(dns_enumeration("example.com"))
+            except Exception as exc:
+                failure["exception"] = exc
+
+        with patch.multiple(
+            "tools.dns_tool",
+            RECORD_TYPES=["A"],
+            SRV_SERVICES=["_sip._tcp"],
+            COMMON_SUBDOMAINS=["www"],
+            SUBDOMAIN_RECORD_TYPES=("A",),
+        ):
+            worker = threading.Thread(target=enumerate_domain)
+            worker.start()
+            try:
+                self.assertTrue(
+                    all_categories_started.wait(timeout=5),
+                    "record, SRV, and subdomain lookups did not overlap",
+                )
+            finally:
+                lookup_gate.set()
+                worker.join(timeout=10)
+
+        self.assertFalse(worker.is_alive(), "DNS enumeration did not shut down")
+        if "exception" in failure:
+            raise failure["exception"]
+        self.assertEqual(
+            set(calls[:3]),
+            {
+                ("example.com", "A"),
+                ("_sip._tcp.example.com", "SRV"),
+                ("www.example.com", "A"),
+            },
+        )
+        self.assertTrue(result["success"])
 
     def test_invalid_domain(self):
         result = dns_enumeration("bad_domain")
