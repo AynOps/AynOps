@@ -23,9 +23,9 @@ The MCP tool exposes one required input:
 There are no optional parameters. The server strips surrounding whitespace,
 converts the value to lowercase, and removes trailing dots before validation.
 Validation requires at least one dot, labels of at most 63 characters, a total
-length of at most 253 characters, and a final label containing at least two
-ASCII letters. Each non-final label may contain letters, digits, and internal
-hyphens, but may not start or end with a hyphen.
+length of at most 253 characters, and a final label consisting entirely of at
+least two ASCII letters. Each non-final label may contain letters, digits, and
+internal hyphens, but may not start or end with a hyphen.
 
 ## Example MCP request
 
@@ -79,7 +79,7 @@ On success, the response contains `success: true` and the following fields:
 | `success` | boolean | `true` for a completed WHOIS lookup. |
 | `domain` | string, list of strings, or null | The `domain_name` value returned by the WHOIS library. A single parsed value remains a string; multiple values are returned as a list. |
 | `registrar` | string or null | Registrar returned by the WHOIS response. |
-| `registrar_url` | string or null | Registrar URL, when supplied. |
+| `registrar_url` | string, list of strings, or null | Registrar URL, when supplied. A single parsed value is a string; repeated upstream values are returned as a list. |
 | `whois_server` | string or null | WHOIS server returned by the response. |
 | `creation_date` | string, list of strings, or null | Creation date. Date objects are converted to strings; multiple values are returned as a list. |
 | `expiration_date` | string, list of strings, or null | Expiration date, with the same conversion and list behavior as `creation_date`. |
