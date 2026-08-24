@@ -6,13 +6,13 @@
 returns the fields that the upstream WHOIS response provides. It does not
 require an API key.
 
-## Common uses
+## Purpose and common use cases
 
 Use this tool to inspect registration metadata such as the registrar, registry
 dates, name servers, registration status, and the organization associated with
 a domain. WHOIS responses vary by registry, so some fields may be unavailable.
 
-## Input
+## Parameters
 
 The MCP tool exposes one required input:
 
@@ -20,12 +20,14 @@ The MCP tool exposes one required input:
 |---|---|---|---|
 | `domain` | string | Yes | A fully qualified domain name to query. IP addresses, `localhost`, bare labels, and malformed domain names are rejected. |
 
-There are no optional parameters. The server strips surrounding whitespace,
-converts the value to lowercase, and removes trailing dots before validation.
 Validation requires at least one dot, labels of at most 63 characters, a total
 length of at most 253 characters, and a final label consisting entirely of at
 least two ASCII letters. Each non-final label may contain letters, digits, and
 internal hyphens, but may not start or end with a hyphen.
+
+## Optional parameters
+
+None.
 
 ## Example MCP request
 
@@ -37,7 +39,7 @@ internal hyphens, but may not start or end with a hyphen.
   "params": {
     "name": "whois_lookup",
     "arguments": {
-      "domain": " Example.COM. "
+      "domain": "example.com"
     }
   }
 }
@@ -70,7 +72,7 @@ or return more than one value for a field.
 }
 ```
 
-## Response fields
+## Response field descriptions
 
 On success, the response contains `success: true` and the following fields:
 
@@ -111,14 +113,19 @@ failures are returned using the underlying exception message.
 
 ## Notes and limitations
 
-- No API key is required, but the lookup needs network access to the relevant
-  WHOIS service.
+- Before validation, the server strips surrounding whitespace, converts the
+  value to lowercase, and removes trailing dots.
+- The lookup needs network access to the relevant WHOIS service.
 - Field availability and formatting vary between registries and registrars;
   missing values are returned as `null`.
 - A field with one parsed value is a scalar string, while repeated values are
   returned as a list of strings.
 - The validator accepts domain names only; IP address lookups are not part of
   this tool's input contract.
+
+## API key requirements
+
+None required.
 
 ## Related tools
 
