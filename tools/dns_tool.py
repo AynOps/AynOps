@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from itertools import zip_longest
 
 import dns.exception
 import dns.name
@@ -145,32 +146,58 @@ def dns_enumeration(domain: str) -> dict:
     ttls = {}
     resolver = _make_resolver()
 
+    first_record_answers = None
+    first_record_error = None
+    if RECORD_TYPES:
+        try:
+            first_record_answers = resolver.resolve(
+                domain, RECORD_TYPES[0], lifetime=RESOLVER_LIFETIME
+            )
+        except dns.resolver.NXDOMAIN:
+            return {"success": False, "error": f"Domain {domain} does not exist"}
+        except Exception as exc:
+            first_record_error = exc
+
     lookup_count = len(RECORD_TYPES) + len(SRV_SERVICES) + len(COMMON_SUBDOMAINS)
     max_workers = max(1, min(MAX_CONCURRENT_LOOKUPS, lookup_count))
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        record_futures = [
-            executor.submit(
-                resolver.resolve, domain, rtype, lifetime=RESOLVER_LIFETIME
-            )
-            for rtype in RECORD_TYPES
-        ]
-        srv_futures = [
-            executor.submit(
-                resolver.resolve,
-                f"{service}.{domain}",
-                "SRV",
-                lifetime=RESOLVER_LIFETIME,
-            )
-            for service in SRV_SERVICES
-        ]
-        subdomain_futures = [
-            executor.submit(_lookup_subdomain, resolver, f"{sub}.{domain}")
-            for sub in COMMON_SUBDOMAINS
-        ]
+        record_futures = []
+        srv_futures = []
+        subdomain_futures = []
+        for rtype, service, sub in zip_longest(
+            RECORD_TYPES[1:], SRV_SERVICES, COMMON_SUBDOMAINS
+        ):
+            if rtype is not None:
+                record_futures.append(
+                    executor.submit(
+                        resolver.resolve,
+                        domain,
+                        rtype,
+                        lifetime=RESOLVER_LIFETIME,
+                    )
+                )
+            if service is not None:
+                srv_futures.append(
+                    executor.submit(
+                        resolver.resolve,
+                        f"{service}.{domain}",
+                        "SRV",
+                        lifetime=RESOLVER_LIFETIME,
+                    )
+                )
+            if sub is not None:
+                subdomain_futures.append(
+                    executor.submit(_lookup_subdomain, resolver, f"{sub}.{domain}")
+                )
 
-        for rtype, future in zip(RECORD_TYPES, record_futures):
+        for index, rtype in enumerate(RECORD_TYPES):
             try:
-                answers = future.result()
+                if index == 0:
+                    if first_record_error is not None:
+                        raise first_record_error
+                    answers = first_record_answers
+                else:
+                    answers = record_futures[index - 1].result()
             except dns.resolver.NXDOMAIN:
                 return {"success": False, "error": f"Domain {domain} does not exist"}
             except LOOKUP_ERRORS as exc:
