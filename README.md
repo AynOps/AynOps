@@ -37,6 +37,9 @@ It is also listed on glama mcp registry.
 
 ## Tools Available
 
+See the [tools documentation index](docs/tools/README.md) for detailed
+reference pages and the current registration inventory.
+
 ### Included in `full_recon`
 
 | Tool | Description |
