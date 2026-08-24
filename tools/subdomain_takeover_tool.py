@@ -6,6 +6,8 @@ fingerprints (GitHub Pages, Heroku, S3, Azure, Ghost, Shopify, Fastly), and
 confirms the takeover with an HTTP request checking for the service's
 takeover-indicating response.
 """
+from dataclasses import dataclass
+from enum import Enum
 import re
 
 import dns.resolver
@@ -57,6 +59,24 @@ _REQUEST_HEADERS = {
 _REQUEST_TIMEOUT = 10
 
 
+class _ProbeStatus(str, Enum):
+    CONFIRMED = "confirmed"
+    NO_INDICATOR = "no_indicator"
+    UNABLE_TO_PROBE = "unable_to_probe"
+
+
+@dataclass(frozen=True)
+class _ProbeResult:
+    response: requests.Response | None
+    errors: tuple[dict[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class _TakeoverResult:
+    status: _ProbeStatus
+    probe_errors: tuple[dict[str, str], ...] = ()
+
+
 def _make_resolver() -> dns.resolver.Resolver:
     resolver = dns.resolver.Resolver(configure=False)
     resolver.nameservers = PUBLIC_RESOLVERS
@@ -84,35 +104,44 @@ def _match_fingerprint(cname: str) -> dict | None:
     return None
 
 
-def _probe(subdomain: str):
+def _probe(subdomain: str) -> _ProbeResult:
     """Fetch the subdomain over HTTPS first, falling back to HTTP.
 
     Many hosted services only serve (or redirect to) HTTPS, so try that first
     and fall back to plain HTTP only when the HTTPS connection itself fails.
-    Returns the response, or None if neither scheme connects.
+    Returns the response and any errors if neither scheme connects.
     """
+    errors = []
     for scheme in ("https", "http"):
         try:
-            return requests.get(
+            response = requests.get(
                 f"{scheme}://{subdomain}",
                 headers=_REQUEST_HEADERS,
                 timeout=_REQUEST_TIMEOUT,
             )
-        except requests.exceptions.RequestException:
+            return _ProbeResult(response=response)
+        except requests.exceptions.RequestException as exc:
+            errors.append({
+                "scheme": scheme,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
             continue
-    return None
+    return _ProbeResult(response=None, errors=tuple(errors))
 
 
-def _confirms_takeover(subdomain: str, fingerprint: dict) -> bool:
-    """HTTP-probe the subdomain and check for the takeover-indicating response."""
-    response = _probe(subdomain)
-    if response is None:
-        return False
+def _confirms_takeover(subdomain: str, fingerprint: dict) -> _TakeoverResult:
+    """Return the tri-state takeover result and probe failure evidence."""
+    probe = _probe(subdomain)
+    if probe.response is None:
+        return _TakeoverResult(_ProbeStatus.UNABLE_TO_PROBE, probe.errors)
 
     indicator = fingerprint["indicator"]
     if "status" in indicator:
-        return response.status_code == indicator["status"]
-    return indicator["body"].lower() in response.text.lower()
+        confirmed = probe.response.status_code == indicator["status"]
+    else:
+        confirmed = indicator["body"].lower() in probe.response.text.lower()
+    status = _ProbeStatus.CONFIRMED if confirmed else _ProbeStatus.NO_INDICATOR
+    return _TakeoverResult(status)
 
 
 def subdomain_takeover(domain: str) -> dict:
@@ -138,6 +167,7 @@ def subdomain_takeover(domain: str) -> dict:
 
     vulnerable = []
     safe = []
+    unknown = []
 
     for subdomain in subdomains:
         cname = _resolve_cname(subdomain, resolver)
@@ -150,7 +180,8 @@ def subdomain_takeover(domain: str) -> dict:
             safe.append(subdomain)
             continue
 
-        if _confirms_takeover(subdomain, fingerprint):
+        probe_result = _confirms_takeover(subdomain, fingerprint)
+        if probe_result.status is _ProbeStatus.CONFIRMED:
             vulnerable.append({
                 "subdomain": subdomain,
                 "cname": cname,
@@ -158,8 +189,14 @@ def subdomain_takeover(domain: str) -> dict:
                 "reason": f"CNAME points to unclaimed {fingerprint['service']} service",
                 "severity": "HIGH",
             })
-        else:
+        elif probe_result.status is _ProbeStatus.NO_INDICATOR:
             safe.append(subdomain)
+        else:
+            unknown.append({
+                "subdomain": subdomain,
+                "reason": "Unable to complete HTTP probe over HTTPS or HTTP",
+                "probe_errors": list(probe_result.probe_errors),
+            })
 
     return {
         "success": True,
@@ -167,5 +204,6 @@ def subdomain_takeover(domain: str) -> dict:
         "subdomains_checked": len(subdomains),
         "vulnerable": vulnerable,
         "safe": safe,
+        "unknown": unknown,
         "total_vulnerable": len(vulnerable),
     }
