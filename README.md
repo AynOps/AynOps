@@ -44,7 +44,7 @@ reference pages and the current registration inventory.
 
 | Tool | Description |
 |---|---|
-| [`whois_lookup`](docs/tools/whois_lookup.md) | Domain registration data — owner, registrar, creation date, expiry, name servers |
+| [`whois_lookup`](docs/tools/whois_lookup.md) | Domain registration data — registrant organization, registrar, creation date, expiry, name servers |
 | `dns_enumeration` | A, AAAA, MX, NS, TXT, CNAME, SOA, CAA, and common SRV records (SIP, LDAP, XMPP, Kerberos, Autodiscover) + common subdomain brute-forcing |
 | `port_scan` | Nmap-powered scanner with service/version detection and security warnings |
 | `ssl_inspect` | SSL/TLS certificate — issuer, expiry, cipher strength, SANs, TLS version |

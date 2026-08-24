@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 import socket
 import unittest
+from pathlib import Path
 from tools.whois_tool import whois_lookup
 
 class TestWhoisLookup(unittest.TestCase):
@@ -77,6 +78,28 @@ class TestWhoisLookup(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertIsNone(result["expiration_date"])
         self.assertIsNone(result["creation_date"])
+
+    @patch("tools.whois_tool.whois.whois")
+    def test_whois_summary_surfaces_describe_returned_organization(self, mock_whois):
+        mock_whois.return_value = self._mock_whois_result()
+        result = whois_lookup("example.com")
+
+        self.assertIn("org", result)
+        self.assertNotIn("owner", result)
+
+        repo_root = Path(__file__).resolve().parents[1]
+        summary_paths = (
+            repo_root / "README.md",
+            repo_root / "docs/tools/README.md",
+        )
+        for summary_path in summary_paths:
+            summary = next(
+                line
+                for line in summary_path.read_text().splitlines()
+                if "whois_lookup" in line and "whois_lookup.md" in line
+            )
+            self.assertIn("registrant organization", summary.lower())
+            self.assertNotIn("owner", summary.lower())
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
