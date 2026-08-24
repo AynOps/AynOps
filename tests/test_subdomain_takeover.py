@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 import dns.rdata
 import dns.rdataclass
 import dns.rdatatype
+import dns.name
 
 from tools.subdomain_takeover_tool import subdomain_takeover
 
@@ -113,6 +114,60 @@ def test_no_dangling_cname_is_safe(mock_enum, mock_resolver_class, mock_get):
     assert result["vulnerable"] == []
     assert result["total_vulnerable"] == 0
     assert result["safe"] == ["www.example.com", "mail.example.com"]
+    mock_get.assert_not_called()
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+@patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
+@patch("tools.subdomain_takeover_tool.dns_enumeration")
+def test_dns_resolution_errors_are_unknown_not_safe(
+    mock_enum, mock_resolver_class, mock_get
+):
+    """Operational CNAME lookup failures must not be reported as safe."""
+    import dns.resolver as real_dns
+
+    mock_enum.return_value = _enumeration_result(["app.example.com"])
+    resolver = Mock()
+    mock_resolver_class.return_value = resolver
+
+    for error in (
+        real_dns.NoNameservers,
+        real_dns.LifetimeTimeout,
+        real_dns.YXDOMAIN,
+        dns.name.NameTooLong,
+    ):
+        resolver.resolve.side_effect = error
+
+        result = subdomain_takeover("example.com")
+
+        assert result["vulnerable"] == []
+        assert result["safe"] == []
+        assert {
+            entry["subdomain"] for entry in result["unknown"]
+        } == {"app.example.com"}
+
+    mock_get.assert_not_called()
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+@patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
+@patch("tools.subdomain_takeover_tool.dns_enumeration")
+def test_unsupported_cname_service_is_unknown_not_safe(
+    mock_enum, mock_resolver_class, mock_get
+):
+    """A CNAME outside the known fingerprints must remain an unknown result."""
+    mock_enum.return_value = _enumeration_result(["app.example.com"])
+    resolver = Mock()
+    resolver.resolve.return_value = [_cname_record("app.unsupported.example.")]
+    mock_resolver_class.return_value = resolver
+
+    result = subdomain_takeover("example.com")
+
+    assert result["vulnerable"] == []
+    assert result["safe"] == []
+    assert {
+        entry["subdomain"] for entry in result["unknown"]
+    } == {"app.example.com"}
     mock_get.assert_not_called()
 
 
@@ -326,7 +381,7 @@ def test_mixed_probe_outcomes_are_disjoint_and_total(mock_enum, mock_resolver_cl
 @patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
 @patch("tools.subdomain_takeover_tool.dns_enumeration")
 def test_s3_fingerprint_matches_only_s3_endpoints(mock_enum, mock_resolver_class, mock_get):
-    """Only actual S3 bucket endpoint CNAMEs select the AWS S3 fingerprint; other AWS endpoints are safe and unprobed."""
+    """Only actual S3 bucket endpoint CNAMEs select the AWS S3 fingerprint; other AWS endpoints are unknown and unprobed."""
     mock_enum.return_value = _enumeration_result(["static.example.com"])
     resolver = Mock()
     mock_resolver_class.return_value = resolver
@@ -396,7 +451,10 @@ def test_s3_fingerprint_matches_only_s3_endpoints(mock_enum, mock_resolver_class
         else:
             ignored = (
                 result["vulnerable"] == []
-                and result["safe"] == ["static.example.com"]
+                and result["safe"] == []
+                and [
+                    entry["subdomain"] for entry in result["unknown"]
+                ] == ["static.example.com"]
                 and mock_get.call_count == 0
             )
             if not ignored:
