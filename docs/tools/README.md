@@ -9,7 +9,7 @@ slice, and the remaining pages are planned follow-ups.
 | Tool | Description | Documentation |
 |---|---|---|
 | [`whois_lookup`](whois_lookup.md) | Domain registration data — registrant organization, registrar, creation date, expiry, and name servers | Available |
-| `dns_enumeration` | Enumerates DNS records and common subdomains | Pending |
+| [`dns_enumeration`](dns_enumeration.md) | Enumerates DNS records and common subdomains | Available |
 | `port_scan` | Nmap-powered port scanner with service and version detection | Pending |
 | `ssl_inspect` | Inspects SSL/TLS certificates, cipher strength, SANs, and TLS version | Pending |
 | `email_security_check` | Checks SPF, DKIM, and DMARC configuration | Pending |
