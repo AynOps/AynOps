@@ -107,7 +107,7 @@ def _live_run_commands(workflow_text):
     _assert_unredirected_run_defaults(workflow)
 
     commands = []
-    for job in jobs.values():
+    for job_name, job in jobs.items():
         assert isinstance(job, dict)
         assert "uses" not in job
         assert "container" not in job
@@ -139,7 +139,7 @@ def _live_run_commands(workflow_text):
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                commands.append(_direct_command_tokens(line))
+                commands.append((job_name, _direct_command_tokens(line)))
     return commands
 
 
@@ -204,18 +204,43 @@ def _is_pytest_invocation(command):
 
 def _assert_locked_uv_workflow(workflow_text):
     commands = _live_run_commands(workflow_text)
-    locked_sync = [command for command in commands if command == ["uv", "sync", "--locked"]]
+    locked_sync = [
+        index
+        for index, (_, command) in enumerate(commands)
+        if command == ["uv", "sync", "--locked"]
+    ]
     assert len(locked_sync) == 1
 
-    uv_sync = [command for command in commands if command[:2] == ["uv", "sync"]]
+    uv_sync = [
+        command for _, command in commands if command[:2] == ["uv", "sync"]
+    ]
     assert uv_sync == [["uv", "sync", "--locked"]]
 
-    assert not any(_is_pip_install(command) for command in commands)
-    assert not any(_is_requirements_install(command) for command in commands)
+    assert not any(_is_pip_install(command) for _, command in commands)
+    assert not any(_is_requirements_install(command) for _, command in commands)
 
-    pytest_commands = [command for command in commands if _is_pytest_invocation(command)]
+    pytest_commands = [
+        command for _, command in commands if _is_pytest_invocation(command)
+    ]
     assert len(pytest_commands) == 1
     assert pytest_commands[0] == _APPROVED_PYTEST_COMMAND
+
+    # Co-location and ordering: the single approved locked sync and the
+    # single approved pytest invocation must execute in the same job's
+    # runner workspace, and within that job's ordered run-command stream
+    # (steps in order, multi-line scalars in parsed-line order) the locked
+    # sync must precede -- and therefore gate -- the pytest signal. A
+    # pytest-first order lets `uv run` silently re-resolve a drifted
+    # pyproject.toml before --locked ever runs; a cross-job split runs the
+    # gate in a different runner VM than the signal.
+    sync_index = locked_sync[0]
+    pytest_index = next(
+        index
+        for index, (_, command) in enumerate(commands)
+        if command == _APPROVED_PYTEST_COMMAND
+    )
+    assert commands[sync_index][0] == commands[pytest_index][0]
+    assert sync_index < pytest_index
 
 
 def _assert_dependency_authority(root, workflow_text):
@@ -926,5 +951,83 @@ def test_workflow_contract_rejects_error_tolerant_execution(workflow):
 )
 def test_workflow_contract_rejects_action_input_redirection(workflow):
     """Approved actions can only run with their approved inputs."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(workflow)
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            """
+            jobs:
+              test:
+                steps:
+                  - run: uv run pytest tests/ -v
+                  - run: uv sync --locked
+            """,
+            id="separate-steps",
+        ),
+        pytest.param(
+            """
+            jobs:
+              test:
+                steps:
+                  - run: |
+                      uv run pytest tests/ -v
+                      uv sync --locked
+            """,
+            id="single-multi-line-scalar",
+        ),
+        pytest.param(
+            """
+            jobs:
+              test:
+                steps:
+                  - run: uv run pytest tests/ -v
+                  - uses: actions/checkout@v4
+                  - run: uv sync --locked
+            """,
+            id="decoy-action-step-between",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_pytest_preceding_locked_sync(workflow):
+    """The locked sync must precede and gate the pytest signal in its job."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(workflow)
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            """
+            jobs:
+              install:
+                steps:
+                  - run: uv sync --locked
+              test:
+                steps:
+                  - run: uv run pytest tests/ -v
+            """,
+            id="ordered-sync-and-pytest-jobs",
+        ),
+        pytest.param(
+            """
+            jobs:
+              test:
+                steps:
+                  - run: uv run pytest tests/ -v
+              install:
+                steps:
+                  - run: uv sync --locked
+            """,
+            id="reversed-sync-and-pytest-jobs",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_split_runner_workspaces(workflow):
+    """The locked sync and the pytest signal must share one job's workspace."""
     with pytest.raises(AssertionError):
         _assert_locked_uv_workflow(workflow)
