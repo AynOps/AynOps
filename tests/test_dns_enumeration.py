@@ -178,6 +178,79 @@ class TestDnsEnumeration(unittest.TestCase):
             {"success": False, "error": "Domain example.com does not exist"},
         )
 
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_later_nxdomain_returns_before_blocked_unrelated_work_is_released(
+        self, mock_resolver_class
+    ):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+        first_record_noanswer = threading.Event()
+        later_record_nxdomain = threading.Event()
+        unrelated_started = threading.Event()
+        unrelated_gate = threading.Event()
+        enumeration_finished = threading.Event()
+        result = {}
+        failure = {}
+
+        def side_effect(name, rtype, lifetime=5, tcp=False):
+            if name == "example.com" and rtype == dns_tool.RECORD_TYPES[0]:
+                first_record_noanswer.set()
+                raise real_dns.NoAnswer
+            if name == "example.com" and rtype == dns_tool.RECORD_TYPES[1]:
+                later_record_nxdomain.set()
+                raise real_dns.NXDOMAIN
+            unrelated_started.set()
+            if not unrelated_gate.wait(timeout=10):
+                raise AssertionError("unrelated lookup gate was not released")
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+
+        def enumerate_domain():
+            try:
+                result.update(dns_enumeration("example.com"))
+            except Exception as exc:
+                failure["exception"] = exc
+            finally:
+                enumeration_finished.set()
+
+        worker = threading.Thread(target=enumerate_domain)
+        worker.start()
+        try:
+            self.assertTrue(
+                first_record_noanswer.wait(timeout=5),
+                "the initial A lookup did not produce NoAnswer",
+            )
+            self.assertTrue(
+                later_record_nxdomain.wait(timeout=5),
+                "the later target-record lookup did not produce NXDOMAIN",
+            )
+            self.assertTrue(
+                unrelated_started.wait(timeout=5),
+                "unrelated lookup work was not scheduled before NXDOMAIN",
+            )
+            self.assertFalse(
+                unrelated_gate.is_set(),
+                "unrelated lookup work was released before the failure returned",
+            )
+            self.assertTrue(
+                enumeration_finished.wait(timeout=2),
+                "the later NXDOMAIN result waited for unrelated lookup work",
+            )
+        finally:
+            unrelated_gate.set()
+            worker.join(timeout=10)
+
+        self.assertFalse(worker.is_alive(), "DNS enumeration did not shut down")
+        if "exception" in failure:
+            raise failure["exception"]
+        self.assertEqual(
+            result,
+            {"success": False, "error": "Domain example.com does not exist"},
+        )
+
     def test_invalid_domain(self):
         result = dns_enumeration("bad_domain")
         self.assertFalse(result["success"])

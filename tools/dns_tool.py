@@ -6,6 +6,16 @@ import dns.name
 import dns.resolver
 from utils.helpers import is_valid_domain, normalize_domain
 
+
+class _DnsExecutor(ThreadPoolExecutor):
+    def cancel_pending(self):
+        self._cancel_pending = True
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        cancel_pending = getattr(self, "_cancel_pending", False)
+        self.shutdown(wait=not cancel_pending, cancel_futures=cancel_pending)
+        return False
+
 # Public resolvers used for every lookup.
 PUBLIC_RESOLVERS = ["1.1.1.1", "8.8.8.8"]
 
@@ -160,7 +170,7 @@ def dns_enumeration(domain: str) -> dict:
 
     lookup_count = len(RECORD_TYPES) + len(SRV_SERVICES) + len(COMMON_SUBDOMAINS)
     max_workers = max(1, min(MAX_CONCURRENT_LOOKUPS, lookup_count))
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with _DnsExecutor(max_workers=max_workers) as executor:
         record_futures = []
         srv_futures = []
         subdomain_futures = []
@@ -199,6 +209,7 @@ def dns_enumeration(domain: str) -> dict:
                 else:
                     answers = record_futures[index - 1].result()
             except dns.resolver.NXDOMAIN:
+                executor.cancel_pending()
                 return {"success": False, "error": f"Domain {domain} does not exist"}
             except LOOKUP_ERRORS as exc:
                 records[rtype] = []
