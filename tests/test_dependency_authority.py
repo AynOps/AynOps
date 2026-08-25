@@ -6,6 +6,24 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+_DIRECT_TOKEN_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-"
+)
+
+
+def _direct_command_tokens(line):
+    lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
+    command = list(lexer)
+    assert command
+    assert all(set(token) <= _DIRECT_TOKEN_CHARS for token in command)
+    assert command == ["uv", "sync", "--locked"] or command[:3] == [
+        "uv",
+        "run",
+        "pytest",
+    ]
+    return command
 
 
 def _live_run_commands(workflow_text):
@@ -27,7 +45,7 @@ def _live_run_commands(workflow_text):
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                commands.append(shlex.split(line, comments=True))
+                commands.append(_direct_command_tokens(line))
     return commands
 
 
@@ -87,6 +105,90 @@ def test_uv_lock_is_the_single_dependency_authority():
     """The repository and CI use the locked uv project, not a legacy manifest."""
     workflow = (ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
     _assert_dependency_authority(ROOT, workflow)
+
+
+def test_workflow_contract_rejects_commands_after_and():
+    """A benign prefix cannot hide later dependency or test commands."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(
+            """
+            jobs:
+              test:
+                steps:
+                  - run: uv sync --locked
+                  - run: uv run pytest tests/ -v
+                  - run: printf done && pip install anyio && pytest tests/ -q
+            """,
+        )
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            """
+            jobs:
+              test:
+                steps:
+                  - run: uv sync --locked
+                  - run: uv run pytest tests/ -v
+                  - run: printf done; pip install anyio; pytest tests/ -q
+            """,
+            id="semicolon-separated-install-and-pytest",
+        ),
+        pytest.param(
+            """
+            jobs:
+              test:
+                steps:
+                  - run: uv sync --locked
+                  - run: uv run pytest tests/ -v
+                  - run: false || pip install anyio
+            """,
+            id="or-separated-install",
+        ),
+        pytest.param(
+            """
+            jobs:
+              test:
+                steps:
+                  - run: uv sync --locked
+                  - run: |
+                      uv run pytest tests/ -v
+                      pip install anyio
+            """,
+            id="newline-separated-install",
+        ),
+        pytest.param(
+            """
+            jobs:
+              test:
+                steps:
+                  - run: uv sync --locked
+                  - run: uv run pytest tests/ -v
+                  - run: uv run echo "$(pip install anyio)"
+            """,
+            id="command-substitution-install",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_hidden_executable_paths(workflow):
+    """Compound and indirect scalars cannot add executable install paths."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(workflow)
+
+
+def test_workflow_contract_accepts_direct_canonical_commands():
+    """The bounded grammar accepts the repository's canonical direct commands."""
+    _assert_locked_uv_workflow(
+        """
+        jobs:
+          test:
+            steps:
+              - run: uv sync --locked
+              - run: uv run pytest tests/ -v
+        """
+    )
 
 
 @pytest.mark.parametrize(
