@@ -65,6 +65,7 @@ reference pages and the current registration inventory.
 | `trace_redirects` | Traces the full HTTP redirect chain hop by hop — flags TLS downgrades, private-IP leaks, redirect loops, cross-domain hops, and overly long chains |
 | `robots_txt_inspect` | Fetch and parse robots.txt to reveal hidden directories and sitemaps |
 | `hibp_check` | Check if an email or domain appears in Have I Been Pwned breaches (HIBP_API_KEY required) |
+| `subdomain_takeover` | Detect dangling DNS records that may leave subdomains vulnerable to takeover across supported cloud and SaaS providers |
 
 ## Prompts Available
 | Prompt | Description |
