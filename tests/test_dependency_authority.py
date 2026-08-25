@@ -1,3 +1,4 @@
+import re
 import shlex
 from itertools import product
 from pathlib import Path
@@ -9,6 +10,14 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 _DIRECT_TOKEN_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-"
+)
+_DIRECT_TOKEN_PATTERN = rf"[{re.escape(''.join(sorted(_DIRECT_TOKEN_CHARS)))}]+"
+_DIRECT_COMMAND_PATTERN = (
+    rf"[ \t]*(?:uv[ \t]+sync[ \t]+--locked"
+    rf"|uv[ \t]+run[ \t]+pytest(?:[ \t]+{_DIRECT_TOKEN_PATTERN})*)[ \t]*"
+)
+_DIRECT_RUN_PATTERN = re.compile(
+    rf"{_DIRECT_COMMAND_PATTERN}(?:\n{_DIRECT_COMMAND_PATTERN})*\n?"
 )
 _NON_BASH_TRIM_CHARACTERS = (
     "\u000b",
@@ -81,6 +90,7 @@ def _live_run_commands(workflow_text):
             if "run" not in step:
                 continue
             assert isinstance(step["run"], str)
+            assert _DIRECT_RUN_PATTERN.fullmatch(step["run"])
             for line in step["run"].splitlines():
                 line = line.strip()
                 if not line or line.startswith("#"):
