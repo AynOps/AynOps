@@ -10,6 +10,44 @@ ROOT = Path(__file__).resolve().parents[1]
 _DIRECT_TOKEN_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-"
 )
+_NON_BASH_TRIM_CHARACTERS = (
+    "\u000b",
+    "\u000c",
+    "\u000d",
+    "\u001c",
+    "\u001d",
+    "\u001e",
+    "\u001f",
+    "\u0085",
+    "\u00a0",
+    "\u1680",
+    "\u2000",
+    "\u2001",
+    "\u2002",
+    "\u2003",
+    "\u2004",
+    "\u2005",
+    "\u2006",
+    "\u2007",
+    "\u2008",
+    "\u2009",
+    "\u200a",
+    "\u2028",
+    "\u2029",
+    "\u202f",
+    "\u205f",
+    "\u3000",
+)
+_PYTHON_NON_BASH_LINE_BOUNDARIES = (
+    "\u000b",
+    "\u000c",
+    "\u000d",
+    "\u001c",
+    "\u001d",
+    "\u001e",
+    "\u2028",
+    "\u2029",
+)
 
 
 def _direct_command_tokens(line):
@@ -61,6 +99,24 @@ def _workflow_with_commands(install_command, pytest_command):
           - run: |
               {pytest_command}
     """
+
+
+def _workflow_from_run_scalars(*run_scalars):
+    return yaml.safe_dump(
+        {
+            "jobs": {
+                "test": {
+                    "steps": [{"run": run_scalar} for run_scalar in run_scalars]
+                }
+            }
+        },
+        allow_unicode=False,
+        sort_keys=False,
+    )
+
+
+def _unicode_id(character):
+    return f"U+{ord(character):04X}"
 
 
 def _is_pip_install(command):
@@ -203,6 +259,51 @@ def test_workflow_contract_accepts_direct_canonical_commands():
               - run: uv run pytest tests/ -v
         """
     )
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    _NON_BASH_TRIM_CHARACTERS,
+    ids=_unicode_id,
+)
+def test_workflow_contract_rejects_python_trim_characters_preserved_by_bash(
+    suffix,
+):
+    """Python-only trimming cannot authenticate a different Bash option."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(
+            _workflow_from_run_scalars(
+                f"uv sync --locked{suffix}",
+                "uv run pytest tests/ -v",
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    _PYTHON_NON_BASH_LINE_BOUNDARIES,
+    ids=_unicode_id,
+)
+def test_workflow_contract_rejects_python_line_boundaries_preserved_by_bash(
+    boundary,
+):
+    """Python-only line boundaries cannot invent separate Bash commands."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(
+            _workflow_from_run_scalars(
+                f"uv sync --locked{boundary}uv run pytest tests/ -v"
+            )
+        )
+
+
+def test_workflow_contract_rejects_nbsp_prefixed_hash_line():
+    """A hash preceded by a non-Bash blank remains executable shell text."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(
+            _workflow_from_run_scalars(
+                "\u00a0#alternate\nuv sync --locked\nuv run pytest tests/ -v"
+            )
+        )
 
 
 def test_workflow_contract_rejects_midword_hash_suffixes():
