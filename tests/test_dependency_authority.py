@@ -15,13 +15,19 @@ _APPROVED_ACTION_USES = frozenset(
         "astral-sh/setup-uv@v6",
     }
 )
+_APPROVED_ACTION_INPUTS = {
+    "actions/checkout@v4": {},
+    "actions/setup-python@v5": {"python-version": "3.12"},
+    "astral-sh/setup-uv@v6": {},
+}
+_APPROVED_RUNS_ON = "ubuntu-latest"
+_APPROVED_PYTEST_COMMAND = ["uv", "run", "pytest", "tests/", "-v"]
 _DIRECT_TOKEN_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-"
 )
-_DIRECT_TOKEN_PATTERN = rf"[{re.escape(''.join(sorted(_DIRECT_TOKEN_CHARS)))}]+"
 _DIRECT_COMMAND_PATTERN = (
     rf"[ \t]*(?:uv[ \t]+sync[ \t]+--locked"
-    rf"|uv[ \t]+run[ \t]+pytest(?:[ \t]+{_DIRECT_TOKEN_PATTERN})*)[ \t]*"
+    rf"|uv[ \t]+run[ \t]+pytest[ \t]+tests/[ \t]+-v)[ \t]*"
 )
 _DIRECT_RUN_PATTERN = re.compile(
     rf"{_DIRECT_COMMAND_PATTERN}(?:\n{_DIRECT_COMMAND_PATTERN})*\n?"
@@ -74,11 +80,7 @@ def _direct_command_tokens(line):
     command = list(lexer)
     assert command
     assert all(set(token) <= _DIRECT_TOKEN_CHARS for token in command)
-    assert command == ["uv", "sync", "--locked"] or command[:3] == [
-        "uv",
-        "run",
-        "pytest",
-    ]
+    assert command in (["uv", "sync", "--locked"], _APPROVED_PYTEST_COMMAND)
     return command
 
 
@@ -108,6 +110,11 @@ def _live_run_commands(workflow_text):
     for job in jobs.values():
         assert isinstance(job, dict)
         assert "uses" not in job
+        assert "container" not in job
+        assert "services" not in job
+        assert "if" not in job
+        assert "continue-on-error" not in job
+        assert job.get("runs-on", _APPROVED_RUNS_ON) == _APPROVED_RUNS_ON
         _assert_unredirected_environment(job)
         _assert_unredirected_run_defaults(job)
         steps = job.get("steps", [])
@@ -117,9 +124,13 @@ def _live_run_commands(workflow_text):
             _assert_unredirected_environment(step)
             assert "working-directory" not in step
             assert "shell" not in step
+            assert "if" not in step
+            assert "continue-on-error" not in step
             if "uses" in step:
                 assert isinstance(step["uses"], str)
                 assert step["uses"] in _APPROVED_ACTION_USES
+                approved_inputs = _APPROVED_ACTION_INPUTS[step["uses"]]
+                assert step.get("with", {}) == approved_inputs
             if "run" not in step:
                 continue
             assert isinstance(step["run"], str)
@@ -204,7 +215,7 @@ def _assert_locked_uv_workflow(workflow_text):
 
     pytest_commands = [command for command in commands if _is_pytest_invocation(command)]
     assert len(pytest_commands) == 1
-    assert pytest_commands[0][:3] == ["uv", "run", "pytest"]
+    assert pytest_commands[0] == _APPROVED_PYTEST_COMMAND
 
 
 def _assert_dependency_authority(root, workflow_text):
@@ -709,3 +720,211 @@ def test_manifest_contract_rejects_requirements_variants(tmp_path):
                   - run: uv run pytest tests/ -v
             """,
         )
+
+
+def _canonical_job(job_lines="", step_lines=""):
+    return (
+        "jobs:\n  test:\n"
+        + job_lines
+        + "    steps:\n"
+        + "      - run: uv sync --locked\n"
+        + "      - run: uv run pytest tests/ -v\n"
+        + step_lines
+    )
+
+
+def _canonical_action_job(uses, with_line=""):
+    return (
+        "jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n"
+        + f"      - uses: {uses}\n"
+        + with_line
+        + "      - run: uv sync --locked\n"
+        + "      - run: uv run pytest tests/ -v\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            _canonical_job(
+                "    runs-on: ubuntu-latest\n"
+                "    container: ghcr.io/attacker/owned:latest\n"
+            ),
+            id="container-image",
+        ),
+        pytest.param(
+            _canonical_job(
+                "    runs-on: ubuntu-latest\n"
+                "    container: {image: ghcr.io/attacker/owned:latest,"
+                " options: --privileged, env: {BASH_ENV: /pwn/startup.sh},"
+                " volumes: [/pwn:/pwn]}\n"
+            ),
+            id="container-mapping-with-env-and-volumes",
+        ),
+        pytest.param(
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    container: ghcr.io/attacker/owned:latest\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@v4\n"
+            "  test:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - run: uv sync --locked\n"
+            "      - run: uv run pytest tests/ -v\n",
+            id="extra-containerized-job",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_job_container_execution(workflow):
+    """No job can supply the execution image for the approved commands."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(workflow)
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            _canonical_job(
+                "    runs-on: ubuntu-latest\n"
+                "    services: {side: {image: ghcr.io/attacker/sniffer:latest}}\n"
+            ),
+            id="service-image",
+        ),
+        pytest.param(
+            _canonical_job(
+                "    runs-on: ubuntu-latest\n"
+                "    services: {side: {image: ghcr.io/attacker/sniffer:latest,"
+                " ports: [8080:8080],"
+                " credentials: {username: attacker, password: hunter2}}}\n"
+            ),
+            id="service-mapping-with-ports-and-credentials",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_job_services_execution(workflow):
+    """No unapproved service container can execute alongside the job."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(workflow)
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            _canonical_job("    runs-on: [self-hosted, linux]\n"),
+            id="self-hosted-labels",
+        ),
+        pytest.param(
+            _canonical_job("    runs-on: windows-latest\n"),
+            id="unapproved-hosted-runner",
+        ),
+        pytest.param(
+            _canonical_job(
+                "    strategy: {matrix: {os: [ubuntu-latest, self-hosted]}}\n"
+                "    runs-on: ${{ matrix.os }}\n"
+            ),
+            id="matrix-driven-runner-selection",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_runner_redirection(workflow):
+    """Approved commands cannot be redirected to unapproved runners."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(workflow)
+
+
+@pytest.mark.parametrize(
+    "pytest_command",
+    [
+        pytest.param("uv run pytest --version", id="version-exits-without-tests"),
+        pytest.param("uv run pytest", id="missing-test-selector"),
+        pytest.param("uv run pytest tests/ -q", id="verbosity-mutated"),
+        pytest.param("uv run pytest tests/ -v -k no_such_test", id="suite-filter"),
+    ],
+)
+def test_workflow_contract_rejects_pytest_argument_gutting(pytest_command):
+    """Only the exact approved pytest invocation can supply the CI signal."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(
+            _workflow_with_commands("uv sync --locked", pytest_command)
+        )
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            _canonical_job("    runs-on: ubuntu-latest\n    if: false\n"),
+            id="job-condition",
+        ),
+        pytest.param(
+            _canonical_job(
+                "    runs-on: ubuntu-latest\n", "        if: false\n"
+            ),
+            id="step-condition",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_conditional_execution(workflow):
+    """No condition can gate whether the approved commands run."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(workflow)
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            _canonical_job(
+                "    runs-on: ubuntu-latest\n    continue-on-error: true\n"
+            ),
+            id="job-continue-on-error",
+        ),
+        pytest.param(
+            _canonical_job(
+                "    runs-on: ubuntu-latest\n",
+                "        continue-on-error: true\n",
+            ),
+            id="step-continue-on-error",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_error_tolerant_execution(workflow):
+    """A failing approved command can never be converted into a pass."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(workflow)
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            _canonical_action_job(
+                "actions/checkout@v4",
+                "        with: {repository: attacker/owned}\n",
+            ),
+            id="checkout-foreign-repository",
+        ),
+        pytest.param(
+            _canonical_action_job(
+                "actions/checkout@v4",
+                "        with: {ref: attacker-controlled-ref}\n",
+            ),
+            id="checkout-foreign-ref",
+        ),
+        pytest.param(
+            _canonical_action_job(
+                "astral-sh/setup-uv@v6", "        with: {version: 0.0.0}\n"
+            ),
+            id="setup-uv-version-override",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_action_input_redirection(workflow):
+    """Approved actions can only run with their approved inputs."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(workflow)
