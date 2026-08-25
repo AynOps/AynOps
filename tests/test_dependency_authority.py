@@ -1,4 +1,5 @@
 import shlex
+from itertools import product
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ _DIRECT_TOKEN_CHARS = frozenset(
 
 
 def _direct_command_tokens(line):
+    assert all(char in _DIRECT_TOKEN_CHARS or char in " \t" for char in line)
     lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     lexer.commenters = "#"
@@ -47,6 +49,18 @@ def _live_run_commands(workflow_text):
                     continue
                 commands.append(_direct_command_tokens(line))
     return commands
+
+
+def _workflow_with_commands(install_command, pytest_command):
+    return f"""
+    jobs:
+      test:
+        steps:
+          - run: |
+              {install_command}
+          - run: |
+              {pytest_command}
+    """
 
 
 def _is_pip_install(command):
@@ -189,6 +203,68 @@ def test_workflow_contract_accepts_direct_canonical_commands():
               - run: uv run pytest tests/ -v
         """
     )
+
+
+def test_workflow_contract_rejects_midword_hash_suffixes():
+    """Forbidden mid-word hash suffixes never become canonical tokens."""
+    suffixes = (
+        "".join(chars)
+        for width in range(1, 4)
+        for chars in product("ab09_-", repeat=width)
+    )
+    for suffix in suffixes:
+        with pytest.raises(AssertionError):
+            _assert_locked_uv_workflow(
+                _workflow_with_commands(
+                    f"uv sync --locked#{suffix}",
+                    "uv run pytest tests/ -v",
+                )
+            )
+        with pytest.raises(AssertionError):
+            _assert_locked_uv_workflow(
+                _workflow_with_commands(
+                    "uv sync --locked",
+                    f"uv run pytest#{suffix} tests/ -v",
+                )
+            )
+
+
+@pytest.mark.parametrize(
+    ("install_command", "pytest_command"),
+    [
+        ("uv sync \"--locked\"", "uv run pytest tests/ -v"),
+        ('uv "sync" --locked', "uv run pytest tests/ -v"),
+        ("uv sync --locked", "uv \"run\" pytest tests/ -v"),
+        ("uv sync --locked", "uv run \"pytest\" tests/ -v"),
+    ],
+)
+def test_workflow_contract_rejects_quoted_command_tokens(
+    install_command, pytest_command
+):
+    """Quoted command spellings are outside the shell-free grammar."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(
+            _workflow_with_commands(install_command, pytest_command)
+        )
+
+
+@pytest.mark.parametrize(
+    ("install_command", "pytest_command"),
+    [
+        ("uv sync --lock\\ed", "uv run pytest tests/ -v"),
+        ("uv s\\ync --locked", "uv run pytest tests/ -v"),
+        ("uv sync --locked", "uv r\\un pytest tests/ -v"),
+        ("uv sync --locked", "uv run py\\test tests/ -v"),
+    ],
+)
+def test_workflow_contract_rejects_backslash_escaped_command_letters(
+    install_command, pytest_command
+):
+    """Backslash-escaped command spellings are outside the shell-free grammar."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(
+            _workflow_with_commands(install_command, pytest_command)
+        )
 
 
 @pytest.mark.parametrize(
