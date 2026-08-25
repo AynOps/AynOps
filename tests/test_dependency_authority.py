@@ -75,18 +75,43 @@ def _direct_command_tokens(line):
     return command
 
 
+def _assert_unredirected_environment(scope):
+    environment = scope.get("env", {})
+    assert isinstance(environment, dict)
+    assert "UV_PROJECT" not in environment
+
+
+def _assert_unredirected_run_defaults(scope):
+    defaults = scope.get("defaults", {})
+    assert isinstance(defaults, dict)
+    run_defaults = defaults.get("run", {})
+    assert isinstance(run_defaults, dict)
+    assert "working-directory" not in run_defaults
+    assert "shell" not in run_defaults
+
+
 def _live_run_commands(workflow_text):
     workflow = yaml.safe_load(workflow_text)
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict)
+    _assert_unredirected_environment(workflow)
+    _assert_unredirected_run_defaults(workflow)
 
     commands = []
     for job in jobs.values():
         assert isinstance(job, dict)
+        _assert_unredirected_environment(job)
+        _assert_unredirected_run_defaults(job)
         steps = job.get("steps", [])
         assert isinstance(steps, list)
         for step in steps:
             assert isinstance(step, dict)
+            _assert_unredirected_environment(step)
+            assert "working-directory" not in step
+            assert "shell" not in step
+            if "uses" in step:
+                assert isinstance(step["uses"], str)
+                assert not step["uses"].startswith("./")
             if "run" not in step:
                 continue
             assert isinstance(step["run"], str)
@@ -269,6 +294,152 @@ def test_workflow_contract_accepts_direct_canonical_commands():
               - run: uv run pytest tests/ -v
         """
     )
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            """
+            jobs:
+              test:
+                env:
+                  UV_PROJECT: alternate/pyproject.toml
+                steps:
+                  - run: uv sync --locked
+                  - run: uv run pytest tests/ -v
+            """,
+            id="job-environment",
+        ),
+        pytest.param(
+            """
+            jobs:
+              test:
+                steps:
+                  - run: uv sync --locked
+                    env:
+                      UV_PROJECT: alternate/pyproject.toml
+                  - run: uv run pytest tests/ -v
+            """,
+            id="step-environment",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_uv_project_redirection(workflow):
+    """Job and step environments cannot redirect uv to another project."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(workflow)
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            """
+            defaults:
+              run:
+                working-directory: alternate
+            jobs:
+              test:
+                steps:
+                  - run: uv sync --locked
+                  - run: uv run pytest tests/ -v
+            """,
+            id="workflow-default",
+        ),
+        pytest.param(
+            """
+            jobs:
+              test:
+                defaults:
+                  run:
+                    working-directory: alternate
+                steps:
+                  - run: uv sync --locked
+                  - run: uv run pytest tests/ -v
+            """,
+            id="job-default",
+        ),
+        pytest.param(
+            """
+            jobs:
+              test:
+                steps:
+                  - run: uv sync --locked
+                    working-directory: alternate
+                  - run: uv run pytest tests/ -v
+            """,
+            id="step-setting",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_working_directory_redirection(workflow):
+    """Run defaults and steps cannot select another project directory."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(workflow)
+
+
+def test_workflow_contract_rejects_executable_local_actions():
+    """Repository actions cannot add an unexamined dependency install path."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(
+            """
+            jobs:
+              test:
+                steps:
+                  - uses: ./.github/actions/dependency-installer
+                  - run: uv sync --locked
+                  - run: uv run pytest tests/ -v
+            """
+        )
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        pytest.param(
+            """
+            defaults:
+              run:
+                shell: python
+            jobs:
+              test:
+                steps:
+                  - run: uv sync --locked
+                  - run: uv run pytest tests/ -v
+            """,
+            id="workflow-default",
+        ),
+        pytest.param(
+            """
+            jobs:
+              test:
+                defaults:
+                  run:
+                    shell: python
+                steps:
+                  - run: uv sync --locked
+                  - run: uv run pytest tests/ -v
+            """,
+            id="job-default",
+        ),
+        pytest.param(
+            """
+            jobs:
+              test:
+                steps:
+                  - run: uv sync --locked
+                    shell: python
+                  - run: uv run pytest tests/ -v
+            """,
+            id="step-setting",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_custom_shell_context(workflow):
+    """Canonical command text cannot be interpreted by a different shell."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(workflow)
 
 
 @pytest.mark.parametrize(
