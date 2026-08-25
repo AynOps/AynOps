@@ -8,6 +8,13 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+_APPROVED_ACTION_USES = frozenset(
+    {
+        "actions/checkout@v4",
+        "actions/setup-python@v5",
+        "astral-sh/setup-uv@v6",
+    }
+)
 _DIRECT_TOKEN_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-"
 )
@@ -78,7 +85,7 @@ def _direct_command_tokens(line):
 def _assert_unredirected_environment(scope):
     environment = scope.get("env", {})
     assert isinstance(environment, dict)
-    assert "UV_PROJECT" not in environment
+    assert environment == {}
 
 
 def _assert_unredirected_run_defaults(scope):
@@ -100,6 +107,7 @@ def _live_run_commands(workflow_text):
     commands = []
     for job in jobs.values():
         assert isinstance(job, dict)
+        assert "uses" not in job
         _assert_unredirected_environment(job)
         _assert_unredirected_run_defaults(job)
         steps = job.get("steps", [])
@@ -111,7 +119,7 @@ def _live_run_commands(workflow_text):
             assert "shell" not in step
             if "uses" in step:
                 assert isinstance(step["uses"], str)
-                assert not step["uses"].startswith("./")
+                assert step["uses"] in _APPROVED_ACTION_USES
             if "run" not in step:
                 continue
             assert isinstance(step["run"], str)
@@ -391,6 +399,101 @@ def test_workflow_contract_rejects_executable_local_actions():
                   - run: uv sync --locked
                   - run: uv run pytest tests/ -v
             """
+        )
+
+
+@pytest.mark.parametrize(
+    "uses",
+    [
+        pytest.param(
+            "$/.github/actions/dependency-installer",
+            id="self-repository-action",
+        ),
+        pytest.param(
+            "gaoharimran29-glitch/AynOps/.github/actions/"
+            "dependency-installer@main",
+            id="same-repository-action-at-ref",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_unapproved_action_sources(uses):
+    """Only the workflow's approved setup actions can execute."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(
+            yaml.safe_dump(
+                {
+                    "jobs": {
+                        "test": {
+                            "steps": [
+                                {"uses": uses},
+                                {"run": "uv sync --locked"},
+                                {"run": "uv run pytest tests/ -v"},
+                            ]
+                        }
+                    }
+                },
+                sort_keys=False,
+            )
+        )
+
+
+def test_workflow_contract_rejects_job_level_reusable_workflows():
+    """Another job cannot delegate dependency installation to a workflow."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(
+            """
+            jobs:
+              hidden-install:
+                uses: ./.github/workflows/install.yml
+              test:
+                steps:
+                  - run: uv sync --locked
+                  - run: uv run pytest tests/ -v
+            """
+        )
+
+
+@pytest.mark.parametrize(
+    ("runs_on", "environment"),
+    [
+        pytest.param(
+            "windows-latest",
+            {"uv_project": "alternate/pyproject.toml"},
+            id="windows-case-insensitive-uv-project",
+        ),
+        pytest.param(
+            "ubuntu-latest",
+            {"BASH_ENV": ".github/ci-bootstrap"},
+            id="bash-startup-file",
+        ),
+        pytest.param(
+            "ubuntu-latest",
+            {"PATH": "${{ github.workspace }}/bin"},
+            id="repository-command-shadow",
+        ),
+    ],
+)
+def test_workflow_contract_rejects_custom_execution_environment(
+    runs_on, environment
+):
+    """Custom environments cannot alter project or executable authority."""
+    with pytest.raises(AssertionError):
+        _assert_locked_uv_workflow(
+            yaml.safe_dump(
+                {
+                    "jobs": {
+                        "test": {
+                            "runs-on": runs_on,
+                            "env": environment,
+                            "steps": [
+                                {"run": "uv sync --locked"},
+                                {"run": "uv run pytest tests/ -v"},
+                            ],
+                        }
+                    }
+                },
+                sort_keys=False,
+            )
         )
 
 
