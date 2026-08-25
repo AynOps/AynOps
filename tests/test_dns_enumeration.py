@@ -1,3 +1,4 @@
+import threading
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
@@ -5,6 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 import dns.rdata
 import dns.rdataclass
 import dns.rdatatype
+from tools import dns_tool
 from tools.dns_tool import dns_enumeration
 
 
@@ -56,6 +58,260 @@ class TestDnsEnumeration(unittest.TestCase):
         answer.__iter__.return_value = iter(records)
         answer.rrset.ttl = ttl
         return answer
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_production_queue_does_not_starve_lookup_category(
+        self, mock_resolver_class
+    ):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+        lookup_gate = threading.Event()
+        all_categories_started = threading.Event()
+        categories = set()
+        calls_lock = threading.Lock()
+        result = {}
+        failure = {}
+
+        def side_effect(name, rtype, lifetime=5, tcp=False):
+            if name == "example.com" and rtype == dns_tool.RECORD_TYPES[0]:
+                raise real_dns.NoAnswer
+            with calls_lock:
+                categories.add(
+                    "record"
+                    if name == "example.com"
+                    else "srv"
+                    if rtype == "SRV"
+                    else "subdomain"
+                )
+                if len(categories) == 3:
+                    all_categories_started.set()
+            if not lookup_gate.wait(timeout=10):
+                raise AssertionError("lookup synchronization gate was not released")
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+
+        def enumerate_domain():
+            try:
+                result.update(dns_enumeration("example.com"))
+            except Exception as exc:
+                failure["exception"] = exc
+
+        worker = threading.Thread(target=enumerate_domain)
+        worker.start()
+        try:
+            self.assertTrue(
+                all_categories_started.wait(timeout=5),
+                "a lookup category was starved under production queue depths",
+            )
+            with calls_lock:
+                self.assertEqual(categories, {"record", "srv", "subdomain"})
+        finally:
+            lookup_gate.set()
+            worker.join(timeout=10)
+
+        self.assertFalse(worker.is_alive(), "DNS enumeration did not shut down")
+        if "exception" in failure:
+            raise failure["exception"]
+        self.assertTrue(result["success"])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_nxdomain_returns_without_waiting_for_unrelated_work(
+        self, mock_resolver_class
+    ):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+        nxdomain_raised = threading.Event()
+        unrelated_started = threading.Event()
+        unrelated_gate = threading.Event()
+        enumeration_finished = threading.Event()
+        result = {}
+        failure = {}
+
+        def side_effect(name, rtype, lifetime=5, tcp=False):
+            if name == "example.com" and rtype == dns_tool.RECORD_TYPES[0]:
+                nxdomain_raised.set()
+                raise real_dns.NXDOMAIN
+            unrelated_started.set()
+            if not unrelated_gate.wait(timeout=10):
+                raise AssertionError("unrelated lookup gate was not released")
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+
+        def enumerate_domain():
+            try:
+                result.update(dns_enumeration("example.com"))
+            except Exception as exc:
+                failure["exception"] = exc
+            finally:
+                enumeration_finished.set()
+
+        worker = threading.Thread(target=enumerate_domain)
+        worker.start()
+        try:
+            self.assertTrue(
+                nxdomain_raised.wait(timeout=5),
+                "the target-domain NXDOMAIN lookup did not run",
+            )
+            self.assertTrue(
+                enumeration_finished.wait(timeout=2),
+                "the NXDOMAIN result waited for unrelated lookup work",
+            )
+        finally:
+            unrelated_gate.set()
+            worker.join(timeout=10)
+
+        self.assertFalse(worker.is_alive(), "DNS enumeration did not shut down")
+        if "exception" in failure:
+            raise failure["exception"]
+        self.assertFalse(
+            unrelated_started.is_set(),
+            "unrelated lookup work started after a conclusive NXDOMAIN",
+        )
+        self.assertEqual(
+            result,
+            {"success": False, "error": "Domain example.com does not exist"},
+        )
+
+    @patch("tools.dns_tool.MAX_CONCURRENT_LOOKUPS", 2)
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_later_nxdomain_returns_before_blocked_unrelated_work_is_released(
+        self, mock_resolver_class
+    ):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+        first_record_noanswer = threading.Event()
+        aaaa_started = threading.Event()
+        later_record_nxdomain = threading.Event()
+        unrelated_started = threading.Event()
+        unrelated_gate = threading.Event()
+        unrelated_finished = threading.Event()
+        topology_ready = threading.Event()
+        queued_started = threading.Event()
+        queued_gate = threading.Event()
+        sentinel_started = threading.Event()
+        sentinel_gate = threading.Event()
+        blockers_finished = threading.Event()
+        blockers_lock = threading.Lock()
+        active_blockers = 0
+        enumeration_finished = threading.Event()
+        result = {}
+        failure = {}
+        sentinel_name = "aws.example.com"
+
+        def wait_for_gate(gate, label):
+            nonlocal active_blockers
+            with blockers_lock:
+                active_blockers += 1
+                blockers_finished.clear()
+            try:
+                if not gate.wait(timeout=10):
+                    raise AssertionError(f"{label} gate was not released")
+            finally:
+                with blockers_lock:
+                    active_blockers -= 1
+                    if active_blockers == 0:
+                        blockers_finished.set()
+
+        def side_effect(name, rtype, lifetime=5, tcp=False):
+            if name == "example.com" and rtype == dns_tool.RECORD_TYPES[0]:
+                first_record_noanswer.set()
+                raise real_dns.NoAnswer
+            if name == "example.com" and rtype == dns_tool.RECORD_TYPES[1]:
+                aaaa_started.set()
+                wait_for_gate(topology_ready, "AAAA topology")
+                later_record_nxdomain.set()
+                raise real_dns.NXDOMAIN
+            if name == sentinel_name:
+                sentinel_started.set()
+                wait_for_gate(sentinel_gate, "sentinel")
+                raise real_dns.NoAnswer
+            if name == "_sip._tcp.example.com" and rtype == "SRV":
+                unrelated_started.set()
+                try:
+                    wait_for_gate(unrelated_gate, "unrelated lookup")
+                finally:
+                    unrelated_finished.set()
+                raise real_dns.NoAnswer
+            queued_started.set()
+            wait_for_gate(queued_gate, "queued lookup")
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+
+        def enumerate_domain():
+            try:
+                result.update(dns_enumeration("example.com"))
+            except Exception as exc:
+                failure["exception"] = exc
+            finally:
+                enumeration_finished.set()
+
+        worker = threading.Thread(target=enumerate_domain)
+        worker.start()
+        try:
+            self.assertTrue(
+                first_record_noanswer.wait(timeout=5),
+                "the initial A lookup did not produce NoAnswer",
+            )
+            self.assertTrue(
+                aaaa_started.wait(timeout=5),
+                "the later AAAA lookup did not start",
+            )
+            self.assertTrue(
+                unrelated_started.wait(timeout=5),
+                "the unrelated SRV lookup did not occupy the second worker",
+            )
+            self.assertFalse(
+                queued_started.is_set(),
+                "queued lookup work started before both workers were occupied",
+            )
+            topology_ready.set()
+            self.assertTrue(
+                later_record_nxdomain.wait(timeout=5),
+                "the later target-record lookup did not produce NXDOMAIN",
+            )
+            self.assertFalse(
+                unrelated_gate.is_set(),
+                "unrelated lookup work was released before the failure returned",
+            )
+            self.assertTrue(
+                enumeration_finished.wait(timeout=2),
+                "the later NXDOMAIN result waited for unrelated lookup work",
+            )
+        finally:
+            topology_ready.set()
+            unrelated_gate.set()
+            queued_gate.set()
+            sentinel_gate.set()
+            worker.join(timeout=10)
+
+        self.assertFalse(worker.is_alive(), "DNS enumeration did not shut down")
+        self.assertTrue(
+            unrelated_finished.wait(timeout=10),
+            "the running unrelated lookup did not terminate",
+        )
+        self.assertTrue(
+            blockers_finished.wait(timeout=10),
+            "a running lookup blocker did not terminate",
+        )
+        if "exception" in failure:
+            raise failure["exception"]
+        self.assertEqual(
+            result,
+            {"success": False, "error": "Domain example.com does not exist"},
+        )
+        self.assertFalse(
+            sentinel_started.wait(timeout=2),
+            "the far-late queued lookup started after blockers were released",
+        )
 
     def test_invalid_domain(self):
         result = dns_enumeration("bad_domain")
