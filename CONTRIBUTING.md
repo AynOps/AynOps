@@ -115,7 +115,7 @@ Verify that:
 
 ---
 
-### 6. Update `.env.example` , `requirements.txt` , `server.json` and `uv.lock` (If Applicable)
+### 6. Update `.env.example`, `pyproject.toml`, `server.json` and `uv.lock` (If Applicable)
 
 If your tool requires new environment variables, add them to `.env.example` & `server.json` with placeholder values:
 
@@ -230,7 +230,7 @@ pytest tests/ -v
 6. Update the tools table in `README.md`
 7. Update the relevant info in `mcp.json`
 8. Update the relevant info in `server.json`
-9. Update `requirements.txt` if you added a new dependency
+9. Update `pyproject.toml` and `uv.lock` if you added a new dependency
 10. Update `.env.example` if your tool needs an API key
 11. Open a pull request with a short description
 
@@ -253,7 +253,7 @@ A pull request template at `.github/PULL_REQUEST_TEMPLATE.md` auto-fills the des
 - [ ] Tools table updated in `README.md`
 - [ ] `mcp.json` updated if applicable
 - [ ] `server.json` updated if applicable
-- [ ] `requirements.txt` updated if a new dependency was added
+- [ ] `pyproject.toml` and `uv.lock` updated if a new dependency was added
 - [ ] `.env.example` updated if a new API key is required
 
 ---
