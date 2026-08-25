@@ -178,6 +178,7 @@ class TestDnsEnumeration(unittest.TestCase):
             {"success": False, "error": "Domain example.com does not exist"},
         )
 
+    @patch("tools.dns_tool.MAX_CONCURRENT_LOOKUPS", 2)
     @patch("tools.dns_tool.dns.resolver.Resolver")
     def test_later_nxdomain_returns_before_blocked_unrelated_work_is_released(
         self, mock_resolver_class
@@ -187,23 +188,60 @@ class TestDnsEnumeration(unittest.TestCase):
         resolver = Mock()
         mock_resolver_class.return_value = resolver
         first_record_noanswer = threading.Event()
+        aaaa_started = threading.Event()
         later_record_nxdomain = threading.Event()
         unrelated_started = threading.Event()
         unrelated_gate = threading.Event()
+        unrelated_finished = threading.Event()
+        topology_ready = threading.Event()
+        queued_started = threading.Event()
+        queued_gate = threading.Event()
+        sentinel_started = threading.Event()
+        sentinel_gate = threading.Event()
+        blockers_finished = threading.Event()
+        blockers_lock = threading.Lock()
+        active_blockers = 0
         enumeration_finished = threading.Event()
         result = {}
         failure = {}
+        sentinel_name = "aws.example.com"
+
+        def wait_for_gate(gate, label):
+            nonlocal active_blockers
+            with blockers_lock:
+                active_blockers += 1
+                blockers_finished.clear()
+            try:
+                if not gate.wait(timeout=10):
+                    raise AssertionError(f"{label} gate was not released")
+            finally:
+                with blockers_lock:
+                    active_blockers -= 1
+                    if active_blockers == 0:
+                        blockers_finished.set()
 
         def side_effect(name, rtype, lifetime=5, tcp=False):
             if name == "example.com" and rtype == dns_tool.RECORD_TYPES[0]:
                 first_record_noanswer.set()
                 raise real_dns.NoAnswer
             if name == "example.com" and rtype == dns_tool.RECORD_TYPES[1]:
+                aaaa_started.set()
+                wait_for_gate(topology_ready, "AAAA topology")
                 later_record_nxdomain.set()
                 raise real_dns.NXDOMAIN
-            unrelated_started.set()
-            if not unrelated_gate.wait(timeout=10):
-                raise AssertionError("unrelated lookup gate was not released")
+            if name == sentinel_name:
+                sentinel_started.set()
+                wait_for_gate(sentinel_gate, "sentinel")
+                raise real_dns.NoAnswer
+            if name == "_sip._tcp.example.com" and rtype == "SRV":
+                unrelated_started.set()
+                try:
+                    wait_for_gate(unrelated_gate, "unrelated lookup")
+                finally:
+                    unrelated_finished.set()
+                raise real_dns.NoAnswer
+            queued_started.set()
+            wait_for_gate(queued_gate, "queued lookup")
             raise real_dns.NoAnswer
 
         resolver.resolve.side_effect = side_effect
@@ -224,12 +262,21 @@ class TestDnsEnumeration(unittest.TestCase):
                 "the initial A lookup did not produce NoAnswer",
             )
             self.assertTrue(
-                later_record_nxdomain.wait(timeout=5),
-                "the later target-record lookup did not produce NXDOMAIN",
+                aaaa_started.wait(timeout=5),
+                "the later AAAA lookup did not start",
             )
             self.assertTrue(
                 unrelated_started.wait(timeout=5),
-                "unrelated lookup work was not scheduled before NXDOMAIN",
+                "the unrelated SRV lookup did not occupy the second worker",
+            )
+            self.assertFalse(
+                queued_started.is_set(),
+                "queued lookup work started before both workers were occupied",
+            )
+            topology_ready.set()
+            self.assertTrue(
+                later_record_nxdomain.wait(timeout=5),
+                "the later target-record lookup did not produce NXDOMAIN",
             )
             self.assertFalse(
                 unrelated_gate.is_set(),
@@ -240,15 +287,30 @@ class TestDnsEnumeration(unittest.TestCase):
                 "the later NXDOMAIN result waited for unrelated lookup work",
             )
         finally:
+            topology_ready.set()
             unrelated_gate.set()
+            queued_gate.set()
+            sentinel_gate.set()
             worker.join(timeout=10)
 
         self.assertFalse(worker.is_alive(), "DNS enumeration did not shut down")
+        self.assertTrue(
+            unrelated_finished.wait(timeout=10),
+            "the running unrelated lookup did not terminate",
+        )
+        self.assertTrue(
+            blockers_finished.wait(timeout=10),
+            "a running lookup blocker did not terminate",
+        )
         if "exception" in failure:
             raise failure["exception"]
         self.assertEqual(
             result,
             {"success": False, "error": "Domain example.com does not exist"},
+        )
+        self.assertFalse(
+            sentinel_started.wait(timeout=2),
+            "the far-late queued lookup started after blockers were released",
         )
 
     def test_invalid_domain(self):
