@@ -1,8 +1,8 @@
 # AynOps tools
 
 This index lists the tools currently registered by the MCP server. Dedicated
-pages are being added incrementally; `whois_lookup` is documented in this
-slice, and the remaining pages are planned follow-ups.
+pages are being added incrementally; entries marked `Available` link to
+completed pages.
 
 ## Included in `full_recon`
 
