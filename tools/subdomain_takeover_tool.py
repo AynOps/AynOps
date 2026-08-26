@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 import re
 
+import dns.exception
 import dns.resolver
 import requests
 
@@ -77,19 +78,27 @@ class _TakeoverResult:
     probe_errors: tuple[dict[str, str], ...] = ()
 
 
+@dataclass(frozen=True)
+class _CnameResolution:
+    cname: str | None = None
+    error: str | None = None
+
+
 def _make_resolver() -> dns.resolver.Resolver:
     resolver = dns.resolver.Resolver(configure=False)
     resolver.nameservers = PUBLIC_RESOLVERS
     return resolver
 
 
-def _resolve_cname(subdomain: str, resolver) -> str | None:
-    """Return the subdomain's CNAME target, or None if it has none."""
+def _resolve_cname(subdomain: str, resolver) -> _CnameResolution:
+    """Distinguish an absent CNAME from a failed DNS lookup."""
     try:
         answers = resolver.resolve(subdomain, "CNAME", lifetime=5, tcp=True)
-        return str(answers[0]).rstrip(".")
-    except Exception:
-        return None
+        return _CnameResolution(cname=str(answers[0]).rstrip("."))
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+        return _CnameResolution()
+    except dns.exception.DNSException as exc:
+        return _CnameResolution(error=f"{type(exc).__name__}: {exc}")
 
 
 def _match_fingerprint(cname: str) -> dict | None:
@@ -166,18 +175,29 @@ def subdomain_takeover(domain: str) -> dict:
     resolver = _make_resolver()
 
     vulnerable = []
-    safe = []
+    not_vulnerable = []
     unknown = []
 
     for subdomain in subdomains:
-        cname = _resolve_cname(subdomain, resolver)
-        if not cname:
-            safe.append(subdomain)
+        cname_result = _resolve_cname(subdomain, resolver)
+        if cname_result.error is not None:
+            unknown.append({
+                "subdomain": subdomain,
+                "reason": "Unable to resolve CNAME record",
+                "dns_error": cname_result.error,
+            })
             continue
+        if cname_result.cname is None:
+            not_vulnerable.append(subdomain)
+            continue
+        cname = cname_result.cname
 
         fingerprint = _match_fingerprint(cname)
         if not fingerprint:
-            safe.append(subdomain)
+            unknown.append({
+                "subdomain": subdomain,
+                "reason": "CNAME points to an unsupported service",
+            })
             continue
 
         probe_result = _confirms_takeover(subdomain, fingerprint)
@@ -190,7 +210,7 @@ def subdomain_takeover(domain: str) -> dict:
                 "severity": "HIGH",
             })
         elif probe_result.status is _ProbeStatus.NO_INDICATOR:
-            safe.append(subdomain)
+            not_vulnerable.append(subdomain)
         else:
             unknown.append({
                 "subdomain": subdomain,
@@ -203,7 +223,7 @@ def subdomain_takeover(domain: str) -> dict:
         "domain": domain,
         "subdomains_checked": len(subdomains),
         "vulnerable": vulnerable,
-        "safe": safe,
+        "not_vulnerable": not_vulnerable,
         "unknown": unknown,
         "total_vulnerable": len(vulnerable),
     }
