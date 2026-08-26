@@ -175,7 +175,7 @@ def subdomain_takeover(domain: str) -> dict:
     resolver = _make_resolver()
 
     vulnerable = []
-    safe = []
+    not_vulnerable = []
     unknown = []
 
     for subdomain in subdomains:
@@ -188,7 +188,7 @@ def subdomain_takeover(domain: str) -> dict:
             })
             continue
         if cname_result.cname is None:
-            safe.append(subdomain)
+            not_vulnerable.append(subdomain)
             continue
         cname = cname_result.cname
 
@@ -210,7 +210,7 @@ def subdomain_takeover(domain: str) -> dict:
                 "severity": "HIGH",
             })
         elif probe_result.status is _ProbeStatus.NO_INDICATOR:
-            safe.append(subdomain)
+            not_vulnerable.append(subdomain)
         else:
             unknown.append({
                 "subdomain": subdomain,
@@ -223,7 +223,7 @@ def subdomain_takeover(domain: str) -> dict:
         "domain": domain,
         "subdomains_checked": len(subdomains),
         "vulnerable": vulnerable,
-        "safe": safe,
+        "not_vulnerable": not_vulnerable,
         "unknown": unknown,
         "total_vulnerable": len(vulnerable),
     }
