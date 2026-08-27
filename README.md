@@ -409,7 +409,7 @@ Intended for:
 ├── utils/                # Shared helper utilities
 ├── server.py             # MCP server entry point
 ├── pyproject.toml        # Project metadata and dependencies
-├── requirements.txt      # Python dependencies
+├── uv.lock               # Locked Python dependencies
 ├── mcp.json              # MCP server metadata
 ├── glama.json            # Glama MCP metadata
 ├── server.json           # MCP all tools metadata

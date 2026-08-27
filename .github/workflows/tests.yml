@@ -18,6 +18,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install -r requirements.txt
+      - uses: astral-sh/setup-uv@v6
 
-      - run: pytest tests/ -v
+      - run: uv sync --locked
+
+      - run: uv run pytest tests/ -v
