@@ -1,4 +1,6 @@
-<svg width="1000" height="240" viewBox="0 0 1000 240" xmlns="http://www.w3.org/2000/svg">
+<svg width="1000" height="240" viewBox="0 0 1000 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">AynOps — MCP for reconnaissance analysis</title>
+  <desc id="desc">AynOps wordmark with the tagline "MCP for reconnaissance analysis".</desc>
   <defs>
     <radialGradient id="glow" cx="50%" cy="50%" r="50%">
       <stop offset="0%" stop-color="#7C3AED" stop-opacity="0.65"/>
@@ -7,9 +9,9 @@
     </radialGradient>
 
     <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#2563EB"/>
-      <stop offset="50%" stop-color="#8B5CF6"/>
-      <stop offset="100%" stop-color="#06B6D4"/>
+      <stop offset="0%" stop-color="#1D4ED8"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#0891B2"/>
     </linearGradient>
 
     <filter id="blurGlow" x="-100%" y="-100%" width="300%" height="300%">
@@ -24,5 +26,5 @@
   <text x="500" y="140" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-style="italic" font-weight="700" font-size="104" fill="url(#textGrad)">AynOps</text>
 
   <!-- tagline -->
-  <text x="500" y="196" text-anchor="middle" font-family="'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" letter-spacing="3" fill="#8A97A8" font-weight="600">MCP for reconn analysis</text>
+  <text x="500" y="196" text-anchor="middle" font-family="'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" letter-spacing="3" fill="#8A97A8" font-weight="600">MCP for reconnaissance analysis</text>
 </svg>

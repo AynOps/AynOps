@@ -17,7 +17,7 @@
   <a href="https://pypi.org/project/AynOps/" target="_blank"><img src="https://img.shields.io/pypi/v/AynOps?label=PyPI%20Version&color=blue" alt="PyPI Version" /></a>
   <a href="https://github.com/AynOps/AynOps/issues" target="_blank"><img src="https://img.shields.io/github/issues/AynOps/AynOps" alt="GitHub Issues" /></a>
   <a href="https://github.com/AynOps/AynOps/discussions" target="_blank"><img src="https://img.shields.io/badge/discussions-active-purple.svg?logo=github" alt="GitHub Discussions" /></a>
-  <a href="https://glama.ai/mcp/servers/AynOps/AynOps"><img src="https://glama.ai/mcp/servers/gaoharimran29-glitch/AynOps/badges/score.svg" alt="Glama Score" /></a>
+  <a href="https://glama.ai/mcp/servers/AynOps/AynOps"><img src="https://glama.ai/mcp/servers/AynOps/AynOps/badges/score.svg" alt="Glama Score" /></a>
   <a href="https://www.python.org/downloads/" target="_blank"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+" /></a>
   <a href="https://hub.docker.com/" target="_blank"><img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker Ready" /></a>
   <a href="https://modelcontextprotocol.io/" target="_blank"><img src="https://img.shields.io/badge/MCP-Standard%20v1.0-8A2BE2" alt="MCP Standard" /></a>
@@ -121,6 +121,8 @@ Signal Aggregator (tools/signals/) ──► Unified Heuristic Security Telemetr
 ```
 
 ### 2. Core Reconnaissance Tool Inventory (Included in `full_recon`)
+
+> **Documentation status:** Detailed reference pages are currently available for tools marked **Available**. Tools marked **Pending** are implemented and included in the inventory, but their dedicated documentation pages are not yet available.
 
 | Tool | Parameters | Underlying Mechanics / Standards | Telemetry Output | Docs |
 |---|---|---|---|:---:|
