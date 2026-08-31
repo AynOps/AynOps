@@ -71,7 +71,7 @@ source .venv/bin/activate
 .venv\Scripts\Activate.ps1
 
 # Install project and dev dependencies
-pip install -e ".[dev]"
+pip install -e . && pip install pytest==9.0.3
 ```
 
 ---
@@ -213,7 +213,6 @@ tools/my_tool.py
 Module implementation for my_tool.
 """
 
-import os
 from utils.helpers import is_valid_domain, normalize_domain
 
 def my_tool(domain: str) -> dict:
@@ -286,7 +285,7 @@ Create a corresponding test suite in `tests/test_my_tool.py`:
 import pytest
 from tools.my_tool import my_tool
 
-def test_my_tool_success(monkeypatch):
+def test_my_tool_success():
     # Test valid input path
     result = my_tool("example.com")
     assert result["success"] is True
@@ -320,9 +319,15 @@ Ensure the tool is documented and registered across all project metadata files:
      "input": {
        "domain": "string"
      },
-     "requires_api_key": false
+     "requires_api_key": false,
+     "requires_system_dependency": false,
+     "api_key_env": null,
+     "api_key_url": null
    }
    ```
+
+   `requires_system_dependency` should be set to true when the tool depends on an external system utility (for example, Nmap). For API-dependent tools, set `requires_api_key` to true and provide the corresponding `api_key_env` and `api_key_url` values. Otherwise, these fields can be set to false/null as appropriate.
+
 3. **`server.json`**: If your tool requires environment variables, define them in the `"environmentVariables"` array.
 4. **`.env.example`**: Add placeholder entries for new API keys (if applicable).
 5. **`pyproject.toml` / `uv.lock`**: Add new third-party packages only if strictly necessary (`uv add <package>`).
@@ -383,6 +388,8 @@ TOOL_REGISTRY = [
 
 Create `tools/signals/my_tool.py` to extract actionable telemetry from the raw tool response:
 
+> **Note:** The shared `signals` dictionary, including `auto_warnings`, is pre-initialized by `extract_signals()` before the extractor is called.
+
 ```python
 def my_tool_extractor(result: dict, signals: dict) -> None:
     """
@@ -401,23 +408,36 @@ def my_tool_extractor(result: dict, signals: dict) -> None:
         )
 ```
 
+> **Note:** In `should_run` callbacks, `results` contains the raw results of previously executed tools, keyed by their registry `name`. Access a tool's output using `results["tool_name"]` when deciding whether the current tool should run. For example, `results["whois"]` accesses the raw WHOIS result.
+
 ---
 
 ### Step 3: Register Default Signal Keys
 
 In `tools/signals/extractor.py`, add your signal key to the default `signals` dictionary to guarantee schema integrity:
 
-- Scalar values: `None` (e.g., `"domain_expiry_days": None`)
-- Lists / collections: `[]` (e.g., `"exposed_ports": []`)
-- Sub-dictionaries: `{}` (e.g., `"email_security": {}`)
-- Counters: `0` (e.g., `"subdomain_count": 0`)
-- Booleans: `False` (e.g., `"is_malicious": False`)
+* Scalar values: `None` — e.g. `domain_expiry_days`, `ssl_days_remaining`, `asn_number`, `asn_org`, `asn_ip`, `asn_country`
+* Lists / collections: `[]` — e.g. `dns_missing_records`, `open_ports`, `software_detected`, `missing_security_headers`, `auto_warnings`
+* Sub-dictionaries: `{}` — e.g. `email_security`
+* Counters: `0` — e.g. `ip_abuse_score`, `subdomain_count`
+* Booleans: `False` — e.g. `ip_reputation_flagged`
+
+Keep the default value consistent with the type of data the extractor will store.
 
 ---
 
 ### Step 4: Update Telemetry Report Formatter
 
 In `tools/fullrecon_tool.py`, update `_format_signals_block()` to ensure the downstream LLM receives your extracted signal in the final structured synthesis.
+
+Add the new signal to the appropriate section of `_format_signals_block()` and preserve the existing formatting conventions.
+
+For nested signals, include the relevant fields expected by the formatter:
+
+* `email_security`: `security_score`, `rating`, `spf_found`, `spf_policy`, `dkim_found`, `dmarc_found`, `dmarc_policy`
+* `cves_found`: list of CVE objects containing `id`, `cvss`, and `summary`
+
+Use safe defaults when optional signal data is unavailable, consistent with the existing implementation.
 
 ---
 
@@ -461,11 +481,36 @@ If you modified dependencies, `Dockerfile`, or server startup scripts, smoke-tes
 ```bash
 # Build local container
 docker build -t aynops:test .
+```
 
+After building the image, verify that the container starts successfully and initializes the MCP server in stdio mode:
+
+```bash
 # Validate stdio MCP listener initialization
 docker run --rm -i aynops:test
 # Press Ctrl+C to terminate
 ```
+
+This is a basic container smoke test and does not require API keys. It verifies that the Docker image can start the MCP server successfully.
+
+
+> **Note:** API keys are only required when testing tools that depend on external services such as AbuseIPDB or Have I Been Pwned. These credentials should be supplied at runtime rather than included in the Docker image.
+
+For API-dependent testing, credentials can be provided using a `.env` file:
+
+```bash
+docker run --rm -i --env-file .env aynops:test
+```
+
+or as runtime environment variables:
+
+```bash
+docker run --rm -i \
+  -e ABUSEIPDB_API_KEY="$ABUSEIPDB_API_KEY" \
+  -e HIBP_API_KEY="$HIBP_API_KEY" \
+  aynops:test
+```
+
 
 ---
 
