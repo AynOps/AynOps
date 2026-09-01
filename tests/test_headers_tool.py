@@ -188,6 +188,44 @@ class TestHeadersAnalyzer(unittest.TestCase):
         self.assertEqual(csp["severity"], "high")
 
     @patch("tools.headers_tool.requests.get")
+    def test_csp_wildcard_false_positive_scoped_subdomain(self, mock_get):
+        mock_get.return_value = _resp(200, {
+            "Content-Security-Policy": "script-src *.trusted-cdn.com",
+        })
+        result = headers_analyzer("example.com")
+        csp = result["headers"]["content-security-policy"]
+        self.assertNotIn("Wildcard", csp["issue"])
+
+    @patch("tools.headers_tool.requests.get")
+    def test_csp_wildcard_false_positive_default_scoped(self, mock_get):
+        mock_get.return_value = _resp(200, {
+            "Content-Security-Policy": "default-src *.example.com",
+        })
+        result = headers_analyzer("example.com")
+        csp = result["headers"]["content-security-policy"]
+        self.assertNotIn("Wildcard", csp["issue"])
+
+    @patch("tools.headers_tool.requests.get")
+    def test_csp_wildcard_false_negative_irregular_whitespace(self, mock_get):
+        mock_get.return_value = _resp(200, {
+            "Content-Security-Policy": "script-src  *",
+        })
+        result = headers_analyzer("example.com")
+        csp = result["headers"]["content-security-policy"]
+        self.assertIn("Wildcard", csp["issue"])
+        self.assertEqual(csp["severity"], "high")
+
+    @patch("tools.headers_tool.requests.get")
+    def test_csp_wildcard_unrelated_directive_not_flagged(self, mock_get):
+        mock_get.return_value = _resp(200, {
+            "Content-Security-Policy": "img-src *; script-src 'self'",
+        })
+        result = headers_analyzer("example.com")
+        csp = result["headers"]["content-security-policy"]
+        self.assertIn("Wildcard", csp["issue"])
+        self.assertEqual(csp["severity"], "high")
+
+    @patch("tools.headers_tool.requests.get")
     def test_csp_missing_default_src_flagged_once(self, mock_get):
         mock_get.return_value = _resp(200, {
             "Content-Security-Policy": "script-src 'self'",
