@@ -301,6 +301,39 @@ class TestHeadersAnalyzer(unittest.TestCase):
         self.assertIn("exposes technology", result["headers"]["server"]["issue"])
 
     @patch("tools.headers_tool.requests.get")
+    def test_disclosure_headers_use_hyphenated_keys(self, mock_get):
+        """x-powered-by and similar headers must appear under their native
+        hyphenated key, not an underscore-converted form (regression guard
+        for the hdr.lower().replace('-', '_') bug reported in issue #187)."""
+        mock_get.return_value = _resp(200, {
+            "X-Powered-By": "PHP/8.1",
+            "X-AspNet-Version": "4.0.30319",
+        })
+        result = headers_analyzer("example.com")
+        headers = result["headers"]
+        self.assertIn("x-powered-by", headers)
+        self.assertIn("x-aspnet-version", headers)
+        self.assertNotIn("x_powered_by", headers)
+        self.assertNotIn("x_aspnet_version", headers)
+        self.assertIn("exposes technology", headers["x-powered-by"]["issue"])
+
+    @patch("tools.headers_tool.requests.get")
+    def test_disclosure_headers_all_use_hyphenated_keys(self, mock_get):
+        """All four disclosure headers must appear under their native
+        hyphenated keys; no underscore-converted variants must be present."""
+        mock_get.return_value = _resp(200, {
+            "X-Powered-By": "Express",
+            "X-Generator": "Drupal 9",
+            "X-AspNet-Version": "4.0.30319",
+            "Server": "nginx",
+        })
+        result = headers_analyzer("example.com")
+        headers = result["headers"]
+        underscore_keys = {"x_powered_by", "x_aspnet_version", "x_generator"}
+        for bad_key in underscore_keys:
+            self.assertNotIn(bad_key, headers, f"Underscore-form key {bad_key!r} found")
+
+    @patch("tools.headers_tool.requests.get")
     def test_referrer_policy_good_value_accepted(self, mock_get):
         mock_get.return_value = _resp(200, {"Referrer-Policy": "strict-origin-when-cross-origin"})
         result = headers_analyzer("example.com")
