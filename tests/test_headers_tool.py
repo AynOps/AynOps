@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch, Mock
 from curl_cffi.requests.errors import RequestsError
 from curl_cffi.requests.headers import Headers
-from tools.headers_tool import headers_analyzer
+from tools.headers_tool import _analyze_raw_headers, headers_analyzer
 
 
 def _resp(status_code: int, headers: dict, body: str = ""):
@@ -299,6 +299,61 @@ class TestHeadersAnalyzer(unittest.TestCase):
         result = headers_analyzer("example.com")
         self.assertIn("server", result["headers"])
         self.assertIn("exposes technology", result["headers"]["server"]["issue"])
+
+    @patch("tools.headers_tool.requests.get")
+    def test_information_disclosure_headers_use_hyphenated_keys(self, mock_get):
+        mock_get.return_value = _resp(200, {
+            "Server": "Apache/2.4.41",
+            "X-Powered-By": "Express",
+            "X-AspNet-Version": "4.0.30319",
+            "X-Generator": "Drupal 7",
+        })
+        result = headers_analyzer("example.com")
+        headers = result["headers"]
+        # Hyphenated keys should be present
+        self.assertIn("server", headers)
+        self.assertIn("x-powered-by", headers)
+        self.assertIn("x-aspnet-version", headers)
+        self.assertIn("x-generator", headers)
+        # Underscore keys should NOT be present
+        self.assertNotIn("x_powered_by", headers)
+        self.assertNotIn("x_aspnet_version", headers)
+        self.assertNotIn("x_generator", headers)
+        self.assertEqual(headers["x-powered-by"]["value"], "Express")
+        self.assertEqual(headers["x-aspnet-version"]["value"], "4.0.30319")
+        self.assertEqual(headers["x-generator"]["value"], "Drupal 7")
+
+    def test_analyze_raw_headers_standardized_keys_and_no_underscores(self):
+        raw_headers = {
+            "strict-transport-security": "max-age=31536000; includeSubDomains",
+            "content-security-policy": "default-src 'self'",
+            "x-frame-options": "DENY",
+            "x-content-type-options": "nosniff",
+            "referrer-policy": "strict-origin-when-cross-origin",
+            "permissions-policy": "camera=()",
+            "server": "nginx/1.18.0",
+            "x-powered-by": "PHP/7.4.3",
+            "x-aspnet-version": "4.0.30319",
+            "x-generator": "WordPress 6.0",
+        }
+        analyzed = _analyze_raw_headers(raw_headers)
+        expected_keys = {
+            "strict-transport-security",
+            "content-security-policy",
+            "x-frame-options",
+            "x-content-type-options",
+            "referrer-policy",
+            "permissions-policy",
+            "server",
+            "x-powered-by",
+            "x-aspnet-version",
+            "x-generator",
+        }
+        self.assertEqual(set(analyzed.keys()), expected_keys)
+        # Structural assertion: no header-derived keys contain underscores
+        for key in analyzed:
+            self.assertNotIn("_", key, f"Header key '{key}' should not contain underscores")
+            self.assertEqual(key, key.lower(), f"Header key '{key}' should be lowercased")
 
     @patch("tools.headers_tool.requests.get")
     def test_referrer_policy_good_value_accepted(self, mock_get):
