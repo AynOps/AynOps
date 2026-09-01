@@ -351,7 +351,17 @@ def _analyze_raw_headers(raw_headers: dict) -> dict:
         if "'unsafe-eval'" in csp_lower:
             issues.append("Contains 'unsafe-eval' which allows eval()")
             severity = "high"
-        if "default-src *" in csp_lower or "script-src *" in csp_lower:
+        has_wildcard = False
+        for directive_str in csp_lower.split(';'):
+            tokens = directive_str.split()
+            if not tokens:
+                continue
+            name = tokens[0]
+            if name in ('default-src', 'script-src') and '*' in tokens[1:]:
+                has_wildcard = True
+                break
+
+        if has_wildcard:
             issues.append("Wildcard (*) source defeats the purpose of CSP")
             severity = "high"
         # A CSP without a restrictive default-src (neither 'self' nor
