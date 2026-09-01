@@ -482,7 +482,7 @@ def _analyze_raw_headers(raw_headers: dict) -> dict:
     for hdr in ("server", "x-powered-by", "x-aspnet-version", "x-generator"):
         val = raw_headers.get(hdr, "")
         if val:
-            headers[hdr.lower().replace("-", "_")] = {
+            headers[hdr.lower()] = {
                 "present": True,
                 "value": val,
                 "issue": f"{hdr} header exposes technology information",

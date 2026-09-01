@@ -4,7 +4,7 @@ def headers_extractor(result, signals) -> None:
     headers_analyzer reports every checked header as
     ``{"present": bool, "value": ..., "issue": ..., "severity": ...}``;
     the ones it marks absent are what `missing_security_headers` means.
-    Information-disclosure headers (``server``, ``x_powered_by``, …) only
+    Information-disclosure headers (``server``, ``x-powered-by``, …) only
     appear when they ARE present, so they never enter the missing list.
 
     A result that did not reach real page content is insufficient data, not
