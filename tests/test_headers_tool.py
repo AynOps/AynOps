@@ -401,6 +401,59 @@ class TestHeadersAnalyzer(unittest.TestCase):
         self.assertIn("may leak", rp["issue"])
         self.assertEqual(rp["severity"], "medium")
 
+    @patch("tools.headers_tool.requests.get")
+    def test_referrer_policy_fallback_list_safe_last(self, mock_get):
+        mock_get.return_value = _resp(200, {
+            "Referrer-Policy": "unsafe-url, strict-origin-when-cross-origin",
+        })
+        result = headers_analyzer("example.com")
+        rp = result["headers"]["referrer-policy"]
+        self.assertTrue(rp["present"])
+        self.assertEqual(rp["issue"], "None")
+        self.assertEqual(rp["severity"], "low")
+
+    @patch("tools.headers_tool.requests.get")
+    def test_referrer_policy_fallback_list_unsafe_last(self, mock_get):
+        mock_get.return_value = _resp(200, {
+            "Referrer-Policy": "strict-origin-when-cross-origin, unsafe-url",
+        })
+        result = headers_analyzer("example.com")
+        rp = result["headers"]["referrer-policy"]
+        self.assertTrue(rp["present"])
+        self.assertIn("may leak", rp["issue"])
+        self.assertEqual(rp["severity"], "medium")
+
+    @patch("tools.headers_tool.requests.get")
+    def test_referrer_policy_fallback_list_whitespace_tolerant(self, mock_get):
+        mock_get.return_value = _resp(200, {
+            "Referrer-Policy": "no-referrer ,  unsafe-url",
+        })
+        result = headers_analyzer("example.com")
+        rp = result["headers"]["referrer-policy"]
+        self.assertTrue(rp["present"])
+        self.assertIn("may leak", rp["issue"])
+        self.assertEqual(rp["severity"], "medium")
+
+        mock_get.return_value = _resp(200, {
+            "Referrer-Policy": "unsafe-url ,  no-referrer",
+        })
+        result2 = headers_analyzer("example.com")
+        rp2 = result2["headers"]["referrer-policy"]
+        self.assertTrue(rp2["present"])
+        self.assertEqual(rp2["issue"], "None")
+        self.assertEqual(rp2["severity"], "low")
+
+    @patch("tools.headers_tool.requests.get")
+    def test_referrer_policy_fallback_list_unknown_token_ignored(self, mock_get):
+        mock_get.return_value = _resp(200, {
+            "Referrer-Policy": "strict-origin-when-cross-origin, future-unknown-policy",
+        })
+        result = headers_analyzer("example.com")
+        rp = result["headers"]["referrer-policy"]
+        self.assertTrue(rp["present"])
+        self.assertEqual(rp["issue"], "None")
+        self.assertEqual(rp["severity"], "low")
+
     # ------------------------------------------------------------------
     # Permissions-Policy content analysis
     # ------------------------------------------------------------------

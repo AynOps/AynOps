@@ -22,6 +22,24 @@ _SENSITIVE_PERMISSIONS_FEATURES = (
     "camera", "microphone", "geolocation", "payment", "usb",
 )
 
+_GOOD_REFERRER_POLICIES = {
+    "no-referrer",
+    "strict-origin-when-cross-origin",
+    "same-origin",
+    "strict-origin",
+}
+
+_ALL_VALID_REFERRER_POLICIES = {
+    "no-referrer",
+    "no-referrer-when-downgrade",
+    "origin",
+    "origin-when-cross-origin",
+    "same-origin",
+    "strict-origin",
+    "strict-origin-when-cross-origin",
+    "unsafe-url",
+}
+
 _WAF_BLOCK_PAGE_HEADER_SIGNATURES = (
     ("cf-mitigated", "challenge", "Cloudflare", None),
     ("server", "akamaighost", "Akamai", 400),
@@ -435,9 +453,16 @@ def _analyze_raw_headers(raw_headers: dict) -> dict:
     # --- Referrer-Policy ---
     rp = raw_headers.get("referrer-policy", "")
     if rp:
-        rp_lower = rp.lower().strip()
-        good_policies = ["no-referrer", "strict-origin-when-cross-origin", "same-origin", "strict-origin"]
-        if any(p in rp_lower for p in good_policies):
+        tokens = [t.strip() for t in rp.lower().split(",") if t.strip()]
+        effective_policy = None
+        for token in reversed(tokens):
+            if token in _ALL_VALID_REFERRER_POLICIES:
+                effective_policy = token
+                break
+        if effective_policy is None and tokens:
+            effective_policy = tokens[-1]
+
+        if effective_policy in _GOOD_REFERRER_POLICIES:
             headers["referrer-policy"] = {
                 "present": True,
                 "value": rp,
