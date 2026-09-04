@@ -324,15 +324,12 @@ Ensure the tool is documented and registered across all project metadata files:
      "description": "One-line description of the security inspection performed.",
      "input": {
        "domain": "string"
-     },
-     "requires_api_key": false,
-     "requires_system_dependency": false,
-     "api_key_env": null,
-     "api_key_url": null
+     }
    }
    ```
 
-   `requires_system_dependency` should be set to true when the tool depends on an external system utility (for example, Nmap). For API-dependent tools, set `requires_api_key` to true and provide the corresponding `api_key_env` and `api_key_url` values. Otherwise, these fields can be set to false/null as appropriate.
+For tools that require an external system dependency, set `"requires_system_dependency"` to the dependency name (for example, `"nmap"`). For API-dependent tools, set `"requires_api_key"` to `true` and provide the corresponding `"api_key_env"` and `"api_key_url"` values. Optional fields should be omitted when they are not applicable rather than set to `false` or `null`.
+
 
 3. **`server.json`**: If your tool requires environment variables, define them in the `"environmentVariables"` array.
 4. **`.env.example`**: Add placeholder entries for new API keys (if applicable).
