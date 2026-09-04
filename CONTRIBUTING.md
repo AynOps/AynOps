@@ -466,12 +466,6 @@ FastMCP ships with an interactive browser-based MCP inspector to inspect tool sc
 uv run fastmcp dev inspector server.py
 ```
 
-*Alternatively, using npx:*
-
-```bash
-npx @modelcontextprotocol/inspector uv run server.py
-```
-
 Verify that:
 - The tool appears in the listed capabilities.
 - JSON-RPC parameter schemas render accurately.
