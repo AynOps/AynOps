@@ -331,7 +331,7 @@ Ensure the tool is documented and registered across all project metadata files:
 For tools that require an external system dependency, set `"requires_system_dependency"` to the dependency name (for example, `"nmap"`). For API-dependent tools, set `"requires_api_key"` to `true` and provide the corresponding `"api_key_env"` and `"api_key_url"` values. Optional fields should be omitted when they are not applicable rather than set to `false` or `null`.
 
 
-3. **`server.json`**: If your tool requires environment variables, define them in the `"environmentVariables"` array.
+3. **`server.json`**: If your tool requires environment variables, define them under the `"environmentVariables"` array in `"packages"`. Each variable should specify its `"name"`, `"description"` `"isRequired"`, `"isSecret"`, and `"format"` fields.
 4. **`.env.example`**: Add placeholder entries for new API keys (if applicable).
 5. **`pyproject.toml` / `uv.lock`**: Add new third-party packages only if strictly necessary (`uv add <package>`).
 
