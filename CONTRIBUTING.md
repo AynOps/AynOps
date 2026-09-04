@@ -26,9 +26,11 @@ We welcome contributions from cybersecurity researchers, software engineers, and
 Before authoring code or submitting pull requests, please review our foundational development principles:
 
 1. **Non-Destructive & Safe Operations**: AynOps is strictly a reconnaissance and security assessment server. All tools must perform non-destructive, read-only telemetry gathering and analysis. Exploit payloads, denial-of-service triggers, or unauthorized modification mechanics are strictly prohibited.
-2. **Local-First & Zero-Telemetry Egress**: AynOps operates locally over standard I/O (`stdio`). Tool implementations must never transmit telemetry, target domains, IP addresses, or environment credentials to unauthorized third-party telemetry aggregators.
-3. **Fail-Safe Server Resilience**: An MCP server process must **never crash**. Network timeouts, socket failures, and malformed upstream responses must be caught gracefully and returned as structured error payloads (`{"success": False, "error": "..."}`).
-4. **Community Discussion**: For major refactors, architectural shifts, or complex new tool integrations, please open a thread in [GitHub Discussions](https://github.com/AynOps/AynOps/discussions) or create an RFC issue first to align with maintainers.
+2. **Authorized Use Only**: Scan only systems that you own or have explicit permission to test. Do not use AynOps to perform reconnaissance or security assessments against systems without authorization. For responsible-use requirements, see [SECURITY.md](SECURITY.md). For a safe, intentionally vulnerable target, use [scanme.nmap.org](https://scanme.nmap.org/).
+3. **Legal & Responsible Use**: Security assessment capabilities must be used only for legitimate, authorized security testing and in accordance with applicable laws and regulations.
+4. **Local-First & Zero-Telemetry Egress**: AynOps operates locally over standard I/O (`stdio`). Tool implementations must never transmit telemetry, target domains, IP addresses, or environment credentials to unauthorized third-party telemetry aggregators.
+5. **Fail-Safe Server Resilience**: An MCP server process must **never crash**. Network timeouts, socket failures, and malformed upstream responses must be caught gracefully and returned as structured error payloads (`{"success": False, "error": "..."}`).
+6. **Community Discussion**: For major refactors, architectural shifts, or complex new tool integrations, please open a thread in [GitHub Discussions](https://github.com/AynOps/AynOps/discussions) or create an RFC issue first to align with maintainers.
 
 ---
 
