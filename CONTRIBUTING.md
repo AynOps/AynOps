@@ -502,7 +502,7 @@ This is a basic container smoke test and does not require API keys. It verifies 
 
 > **Note:** API keys are only required when testing tools that depend on external services such as AbuseIPDB or Have I Been Pwned. These credentials should be supplied at runtime rather than included in the Docker image.
 
-For API-dependent testing, credentials can be provided using a `.env` file:
+For API-dependent testing, credentials can be provided using a `.env` file. When using Docker's `--env-file`, use unquoted values to avoid quote characters being passed literally.
 
 ```bash
 docker run --rm -i --env-file .env aynops:test
