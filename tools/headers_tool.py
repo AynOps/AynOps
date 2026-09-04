@@ -42,11 +42,12 @@ _ALL_VALID_REFERRER_POLICIES = {
 
 _WAF_BLOCK_PAGE_HEADER_SIGNATURES = (
     ("cf-mitigated", "challenge", "Cloudflare", None),
-    ("server", "akamaighost", "Akamai", 400),
 )
 
 # Body-content signatures: (substring to search for in the lowercased
 # response body, provider label, minimum status code required or None).
+# A single needle is a str; a tuple means ALL listed substrings must be
+# present (AND semantics).
 #
 # Needed because some providers' block pages aren't distinguishable via
 # headers alone: Imperva/Incapsula's X-Iinfo and X-CDN headers are
@@ -64,8 +65,22 @@ _WAF_BLOCK_PAGE_HEADER_SIGNATURES = (
 # confirmed live sample, no proof this string is exclusive to block
 # pages, so an error-class status is required as a second signal
 # rather than trusting the body substring alone.
+#
+# Akamai is detected by BODY fingerprint, not the Server header, for the
+# opposite reason: `Server: AkamaiGHost` identifies Akamai's edge
+# infrastructure, not mitigation. Every response served from an
+# Akamai-fronted origin carries it, including ordinary 401/403/404/5xx
+# responses that pass straight through the edge (issue #194), so
+# `Server: AkamaiGHost` + status >= 400 misclassified regular errors as
+# blocks and aborted analysis. Akamai's own deny page instead embeds
+# two markers together — an "Access Denied" heading and a
+# "Reference #" error identifier — that an origin error page does not
+# pair with the edge header. Requiring BOTH substrings on an error
+# status keeps genuine blocks detected while ordinary errors are
+# analyzed normally.
 _WAF_BLOCK_PAGE_BODY_SIGNATURES = (
     ("_incapsula_resource", "Imperva", 400),
+    (("access denied", "reference #"), "Akamai", 400),
 )
 
 
@@ -84,8 +99,9 @@ def _detect_waf_block_page(raw_headers: dict, status_code: int, body: str) -> st
         return provider
 
     body_lower = body.lower()
-    for needle, provider, min_status in _WAF_BLOCK_PAGE_BODY_SIGNATURES:
-        if needle not in body_lower:
+    for needles, provider, min_status in _WAF_BLOCK_PAGE_BODY_SIGNATURES:
+        required = (needles,) if isinstance(needles, str) else needles
+        if not all(needle in body_lower for needle in required):
             continue
         if min_status is not None and status_code < min_status:
             continue

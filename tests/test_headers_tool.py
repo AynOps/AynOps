@@ -526,13 +526,21 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_akamai_block_page_is_rejected_not_analyzed(self, mock_get):
-        # Real signature confirmed against marriott.com/homedepot.com/
-        # costco.com: a 403 with Server: AkamaiGHost and no origin
-        # headers at all -- Akamai's edge generated this page itself.
+        # Real deny-page shape: Akamai's edge serves a 403 whose body
+        # pairs an "Access Denied" message with a "Reference #" id
+        # (marriott.com/homedepot.com/costco.com pattern). The body
+        # fingerprint is required since #194 -- Server: AkamaiGHost
+        # alone is on every response from an Akamai-fronted origin,
+        # blocked or not.
         mock_get.return_value = _resp(403, {
             "Server": "AkamaiGHost",
             "Content-Type": "text/html",
-        })
+        }, body=(
+            "<html><head><title>Access Denied</title></head><body>"
+            "<h1>Access Denied</h1><p>You don't have permission to "
+            "access this page.</p><p>Reference #18.4a2b3c4d.1757000000.0</p>"
+            "</body></html>"
+        ))
         result = headers_analyzer("example.com")
         self.assertFalse(result["success"])
         self.assertIn("akamai", result["error"].lower())
@@ -548,6 +556,55 @@ class TestHeadersAnalyzer(unittest.TestCase):
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
         self.assertTrue(result["headers"]["x-frame-options"]["present"])
+
+    @patch("tools.headers_tool.requests.get")
+    def test_akamai_ordinary_404_is_not_classified_as_block(self, mock_get):
+        # #194 regression: Server: AkamaiGHost + 404 + an ordinary origin
+        # error body must NOT abort analysis as a bot-detection block.
+        mock_get.return_value = _resp(404, {
+            "Server": "AkamaiGHost",
+            "X-Frame-Options": "SAMEORIGIN",
+        }, body="<html><body><h1>404 Not Found</h1></body></html>")
+        result = headers_analyzer("example.com")
+        self.assertTrue(result["success"])
+
+    @patch("tools.headers_tool.requests.get")
+    def test_akamai_ordinary_403_is_not_classified_as_block(self, mock_get):
+        mock_get.return_value = _resp(403, {
+            "Server": "AkamaiGHost",
+        }, body="<html><body>403 Forbidden</body></html>")
+        result = headers_analyzer("example.com")
+        self.assertTrue(result["success"])
+
+    @patch("tools.headers_tool.requests.get")
+    def test_akamai_ordinary_5xx_is_not_classified_as_block(self, mock_get):
+        for status in (500, 502, 503):
+            mock_get.return_value = _resp(status, {
+                "Server": "AkamaiGHost",
+            }, body="<html><body>Internal Server Error</body></html>")
+            result = headers_analyzer("example.com")
+            self.assertTrue(result["success"], f"status {status} should be analyzed, not blocked")
+
+    @patch("tools.headers_tool.requests.get")
+    def test_akamai_block_fingerprint_without_error_status_is_not_blocked(self, mock_get):
+        # The fingerprint on a 200 must not trigger either -- the status
+        # floor is part of the signature.
+        mock_get.return_value = _resp(200, {
+            "Server": "AkamaiGHost",
+            "X-Frame-Options": "DENY",
+        }, body="<html><body>Access Denied Reference #18.4a2b.0</body></html>")
+        result = headers_analyzer("example.com")
+        self.assertTrue(result["success"])
+
+    @patch("tools.headers_tool.requests.get")
+    def test_akamai_partial_fingerprint_is_not_blocked(self, mock_get):
+        # Only one of the two body markers -> ordinary content (e.g. a
+        # forum post mentioning "access denied"), not a block page.
+        mock_get.return_value = _resp(403, {
+            "Server": "AkamaiGHost",
+        }, body="<html><body>Access Denied is what the admin said</body></html>")
+        result = headers_analyzer("example.com")
+        self.assertTrue(result["success"])
 
     @patch("tools.headers_tool.requests.get")
     def test_akamaighost_on_a_2xx_response_is_not_rejected(self, mock_get):
