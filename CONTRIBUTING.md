@@ -420,7 +420,7 @@ def my_tool_extractor(result: dict, signals: dict) -> None:
 In `tools/signals/extractor.py`, add your signal key to the default `signals` dictionary to guarantee schema integrity:
 
 * Scalar values: `None` — e.g. `domain_expiry_days`, `ssl_days_remaining`, `asn_number`, `asn_org`, `asn_ip`, `asn_country`
-* Lists / collections: `[]` — e.g. `dns_missing_records`, `open_ports`, `software_detected`, `missing_security_headers`, `auto_warnings`
+* Lists / collections: `[]` — e.g. `dns_missing_records`, `open_ports`, `software_detected`, `missing_security_headers`, `auto_warnings`, `cves_found`
 * Sub-dictionaries: `{}` — e.g. `email_security`
 * Counters: `0` — e.g. `ip_abuse_score`, `subdomain_count`
 * Booleans: `False` — e.g. `ip_reputation_flagged`
