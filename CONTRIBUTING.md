@@ -153,7 +153,7 @@ AynOps/
 ├── utils/                    # Shared utilities and helpers
 ├── .env.example              # Environment variable template
 ├── .gitignore                # Git ignored files and directories
-├── .python-version           # Mentions the Python version
+├── .python-version           # Pins Python 3.12
 ├── CONTRIBUTING.md           # Contribution guidelines
 ├── Dockerfile                # Container configuration
 ├── glama.json                # Glama MCP configuration
