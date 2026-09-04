@@ -100,7 +100,11 @@ nmap --version
 Copy `.env.example` to create your local `.env` file:
 
 ```bash
+# On Linux/macOS:
 cp .env.example .env
+
+# On Windows (PowerShell):
+Copy-Item .env.example .env
 ```
 
 | Variable | Required | Description | Source |
@@ -285,7 +289,6 @@ mcp.tool()(my_tool)
 Create a corresponding test suite in `tests/test_my_tool.py`:
 
 ```python
-import pytest
 from tools.my_tool import my_tool
 
 def test_my_tool_success():
