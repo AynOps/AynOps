@@ -316,7 +316,7 @@ uv run pytest tests/test_my_tool.py -v
 
 Ensure the tool is documented and registered across all project metadata files:
 
-1. **`README.md`**: Add the tool entry to the **Standalone Offensive & Cloud Auditing Tools** table.
+1. **`README.md`**: Add the tool entry to the **Standalone Offensive Tools** table.
 2. **`mcp.json`**: Add the tool definition to the `"tools"` array:
    ```json
    {
