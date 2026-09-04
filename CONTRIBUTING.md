@@ -411,7 +411,7 @@ def my_tool_extractor(result: dict, signals: dict) -> None:
         )
 ```
 
-> **Note:** In `should_run` callbacks, `results` contains the raw results of previously executed tools, keyed by their registry `name`. Access a tool's output using `results["tool_name"]` when deciding whether the current tool should run. For example, `results["whois"]` accesses the raw WHOIS result.
+> **Note:** In `should_run` callbacks, `results` contains the raw results of tools executed in **previous waves**, keyed by their registry `name`. Use `results.get("tool_name")` to safely access a tool's output when deciding whether the current tool should run. For example, `results.get("whois")` returns the raw WHOIS result, or `None` if the tool has not produced a result.
 
 ---
 
