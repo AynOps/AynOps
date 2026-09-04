@@ -260,15 +260,24 @@ def test_asn_extractor_skips_metadata_on_failure():
 # ── techstack_extractor ──────────────────────────────────────────────────
 
 def test_techstack_extractor_flattens_list_valued_technologies():
-    """List-valued technology entries must be flattened into individual names."""
+    """Detection dicts in each category must be flattened into individual names."""
     result = {
         "success": True,
         "status_code": 200,
         "technologies": {
-            "web_server": "nginx",
-            "cms": ["WordPress"],
-            "analytics": ["Google Analytics"],
-            "javascript_frameworks": ["React", "Vue.js"],
+            "web_servers": [
+                {"name": "nginx", "confidence": 95, "evidence": ["Server header"]},
+            ],
+            "cms": [
+                {"name": "WordPress", "confidence": 90, "evidence": ["wp-content"]},
+            ],
+            "analytics": [
+                {"name": "Google Analytics", "confidence": 90, "evidence": ["gtag"]},
+            ],
+            "frameworks": [
+                {"name": "React",  "confidence": 85, "evidence": ["__react"]},
+                {"name": "Vue.js", "confidence": 85, "evidence": ["__vue__"]},
+            ],
         },
     }
     signals = _base_signals()
@@ -283,16 +292,22 @@ def test_techstack_extractor_flattens_list_valued_technologies():
 
 
 def test_techstack_extractor_skips_empty_and_none_technologies():
-    """Empty lists, None, 'Unknown' and 'None' values must not add entries."""
+    """Categories with empty lists or dicts with blank names must not add entries."""
     result = {
         "success": True,
         "status_code": 200,
         "technologies": {
-            "web_server": "nginx",
+            "web_servers": [
+                {"name": "nginx", "confidence": 95, "evidence": []},
+            ],
             "cms": [],
             "analytics": None,
-            "powered_by": "Unknown",
-            "javascript_frameworks": ["React", None, "", "Unknown"],
+            "frameworks": [
+                {"name": "React",   "confidence": 85, "evidence": []},
+                {"name": "",        "confidence": 70, "evidence": []},
+                {"name": "Unknown", "confidence": 70, "evidence": []},
+                {"name": "None",    "confidence": 70, "evidence": []},
+            ],
         },
     }
     signals = _base_signals()
@@ -436,7 +451,12 @@ def test_techstack_success_does_not_clear_the_headers_signal():
             "domain": "example.com",
             "url": "https://example.com",
             "status_code": 200,
-            "technologies": {"web_server": "nginx"},
+            "technologies": {
+                "web_servers": [
+                    {"name": "nginx", "confidence": 95, "evidence": ["Server header"]},
+                ],
+            },
+            "fingerprints": {"headers": {}, "cookies": [], "meta_tags": {}},
         },
     )
     signals = extract_signals(results)
@@ -525,7 +545,12 @@ def test_techstack_extractor_does_not_touch_the_headers_signal():
             "domain": "example.com",
             "url": "https://example.com",
             "status_code": 200,
-            "technologies": {"web_server": "nginx"},
+            "technologies": {
+                "web_servers": [
+                    {"name": "nginx", "confidence": 95, "evidence": ["Server header"]},
+                ],
+            },
+            "fingerprints": {"headers": {}, "cookies": [], "meta_tags": {}},
         },
         signals,
     )
