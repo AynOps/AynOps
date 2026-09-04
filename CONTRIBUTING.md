@@ -196,7 +196,7 @@ When modifying or adding Python code in AynOps:
    - Always sanitize domain inputs using `utils.helpers.normalize_domain()` and `utils.helpers.is_valid_domain()`.
    - Validate IP addresses using Python's standard `ipaddress` library (`ipaddress.ip_address()`).
 2. **Explicit Network Timeouts**:
-   - Never initiate unbounded network sockets, HTTP requests, or subprocess calls. Always enforce sensible timeouts (e.g. `timeout=10` for HTTP, `timeout=5` for DNS/WHOIS sockets).
+   - Never initiate unbounded network sockets, HTTP requests, or subprocess calls. Always configure sensible, operation-appropriate timeouts. For example, HTTP requests may use `timeout=10`, while DNS/WHOIS sockets may use `timeout=5`.
 3. **Structured Response Contracts**:
    - Every tool function must return a standard dictionary payload containing `"success": True` or `"success": False`.
    - Error responses must follow the format: `{"success": False, "error": "<detailed message>"}`.
