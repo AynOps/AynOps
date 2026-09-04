@@ -442,6 +442,8 @@ For nested signals, include the relevant fields expected by the formatter:
 
 Use safe defaults when optional signal data is unavailable, consistent with the existing implementation.
 
+If the new signal introduces a distinct finding or relationship that requires explicit LLM correlation, **update `tools/prompts/threat_analysis.py` with the corresponding correlation rule**. Ensure the rule follows the existing **"EVIDENCE QUALITY RULES"** so the signal is properly interpreted and correlated with related findings. If no signal-specific correlation is required, no changes to `threat_analysis.py` are necessary.
+
 ---
 
 ### Step 5: Test Signal Extractor
