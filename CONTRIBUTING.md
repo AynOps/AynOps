@@ -73,7 +73,8 @@ source .venv/bin/activate
 .venv\Scripts\Activate.ps1
 
 # Install project and dev dependencies
-pip install -e . && pip install pytest==9.0.3
+pip install -e .
+pip install pytest==9.0.3
 ```
 
 ---
