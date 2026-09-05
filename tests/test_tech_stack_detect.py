@@ -377,6 +377,47 @@ class TestErrorHandling(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual(result["error"], "Invalid domain format")
 
+    def test_fingerprint_engine_exception_returns_error_dict(self):
+        """If the fingerprint engine raises, tech_stack_detect must return
+        {success: False, error: ...} instead of propagating the exception.
+
+        Regression test for PR #195 review comment: fingerprint() was called
+        outside the surrounding try/except, so any engine exception escaped
+        the tool's structured error contract.
+        """
+        good_resp = _make_response(html="", headers={})
+
+        with patch("tools.techstack_tool._fetch", return_value=good_resp), \
+             patch("tools.techstack_tool.fingerprint",
+                   side_effect=RuntimeError("unexpected engine failure")):
+            result = tech_stack_detect("example.com")
+
+        self.assertFalse(result["success"],
+                         "Expected success=False when fingerprint() raises")
+        self.assertIn("error", result,
+                      "Expected 'error' key in failure response")
+        self.assertIsInstance(result["error"], str)
+        self.assertGreater(len(result["error"]), 0)
+
+    def test_no_false_positive_apache_nginx_with_unknown_server_header(self):
+        """Server: gws must not produce Apache or nginx detections.
+
+        Regression test for PR #195 review: WEB_SERVER_SIGNATURES previously
+        included header_name:server markers that fired on any response with a
+        Server header, producing bogus Apache/nginx detections for servers
+        like GWS, envoy, or any unknown banner.
+        """
+        result = _detect(headers={"Server": "gws"})
+        self.assertTrue(result["success"])
+        web_servers = [
+            d["name"]
+            for d in result["technologies"].get("web_servers", [])
+        ]
+        self.assertNotIn("Apache", web_servers,
+                         "Apache falsely detected from 'Server: gws'")
+        self.assertNotIn("nginx", web_servers,
+                         "nginx falsely detected from 'Server: gws'")
+
 
 # ---------------------------------------------------------------------------
 # Seam test: fingerprint engine is called correctly

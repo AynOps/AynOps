@@ -89,6 +89,52 @@ class TestHeadersLayer(unittest.TestCase):
         self.assertIsInstance(det["evidence"], list)
         self.assertGreater(len(det["evidence"]), 0)
 
+    # ------------------------------------------------------------------
+    # False-positive regression tests (Issue #130 / PR #195 review)
+    # ------------------------------------------------------------------
+    # The maintainer explicitly required these four assertions to guard
+    # against WEB_SERVER_SIGNATURES using header_name:"server" markers
+    # that fire on ANY response containing a Server header, regardless
+    # of its value.
+
+    def test_server_gws_does_not_report_apache_or_nginx(self):
+        """Server: gws (Google Web Server) must not produce Apache or nginx detections."""
+        result = headers_layer({"Server": "gws"})
+        web_servers = _names(result, "web_servers")
+        self.assertNotIn("Apache", web_servers,
+                         "Apache falsely detected from 'Server: gws'")
+        self.assertNotIn("nginx", web_servers,
+                         "nginx falsely detected from 'Server: gws'")
+
+    def test_server_caddy_reports_caddy_only_not_apache_or_nginx(self):
+        """Server: Caddy/2.7 must detect Caddy and must not detect Apache or nginx."""
+        result = headers_layer({"Server": "Caddy/2.7.6"})
+        web_servers = _names(result, "web_servers")
+        self.assertIn("Caddy", web_servers,
+                      "Caddy not detected from 'Server: Caddy/2.7.6'")
+        self.assertNotIn("Apache", web_servers,
+                         "Apache falsely detected from 'Server: Caddy/2.7.6'")
+        self.assertNotIn("nginx", web_servers,
+                         "nginx falsely detected from 'Server: Caddy/2.7.6'")
+
+    def test_server_nginx_reports_nginx_and_not_apache(self):
+        """Server: nginx/1.25.3 must detect nginx and must not detect Apache."""
+        result = headers_layer({"Server": "nginx/1.25.3"})
+        web_servers = _names(result, "web_servers")
+        self.assertIn("nginx", web_servers,
+                      "nginx not detected from 'Server: nginx/1.25.3'")
+        self.assertNotIn("Apache", web_servers,
+                         "Apache falsely detected from 'Server: nginx/1.25.3'")\
+
+    def test_server_apache_reports_apache_and_not_nginx(self):
+        """Server: Apache/2.4.58 must detect Apache and must not detect nginx."""
+        result = headers_layer({"Server": "Apache/2.4.58 (Ubuntu)"})
+        web_servers = _names(result, "web_servers")
+        self.assertIn("Apache", web_servers,
+                      "Apache not detected from 'Server: Apache/2.4.58 (Ubuntu)'")
+        self.assertNotIn("nginx", web_servers,
+                         "nginx falsely detected from 'Server: Apache/2.4.58 (Ubuntu)'")
+
 
 # ---------------------------------------------------------------------------
 # Layer 2: cookies_layer

@@ -24,16 +24,19 @@ from __future__ import annotations
 # Web servers — detected from HTTP response headers
 # ---------------------------------------------------------------------------
 WEB_SERVER_SIGNATURES: dict[str, list[tuple[str, str, int]]] = {
-    "Apache":  [("header_name",  "server",         95),
-                ("header_value", "apache",         95)],
-    "nginx":   [("header_name",  "server",         95),
-                ("header_value", "nginx",          95)],
-    "IIS":     [("header_value", "iis",            95),
-                ("header_value", "microsoft-iis",  95)],
-    "Caddy":   [("header_value", "caddy",          90)],
-    "LiteSpeed": [("header_value", "litespeed",    90)],
-    "Gunicorn":  [("header_value", "gunicorn",     90)],
-    "Tornado":   [("header_value", "tornadoserver",85)],
+    # Detection is value-based only: the Server header's *presence* is not a
+    # reliable indicator of the server implementation — virtually every HTTP
+    # response carries a Server header regardless of origin.  Use header_value
+    # markers so that only responses whose Server banner contains the
+    # technology name are matched.
+    "Apache":    [("header_value", "apache",         95)],
+    "nginx":     [("header_value", "nginx",          95)],
+    "IIS":       [("header_value", "iis",            95),
+                  ("header_value", "microsoft-iis",  95)],
+    "Caddy":     [("header_value", "caddy",          90)],
+    "LiteSpeed": [("header_value", "litespeed",      90)],
+    "Gunicorn":  [("header_value", "gunicorn",       90)],
+    "Tornado":   [("header_value", "tornadoserver",  85)],
 }
 
 # ---------------------------------------------------------------------------

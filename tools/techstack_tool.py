@@ -93,7 +93,7 @@ def tech_stack_detect(domain: str) -> dict:
             },
             "fingerprints": {
                 "headers":   {"server": "nginx/1.18", ...},
-                "cookies":   ["phpsessid"],
+                "cookies":   ["PHPSESSID"],
                 "meta_tags": {"generator": "WordPress 6.4"},
             },
         }
@@ -139,11 +139,14 @@ def tech_stack_detect(domain: str) -> dict:
     finally:
         resp.close()
 
-    technologies, fp_artefacts = fingerprint(
-        dict(resp.headers),
-        body,
-        cookie_names=cookie_names,
-    )
+    try:
+        technologies, fp_artefacts = fingerprint(
+            dict(resp.headers),
+            body,
+            cookie_names=cookie_names,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"success": False, "error": f"Fingerprinting error: {exc}"}
 
     return {
         "success":      True,
