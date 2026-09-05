@@ -64,7 +64,8 @@ _WAF_BLOCK_PAGE_HEADER_SIGNATURES = (
 # required for the same reason as Akamai's entry above: only 1 directly
 # confirmed live sample, no proof this string is exclusive to block
 # pages, so an error-class status is required as a second signal
-# rather than trusting the body substring alone.
+# rather than trusting the body substring alone (the same policy the
+# Akamai entry below follows).
 #
 # Akamai is detected by BODY fingerprint, not the Server header, for the
 # opposite reason: `Server: AkamaiGHost` identifies Akamai's edge
@@ -100,10 +101,10 @@ def _detect_waf_block_page(raw_headers: dict, status_code: int, body: str) -> st
 
     body_lower = body.lower()
     for needles, provider, min_status in _WAF_BLOCK_PAGE_BODY_SIGNATURES:
+        if min_status is not None and status_code < min_status:
+            continue
         required = (needles,) if isinstance(needles, str) else needles
         if not all(needle in body_lower for needle in required):
-            continue
-        if min_status is not None and status_code < min_status:
             continue
         return provider
 

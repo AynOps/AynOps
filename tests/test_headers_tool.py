@@ -567,6 +567,9 @@ class TestHeadersAnalyzer(unittest.TestCase):
         }, body="<html><body><h1>404 Not Found</h1></body></html>")
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
+        self.assertEqual(
+            result["headers"]["x-frame-options"]["value"], "SAMEORIGIN"
+        )
 
     @patch("tools.headers_tool.requests.get")
     def test_akamai_ordinary_403_is_not_classified_as_block(self, mock_get):
@@ -575,6 +578,7 @@ class TestHeadersAnalyzer(unittest.TestCase):
         }, body="<html><body>403 Forbidden</body></html>")
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
+        self.assertEqual(result["headers"]["server"]["value"], "AkamaiGHost")
 
     @patch("tools.headers_tool.requests.get")
     def test_akamai_ordinary_5xx_is_not_classified_as_block(self, mock_get):
@@ -584,6 +588,7 @@ class TestHeadersAnalyzer(unittest.TestCase):
             }, body="<html><body>Internal Server Error</body></html>")
             result = headers_analyzer("example.com")
             self.assertTrue(result["success"], f"status {status} should be analyzed, not blocked")
+            self.assertEqual(result["headers"]["server"]["value"], "AkamaiGHost")
 
     @patch("tools.headers_tool.requests.get")
     def test_akamai_block_fingerprint_without_error_status_is_not_blocked(self, mock_get):
@@ -595,6 +600,7 @@ class TestHeadersAnalyzer(unittest.TestCase):
         }, body="<html><body>Access Denied Reference #18.4a2b.0</body></html>")
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
+        self.assertEqual(result["headers"]["x-frame-options"]["value"], "DENY")
 
     @patch("tools.headers_tool.requests.get")
     def test_akamai_partial_fingerprint_is_not_blocked(self, mock_get):
@@ -605,6 +611,19 @@ class TestHeadersAnalyzer(unittest.TestCase):
         }, body="<html><body>Access Denied is what the admin said</body></html>")
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
+        self.assertEqual(result["headers"]["server"]["value"], "AkamaiGHost")
+
+    @patch("tools.headers_tool.requests.get")
+    def test_akamai_partial_fingerprint_reference_only_is_not_blocked(self, mock_get):
+        # The AND-check has a second path: "reference #" present without
+        # "access denied" -- e.g. a ticketing page citing a reference
+        # number for unrelated reasons.
+        mock_get.return_value = _resp(403, {
+            "Server": "AkamaiGHost",
+        }, body="<html><body>Reference #AB-1942 has been escalated to support.</body></html>")
+        result = headers_analyzer("example.com")
+        self.assertTrue(result["success"])
+        self.assertEqual(result["headers"]["server"]["value"], "AkamaiGHost")
 
     @patch("tools.headers_tool.requests.get")
     def test_akamaighost_on_a_2xx_response_is_not_rejected(self, mock_get):
