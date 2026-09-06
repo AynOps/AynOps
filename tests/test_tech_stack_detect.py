@@ -141,6 +141,11 @@ class TestDetections(unittest.TestCase):
         result = _detect(headers={"Server": "Apache/2.4 (Ubuntu)"})
         self._assert_detected(result, "web_servers", "Apache")
 
+    def test_gws_detected_as_google_web_server(self):
+        result = _detect(headers={"Server": "gws"})
+        self._assert_detected(result, "web_servers", "Google Web Server")
+    
+
     # ── programming language ──
 
     def test_php_detected_from_x_powered_by(self):
