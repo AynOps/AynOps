@@ -1,12 +1,12 @@
-from types import SimpleNamespace
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from urllib.parse import urlparse
 
+import dns.name
 import dns.rdata
 import dns.rdataclass
 import dns.rdatatype
-import dns.name
 import dns.resolver
 import pytest
 
@@ -32,6 +32,96 @@ def _cname_record(target):
     record = Mock()
     record.__str__ = lambda self: target
     return record
+
+
+def _cname_chain(*targets):
+    records = iter(targets)
+
+    def resolve(_name, _rtype, **_kwargs):
+        try:
+            return [_cname_record(next(records))]
+        except StopIteration:
+            raise dns.resolver.NoAnswer
+
+    return resolve
+
+
+def test_cname_chain_reaches_fingerprinted_service_and_preserves_evidence():
+    resolver = Mock()
+    resolver.resolve.side_effect = _cname_chain(
+        "Alias.Example.NET.",
+        "User.GitHub.IO.",
+    )
+
+    from tools.subdomain_takeover_tool import _resolve_cname
+
+    result = _resolve_cname("Blog.Example.Com.", resolver)
+
+    assert result.error is None
+    assert result.cname == "User.GitHub.IO"
+    assert result.chain == ("Alias.Example.NET", "User.GitHub.IO")
+    assert [call.args[0] for call in resolver.resolve.call_args_list] == [
+        "blog.example.com",
+        "alias.example.net",
+        "user.github.io",
+    ]
+
+
+def test_cname_chain_detects_loops():
+    resolver = Mock()
+    resolver.resolve.side_effect = _cname_chain(
+        "alias.example.net.",
+        "blog.example.com.",
+    )
+
+    from tools.subdomain_takeover_tool import _resolve_cname
+
+    result = _resolve_cname("blog.example.com", resolver)
+
+    assert result.error == "CNAME loop detected"
+    assert result.chain == ("alias.example.net", "blog.example.com")
+
+
+def test_cname_chain_stops_after_bounded_depth():
+    resolver = Mock()
+    resolver.resolve.side_effect = _cname_chain(
+        *(f"hop-{index}.example.net." for index in range(1, 7))
+    )
+
+    from tools.subdomain_takeover_tool import _resolve_cname
+
+    result = _resolve_cname("blog.example.com", resolver)
+
+    assert result.error == "CNAME chain exceeds maximum depth of 5"
+    assert len(result.chain) == 6
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+@patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
+@patch("tools.subdomain_takeover_tool.dns_enumeration")
+def test_multihop_cname_reaches_takeover_fingerprint(
+    mock_enum, mock_resolver_class, mock_get
+):
+    mock_enum.return_value = _enumeration_result(["blog.example.com"])
+    resolver = Mock()
+    resolver.resolve.side_effect = _cname_chain(
+        "alias.example.net.",
+        "user.github.io.",
+    )
+    mock_resolver_class.return_value = resolver
+    response = Mock(status_code=404)
+    response.text = "There isn't a GitHub Pages site here."
+    mock_get.return_value = response
+
+    result = subdomain_takeover("example.com")
+
+    assert result["total_vulnerable"] == 1
+    assert result["vulnerable"][0]["service"] == "GitHub Pages"
+    assert result["vulnerable"][0]["cname"] == "user.github.io"
+    assert result["cname_chains"] == {
+        "blog.example.com": ["alias.example.net", "user.github.io"]
+    }
+    mock_get.assert_called_once()
 
 
 @patch("tools.subdomain_takeover_tool.requests.get")
@@ -79,7 +169,7 @@ def test_fingerprint_match_without_indicator_is_not_vulnerable(mock_enum, mock_r
     mock_enum.return_value = _enumeration_result(["blog.example.com"])
 
     resolver = Mock()
-    resolver.resolve.return_value = [_cname_record("example.ghost.io.")]
+    resolver.resolve.side_effect = _cname_chain("example.ghost.io.")
     mock_resolver_class.return_value = resolver
 
     mock_response = Mock()
@@ -190,7 +280,7 @@ def test_unsupported_cname_service_is_unknown_without_negative_bucket(
     """A CNAME outside the known fingerprints must remain unknown, not negative."""
     mock_enum.return_value = _enumeration_result(["app.example.com"])
     resolver = Mock()
-    resolver.resolve.return_value = [_cname_record("app.unsupported.example.")]
+    resolver.resolve.side_effect = _cname_chain("app.unsupported.example.")
     mock_resolver_class.return_value = resolver
 
     result = subdomain_takeover("example.com")
@@ -267,7 +357,7 @@ def test_azure_vulnerable_matches_body(mock_enum, mock_resolver_class, mock_get)
     mock_enum.return_value = _enumeration_result(["app.example.com"])
 
     resolver = Mock()
-    resolver.resolve.return_value = [_cname_record("app.azurewebsites.net.")]
+    resolver.resolve.side_effect = _cname_chain("app.azurewebsites.net.")
     mock_resolver_class.return_value = resolver
 
     mock_response = Mock()
@@ -300,7 +390,7 @@ def test_https_failure_falls_back_to_http(mock_enum, mock_resolver_class, mock_g
     mock_enum.return_value = _enumeration_result(["app.example.com"])
 
     resolver = Mock()
-    resolver.resolve.return_value = [_cname_record("app.azurewebsites.net.")]
+    resolver.resolve.side_effect = _cname_chain("app.azurewebsites.net.")
     mock_resolver_class.return_value = resolver
 
     def http_side_effect(url, **kwargs):
@@ -338,7 +428,7 @@ def test_both_schemes_fail_is_unknown(mock_enum, mock_resolver_class, mock_get):
     mock_enum.return_value = _enumeration_result(["app.example.com"])
 
     resolver = Mock()
-    resolver.resolve.return_value = [_cname_record("app.azurewebsites.net.")]
+    resolver.resolve.side_effect = _cname_chain("app.azurewebsites.net.")
     mock_resolver_class.return_value = resolver
 
     mock_get.side_effect = real_requests.exceptions.ConnectionError("unreachable")
@@ -363,8 +453,8 @@ def test_both_schemes_fail_is_unknown(mock_enum, mock_resolver_class, mock_get):
 @patch("tools.subdomain_takeover_tool.dns_enumeration")
 def test_mixed_probe_outcomes_are_disjoint_and_total(mock_enum, mock_resolver_class, mock_get):
     """Every subdomain lands in exactly one of vulnerable, not-vulnerable, or unknown."""
-    import requests as real_requests
     import dns.resolver as real_dns
+    import requests as real_requests
 
     subdomains = [
         "vulnerable.example.com",
@@ -382,6 +472,8 @@ def test_mixed_probe_outcomes_are_disjoint_and_total(mock_enum, mock_resolver_cl
             raise real_dns.NoNameservers
         if name == "unsupported.example.com":
             return [_cname_record("app.unsupported.example.")]
+        if name not in subdomains:
+            raise real_dns.NoAnswer
         return [
             _cname_record(
                 "vulnerable.ghost.io."
@@ -493,7 +585,7 @@ def test_s3_fingerprint_matches_only_s3_endpoints(mock_enum, mock_resolver_class
     failures = []
     for cname, is_s3 in [(c, True) for c in s3_cnames] + [(c, False) for c in non_s3_cnames]:
         mock_get.reset_mock()
-        resolver.resolve.return_value = [_cname_record(cname)]
+        resolver.resolve.side_effect = _cname_chain(cname)
         mock_response = Mock()
         mock_response.status_code = 404
         mock_response.text = "NoSuchBucket"

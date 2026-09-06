@@ -6,9 +6,10 @@ fingerprints (GitHub Pages, Heroku, S3, Azure, Ghost, Shopify, Fastly), and
 confirms the takeover with an HTTP request checking for the service's
 takeover-indicating response.
 """
+
+import re
 from dataclasses import dataclass
 from enum import Enum
-import re
 
 import dns.exception
 import dns.resolver
@@ -58,6 +59,7 @@ _REQUEST_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 }
 _REQUEST_TIMEOUT = 10
+_MAX_CNAME_DEPTH = 5
 
 
 class _ProbeStatus(str, Enum):
@@ -81,6 +83,7 @@ class _TakeoverResult:
 @dataclass(frozen=True)
 class _CnameResolution:
     cname: str | None = None
+    chain: tuple[str, ...] = ()
     error: str | None = None
 
 
@@ -91,14 +94,43 @@ def _make_resolver() -> dns.resolver.Resolver:
 
 
 def _resolve_cname(subdomain: str, resolver) -> _CnameResolution:
-    """Distinguish an absent CNAME from a failed DNS lookup."""
-    try:
-        answers = resolver.resolve(subdomain, "CNAME", lifetime=5, tcp=True)
-        return _CnameResolution(cname=str(answers[0]).rstrip("."))
-    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
-        return _CnameResolution()
-    except dns.exception.DNSException as exc:
-        return _CnameResolution(error=f"{type(exc).__name__}: {exc}")
+    """Resolve a bounded CNAME chain and distinguish absence from failure."""
+    current = subdomain.lower().rstrip(".")
+    seen = {current}
+    chain = []
+
+    while True:
+        try:
+            answers = resolver.resolve(current, "CNAME", lifetime=5, tcp=True)
+        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+            return _CnameResolution(
+                cname=chain[-1] if chain else None,
+                chain=tuple(chain),
+            )
+        except dns.exception.DNSException as exc:
+            return _CnameResolution(
+                cname=chain[-1] if chain else None,
+                chain=tuple(chain),
+                error=f"{type(exc).__name__}: {exc}",
+            )
+
+        target = str(answers[0]).rstrip(".")
+        normalized_target = target.lower()
+        chain.append(target)
+        if normalized_target in seen:
+            return _CnameResolution(
+                cname=target,
+                chain=tuple(chain),
+                error="CNAME loop detected",
+            )
+        if len(chain) > _MAX_CNAME_DEPTH:
+            return _CnameResolution(
+                cname=target,
+                chain=tuple(chain),
+                error=f"CNAME chain exceeds maximum depth of {_MAX_CNAME_DEPTH}",
+            )
+        seen.add(normalized_target)
+        current = normalized_target
 
 
 def _match_fingerprint(cname: str) -> dict | None:
@@ -177,9 +209,12 @@ def subdomain_takeover(domain: str) -> dict:
     vulnerable = []
     not_vulnerable = []
     unknown = []
+    cname_chains = {}
 
     for subdomain in subdomains:
         cname_result = _resolve_cname(subdomain, resolver)
+        if cname_result.chain:
+            cname_chains[subdomain] = list(cname_result.chain)
         if cname_result.error is not None:
             unknown.append({
                 "subdomain": subdomain,
@@ -225,5 +260,6 @@ def subdomain_takeover(domain: str) -> dict:
         "vulnerable": vulnerable,
         "not_vulnerable": not_vulnerable,
         "unknown": unknown,
+        "cname_chains": cname_chains,
         "total_vulnerable": len(vulnerable),
     }
