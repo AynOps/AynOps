@@ -37,6 +37,7 @@ WEB_SERVER_SIGNATURES: dict[str, list[tuple[str, str, int]]] = {
     "LiteSpeed": [("header_value", "litespeed",      90)],
     "Gunicorn":  [("header_value", "gunicorn",       90)],
     "Tornado":   [("header_value", "tornadoserver",  85)],
+    "Google Web Server": [("header_value", "gws", 95)],
 }
 
 # ---------------------------------------------------------------------------
