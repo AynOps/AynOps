@@ -11,7 +11,7 @@ completed pages.
 | [`whois_lookup`](whois_lookup.md) | Domain registration data — registrant organization, registrar, creation date, expiry, and name servers | Available |
 | [`dns_enumeration`](dns_enumeration.md) | Enumerates DNS records and common subdomains | Available |
 | [`port_scan`](port_scan.md) | Nmap-powered port scanner with service and version detection | Available |
-| `ssl_inspect` | Inspects SSL/TLS certificates, cipher strength, SANs, and TLS version | Pending |
+| [`ssl_inspect`](ssl_inspect.md) | Inspects SSL/TLS certificates, cipher strength, SANs, and TLS version | Available |
 | `email_security_check` | Checks SPF, DKIM, and DMARC configuration | Pending |
 | `tech_stack_detect` | Detects web servers, CMSs, JavaScript frameworks, CDNs, and analytics | Pending |
 | `cert_transparency` | Queries Certificate Transparency logs and extracts certificate and subdomain information | Pending |
