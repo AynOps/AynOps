@@ -135,14 +135,14 @@ The values below are illustrative.
 | `tls_version` | string | Negotiated TLS protocol version, e.g. `"TLSv1.3"`. |
 | `wildcard_certificate` | boolean | `true` if the Common Name or any SAN starts with `*.`. |
 | `self_signed` | boolean | `true` if the Subject and Issuer RDN sequences are identical. |
-| `public_key_type` | string or null | Key algorithm: `"RSA"`, `"ECDSA"`, `"DSA"`, `"Ed25519"`, `"Ed448"`, or the raw class name. `null` when the `cryptography` library is not installed. |
+| `public_key_type` | string or null | Key algorithm: `"RSA"`, `"ECDSA"`, `"DSA"`, `"Ed25519"`, `"Ed448"`, or the raw class name. `null` when the `cryptography` library is not installed, or if the certificate's public key could not be parsed.|
 | `san_count` | integer | Number of `DNS` entries in the Subject Alternative Names extension. |
 | `validity_period_days` | integer | Total validity window in days (`not_after` − `not_before`). |
 | `certificate_status` | string | `"Healthy"`, `"Expiring Soon"` (≤ 30 days remaining), or `"Expired"`. |
 | `tls_security` | string | `"Strong"` (TLS 1.3), `"Good"` (TLS 1.2), `"Weak"` (TLS 1.1 or older), or `"Unknown"`. Because the connection context enforces a minimum of TLS 1.2, `"Weak"` cannot appear in a successful response — a server that only supports TLS 1.1 or older will produce a connection error instead. |
 | `cipher_security` | string | `"Strong"` (≥ 256-bit key and no weak pattern), `"Good"` (≥ 128-bit), `"Weak"` (known weak pattern or < 128-bit), or `"Unknown"`. |
 | `weak_tls_version` | boolean | `true` when the negotiated TLS version is TLS 1.1 or older (deprecated by RFC 8996 / PCI-DSS). For the same reason as `tls_security`, this will always be `false` in a successful response. |
-| `weak_cipher` | boolean | `true` when the cipher name contains a known weak indicator (RC4, 3DES, NULL, EXPORT, EXP, MD5, RC2, ADH, AECDH) or the key size is below 128 bits. |
+| `weak_cipher` | boolean | `true` when the cipher name contains a known weak indicator (RC4, 3DES, DES-CBC, NULL, EXPORT, EXP, MD5, RC2, ADH, AECDH) or the key size is below 128 bits. |
 | `security_rating` | string | Overall rating: `"Excellent"`, `"Good"`, `"Fair"`, or `"Poor"`. See [Security rating](#security-rating) for the scoring logic. |
 
 ### `cipher` object
@@ -229,8 +229,7 @@ support TLS 1.1 or older will fail at the handshake level.
 - The tool connects to the live server; it needs outbound network access on the
   target port.
 - `public_key_type` is `null` when the `cryptography` package is not
-  installed. The package is pulled in transitively by the MCP stack, so it
-  should normally be present.
+  installed, or when the certificate's public key could not be parsed from the DER data. The package is pulled in transitively by the MCP stack, so it should normally be present.
 - The connection context enforces TLS 1.2 as the minimum version. Servers that
   do not support TLS 1.2 will produce a connection error, not a `weak_tls`
   result.
