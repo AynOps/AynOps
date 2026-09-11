@@ -44,6 +44,7 @@ Ensure your development environment has the following tools installed:
 - **Astral `uv`**: Recommended package and virtual environment manager ([Install uv](https://docs.astral.sh/uv/getting-started/installation))
 - **Nmap**: Network mapper binary available on your system `PATH` ([Download Nmap](https://nmap.org/download.html))
 - **Git**: Distributed version control system ([Download Git](https://git-scm.com/))
+- **Node.js and npm** *(Inspector workflow only)*: Required to launch the MCP Inspector through `npx`. They are **not required to run AynOps itself**. Install a current Node.js release that includes npm/npx ([Download Node.js](https://nodejs.org/)).
 - **Docker** *(Optional)*: For containerized testing ([Download Docker](https://www.docker.com/))
 
 ---
@@ -79,7 +80,7 @@ pip install pytest==9.0.3
 
 ---
 
-### 3. Verify System Dependencies (Nmap)
+### 3. Verify System Dependencies
 
 Nmap must be accessible in your system `PATH` for the port scanning engine:
 
@@ -92,6 +93,16 @@ nmap --version
 - **Fedora / RHEL**: `sudo dnf install -y nmap`
 - **Arch Linux**: `sudo pacman -S nmap`
 - **Windows**: Run the Nmap installer and add `C:\Program Files (x86)\Nmap` (or `C:\Program Files\Nmap`) to your system `PATH` environment variables.
+
+For the optional MCP Inspector workflow, also verify that Node.js, npm, and `npx` are available:
+
+```bash
+node --version
+npm --version
+npx --version
+```
+
+`npx` must resolve from your system `PATH` because FastMCP uses it to launch the Inspector. These Node.js tools are only needed for the Inspector workflow; AynOps itself continues to use the Python/`uv` runtime described above.
 
 ---
 
@@ -458,12 +469,23 @@ Before opening a pull request, perform manual verification of your changes:
 
 ### 1. Interactive Testing with FastMCP Inspector
 
-FastMCP ships with an interactive browser-based MCP inspector to inspect tool schemas and test tool invocations:
+FastMCP ships with an interactive browser-based MCP inspector to inspect tool schemas and test tool invocations.
+
+This workflow requires Node.js/npm and a working `npx` command in addition to AynOps' Python/`uv` environment. Node.js is required by the Inspector tooling, not by AynOps itself. Verify the Node.js toolchain before launching the Inspector:
 
 ```bash
-# Launch FastMCP Inspector
+node --version
+npm --version
+npx --version
+```
+
+Then launch the Inspector:
+
+```bash
 uv run fastmcp dev inspector server.py
 ```
+
+If the required MCP Inspector package is not already available locally, `npx` may prompt to install it. Accept that prompt to let `npx` obtain the version required by the current FastMCP/Inspector tooling. Do not pin a package version in these instructions because that requirement may change over time.
 
 Verify that:
 - The tool appears in the listed capabilities.
