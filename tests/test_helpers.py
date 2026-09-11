@@ -110,9 +110,22 @@ class TestHelpers(unittest.TestCase):
         self.assertIsNone(safe_parse_datetime([]))
 
     def test_safe_parse_datetime_list_with_empty_first_element(self):
-        """A list whose first element is empty/None falls through to None."""
-        self.assertIsNone(safe_parse_datetime([None, "2025-12-25"]))
-        self.assertIsNone(safe_parse_datetime(["", "2025-12-25"]))
+        """A list whose first element is empty/None falls through to a later valid element."""
+        self.assertEqual(safe_parse_datetime([None, "2025-12-25"]), datetime(2025, 12, 25))
+        self.assertEqual(safe_parse_datetime(["", "2025-12-25"]), datetime(2025, 12, 25))
+
+    def test_safe_parse_datetime_list_falls_back_to_later_element(self):
+        """An unparseable first element falls back to a later parseable one."""
+        result = safe_parse_datetime(["not-a-real-date", "2028-09-14 04:00:00+00:00"])
+        self.assertEqual(result, datetime(2028, 9, 14, 4, 0, 0, tzinfo=timezone.utc))
+
+    def test_safe_parse_datetime_list_all_unparseable(self):
+        """A list with no parseable elements returns None."""
+        self.assertIsNone(safe_parse_datetime(["not-a-date", "also-not-a-date"]))
+
+    def test_safe_parse_datetime_single_element_list(self):
+        """A single-element list parses its only candidate."""
+        self.assertEqual(safe_parse_datetime(["2025-12-25"]), datetime(2025, 12, 25))
 
     def test_safe_parse_datetime_invalid_string_returns_none(self):
         """A genuinely unparseable string returns None, not a crash."""
