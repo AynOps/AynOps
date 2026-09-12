@@ -27,7 +27,7 @@ Focus on high-signal technical engineering. Disagree about protocols, architectu
 - **Security elitism, gatekeeping, and condescension.**  
   Cybersecurity has a steep learning curve. Mocking someone's networking knowledge, Python proficiency, or the fact that they are new to open-source contributions will not be tolerated.
 - **Weaponizing security knowledge.**  
-  Do not use obscure security jargon or complex threat vectors to belittle, confuse, or embarrass other contributors.
+  Do not use obscure security jargon or complex threat vectors to belittle, confuse, or embarrass other contributors. For authorized-use and responsible-use requirements, see [SECURITY.md](SECURITY.md).
 - **Submitting bad-faith or malicious code.**  
   Attempting to slip in obfuscated logic, hidden command injections, telemetry backdoors, or unvetted data-exfiltration mechanics is grounds for an immediate, permanent ban.
 - **Harassment and toxic behavior in any form.**  
