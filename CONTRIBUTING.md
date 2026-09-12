@@ -23,6 +23,7 @@ We welcome contributions from cybersecurity researchers, software engineers, and
 
 ## 📌 Before You Start
 
+All participants in the AynOps project are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md) — **challenge the code, not the contributor.**
 Before authoring code or submitting pull requests, please review our foundational development principles:
 
 1. **Non-Destructive & Safe Operations**: AynOps is strictly a reconnaissance and security assessment server. All tools must perform non-destructive, read-only telemetry gathering and analysis. Exploit payloads, denial-of-service triggers, or unauthorized modification mechanics are strictly prohibited.

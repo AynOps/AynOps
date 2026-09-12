@@ -606,7 +606,7 @@ Check the current planned **[Roadmap](https://github.com/orgs/AynOps/discussions
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, project structure, and a guide to adding support for a new tool — that's currently the highest-value place to contribute.
+Contributions, issues, and feature requests are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, project structure, and a guide to adding support for a new tool — that's currently the highest-value place to contribute. All participants are expected to follow [Code of Conduct](CODE_OF_CONDUCT.md).
 
 Quick version:
 
