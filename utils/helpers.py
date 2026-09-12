@@ -74,18 +74,15 @@ def safe_parse_datetime(date_input) -> datetime | None:
         return date_input
 
     # python-whois returns a list of datetimes for some TLDs (e.g. when the
-    # registrar exposes both registry and registrar expiration dates). Take
-    # the first element — they are typically identical, and the alternative
-    # (str(list)) yields "['2025-12-25 00:00:00']" which matches no format
-    # and silently suppresses domain-expiry warnings downstream.
+    # registrar exposes both registry and registrar expiration dates). Try
+    # each candidate in sequence until one parses successfully, avoiding
+    # str(list) which yields "['...']" and matches no format.
     if isinstance(date_input, list):
-        if not date_input:
-            return None
-        date_input = date_input[0]
-        if not date_input:
-            return None
-        if isinstance(date_input, datetime):
-            return date_input
+        for item in date_input:
+            parsed = safe_parse_datetime(item)
+            if parsed is not None:
+                return parsed
+        return None
 
     clean_str = str(date_input).strip().replace("Z", "+00:00")
     
