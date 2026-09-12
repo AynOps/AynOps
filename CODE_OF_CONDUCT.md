@@ -53,7 +53,6 @@ This Code of Conduct applies across all project-affiliated digital spaces:
 If you experience or witness behavior that violates these standards, please report it privately rather than escalating public conflict in the issue tracker:
 
 - **GitHub**: [@gaoharimran29-glitch](https://github.com/gaoharimran29-glitch)
-- **LinkedIn**: [Gaohar Imran](https://www.linkedin.com/in/gaohar-imran-5a4063379/)
 - **Email**: `gaoharimran29@gmail.com`
 
 When filing a report, please include:
