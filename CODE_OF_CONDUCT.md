@@ -55,6 +55,8 @@ If you experience or witness behavior that violates these standards, please repo
 - **GitHub**: [@gaoharimran29-glitch](https://github.com/gaoharimran29-glitch)
 - **Email**: `gaoharimran29@gmail.com`
 
+If a report concerns the person listed above, please indicate this when submitting the report so that it can be routed to **[@SemTiOne](https://github.com/SemTiOne)** for independent review.
+
 When filing a report, please include:
 1. Links to the relevant issue, PR, comment, or commit.
 2. A concise explanation of the incident and impact.
