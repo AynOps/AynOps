@@ -44,7 +44,7 @@ This Code of Conduct applies across all project-affiliated digital spaces:
 - Commit messages and code review comments
 - Any official AynOps communication channels or project boards that may be established
 - Future community platforms officially adopted by the project (e.g., Discord/Slack)
-- External spaces when formally representing the AynOps project (e.g., presenting or publishing on behalf of the project)
+- External spaces directly moderated by AynOps maintainers when formally representing the project (e.g., presenting or publishing on behalf of the project)
 
 ---
 
