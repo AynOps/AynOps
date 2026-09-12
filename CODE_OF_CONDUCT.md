@@ -62,7 +62,7 @@ When filing a report, please include:
 2. A concise explanation of the incident and impact.
 3. Any relevant context or screenshots.
 
-All reports will be handled confidentially and promptly. You will not face public retaliation or exposure for reporting conduct violations in good faith.
+All reports will be handled confidentially and promptly. Any public warning or documentation of a violation will describe the conduct involved without identifying the reporter. You will not face public retaliation or exposure for reporting conduct violations in good faith.
 
 > [!NOTE]
 > For **security vulnerabilities** in the AynOps codebase itself (such as command injection, path traversal, or privilege escalation flaws), please follow our responsible disclosure workflow outlined in [SECURITY.md](SECURITY.md) instead of filing conduct reports.
