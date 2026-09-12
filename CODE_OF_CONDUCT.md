@@ -79,12 +79,6 @@ Maintainers and core contributors are held strictly to the same standard.
 
 ---
 
-## Why This Exists
-
-Reconnaissance and offensive/defensive cybersecurity tools often spark intense technical debates regarding scan efficiency, detection mechanics, and responsible disclosure. We are explicit about our standards so that AynOps remains a collaborative, high-signal environment where developers and security researchers can build powerful, reliable open-source tooling without unnecessary toxicity or ego.
-
----
-
 <div align="center">
   <sub>Adapted in spirit from the <a href="https://www.contributor-covenant.org/">Contributor Covenant</a>, customized to reflect the technical and operational ethos of AynOps.</sub>
 </div>
