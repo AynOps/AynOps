@@ -10,6 +10,7 @@ takeover-indicating response.
 import re
 from dataclasses import dataclass
 from enum import Enum
+from urllib.parse import urlparse
 
 import dns.exception
 import dns.resolver
@@ -71,6 +72,7 @@ class _ProbeStatus(str, Enum):
 @dataclass(frozen=True)
 class _ProbeResult:
     response: requests.Response | None
+    request_url: str | None = None
     errors: tuple[dict[str, str], ...] = ()
 
 
@@ -78,6 +80,8 @@ class _ProbeResult:
 class _TakeoverResult:
     status: _ProbeStatus
     probe_errors: tuple[dict[str, str], ...] = ()
+    evidence: dict | None = None
+    confidence: str | None = None
 
 
 @dataclass(frozen=True)
@@ -154,35 +158,103 @@ def _probe(subdomain: str) -> _ProbeResult:
     """
     errors = []
     for scheme in ("https", "http"):
+        url = f"{scheme}://{subdomain}"
         try:
             response = requests.get(
-                f"{scheme}://{subdomain}",
+                url,
                 headers=_REQUEST_HEADERS,
                 timeout=_REQUEST_TIMEOUT,
             )
-            return _ProbeResult(response=response)
+            return _ProbeResult(response=response, request_url=url)
         except requests.exceptions.RequestException as exc:
             errors.append({
                 "scheme": scheme,
+                "url": url,
                 "error": f"{type(exc).__name__}: {exc}",
             })
             continue
     return _ProbeResult(response=None, errors=tuple(errors))
 
 
+def _response_url(response) -> str | None:
+    """Return the response's URL, tolerating test doubles that lack one."""
+    url = getattr(response, "url", None)
+    return url if isinstance(url, str) else None
+
+
+def _redirect_chain(response) -> tuple[str, ...]:
+    """Return every URL requested across followed redirects, ending at the final URL."""
+    urls = []
+    history = getattr(response, "history", None)
+    if isinstance(history, (list, tuple)):
+        for hop in history:
+            hop_url = _response_url(hop)
+            if hop_url is not None:
+                urls.append(hop_url)
+    final_url = _response_url(response)
+    if final_url is not None:
+        urls.append(final_url)
+    return tuple(urls)
+
+
+def _assess_confidence(matched_indicator: dict | None, cross_host_redirect: bool) -> str:
+    """Rate how conclusively the probe evidence supports a real takeover.
+
+    Severity describes the impact if the finding is exploitable; confidence
+    describes how strong the evidence is. A service-specific body marker
+    served by the probed host is the strongest signal. Matching only a bare
+    status code is weaker, and matching content served after a redirect to a
+    different host is weaker still because the fingerprint may reflect a
+    third-party site rather than the scanned subdomain.
+    """
+    weak_signal = matched_indicator is None or matched_indicator["type"] != "body"
+    if weak_signal and cross_host_redirect:
+        return "low"
+    if weak_signal or cross_host_redirect:
+        return "medium"
+    return "high"
+
+
 def _confirms_takeover(subdomain: str, fingerprint: dict) -> _TakeoverResult:
-    """Return the tri-state takeover result and probe failure evidence."""
+    """Return the tri-state takeover result with probe evidence and confidence."""
     probe = _probe(subdomain)
     if probe.response is None:
         return _TakeoverResult(_ProbeStatus.UNABLE_TO_PROBE, probe.errors)
 
+    response = probe.response
     indicator = fingerprint["indicator"]
     if "status" in indicator:
-        confirmed = probe.response.status_code == indicator["status"]
+        confirmed = response.status_code == indicator["status"]
+        matched_indicator = (
+            {"type": "status", "value": indicator["status"]} if confirmed else None
+        )
     else:
-        confirmed = indicator["body"].lower() in probe.response.text.lower()
-    status = _ProbeStatus.CONFIRMED if confirmed else _ProbeStatus.NO_INDICATOR
-    return _TakeoverResult(status)
+        confirmed = indicator["body"].lower() in response.text.lower()
+        matched_indicator = (
+            {"type": "body", "value": indicator["body"]} if confirmed else None
+        )
+
+    redirect_chain = _redirect_chain(response)
+    final_url = _response_url(response) or probe.request_url
+    final_host = (urlparse(final_url).hostname or "").lower() if final_url else ""
+    cross_host_redirect = bool(final_host) and final_host != subdomain.lower()
+
+    evidence = {
+        "url": probe.request_url,
+        "final_url": final_url,
+        "status_code": response.status_code,
+        "redirect_chain": list(redirect_chain),
+        "cross_host_redirect": cross_host_redirect,
+        "matched_indicator": matched_indicator,
+    }
+
+    if not confirmed:
+        return _TakeoverResult(_ProbeStatus.NO_INDICATOR, evidence=evidence)
+    return _TakeoverResult(
+        _ProbeStatus.CONFIRMED,
+        evidence=evidence,
+        confidence=_assess_confidence(matched_indicator, cross_host_redirect),
+    )
 
 
 def subdomain_takeover(domain: str) -> dict:
@@ -243,6 +315,8 @@ def subdomain_takeover(domain: str) -> dict:
                 "service": fingerprint["service"],
                 "reason": f"CNAME points to unclaimed {fingerprint['service']} service",
                 "severity": "HIGH",
+                "confidence": probe_result.confidence,
+                "evidence": probe_result.evidence,
             })
         elif probe_result.status is _ProbeStatus.NO_INDICATOR:
             not_vulnerable.append(subdomain)
