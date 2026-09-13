@@ -974,6 +974,179 @@ def test_multi_signal_fingerprint_missing_signal_no_confirm(
         f"{service}: expected no_indicator when {missing_signal!r} signal is absent"
     )
 
+@patch("tools.subdomain_takeover_tool.requests.get")
+@patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
+@patch("tools.subdomain_takeover_tool.dns_enumeration")
+def test_vulnerable_finding_includes_structured_evidence(
+    mock_enum, mock_resolver_class, mock_get
+):
+    """Confirmed findings carry probe evidence and a confidence rating separate from severity."""
+    mock_enum.return_value = _enumeration_result(["blog.example.com"])
+    resolver = Mock()
+    resolver.resolve.side_effect = _cname_chain("example.ghost.io.")
+    mock_resolver_class.return_value = resolver
+
+    response = Mock()
+    response.status_code = 404
+    response.text = "404 Domain Not Found"
+    response.headers = {"x-ghost-cache-status": "MISS"}
+    response.url = "https://blog.example.com/"
+    mock_get.return_value = response
+
+    result = subdomain_takeover("example.com")
+
+    assert result["total_vulnerable"] == 1
+    finding = result["vulnerable"][0]
+    assert finding["severity"] == "HIGH"
+    assert finding["confidence"] == "high"
+    evidence = finding["evidence"]
+    assert evidence["url"] == "https://blog.example.com"
+    assert evidence["final_url"] == "https://blog.example.com/"
+    assert evidence["status_code"] == 404
+    assert evidence["matched_indicator"] == {
+        "type": "body",
+        "value": "404 Domain Not Found",
+    }
+    assert evidence["redirect_chain"] == ["https://blog.example.com"]
+    assert evidence["cross_host_redirect"] is False
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+@patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
+@patch("tools.subdomain_takeover_tool.dns_enumeration")
+def test_cross_host_redirect_is_recorded_and_lowers_confidence(
+    mock_enum, mock_resolver_class, mock_get
+):
+    """An indicator matched after a redirect to a different in-scope host is weaker evidence."""
+    mock_enum.return_value = _enumeration_result(["blog.example.com"])
+    resolver = Mock()
+    resolver.resolve.side_effect = _cname_chain("example.ghost.io.")
+    mock_resolver_class.return_value = resolver
+
+    redirect_resp = Mock(
+        status_code=302,
+        headers={"Location": "https://www.blog.example.com/landing"},
+    )
+    redirect_resp.url = "https://blog.example.com"
+    response = Mock()
+    response.status_code = 404
+    response.text = "404 Domain Not Found"
+    response.headers = {"x-ghost-cache-status": "MISS"}
+    response.url = "https://www.blog.example.com/landing"
+    mock_get.side_effect = [redirect_resp, response]
+
+    result = subdomain_takeover("example.com")
+
+    finding = result["vulnerable"][0]
+    assert finding["severity"] == "HIGH"
+    assert finding["confidence"] == "medium"
+    evidence = finding["evidence"]
+    assert evidence["cross_host_redirect"] is True
+    assert evidence["final_url"] == "https://www.blog.example.com/landing"
+    assert evidence["redirect_chain"] == [
+        "https://blog.example.com",
+        "https://www.blog.example.com/landing",
+    ]
+    assert evidence["matched_indicator"] == {
+        "type": "body",
+        "value": "404 Domain Not Found",
+    }
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+def test_status_only_indicator_yields_medium_confidence(mock_get):
+    """A bare status-code match is weaker evidence than a service-specific body marker."""
+    from tools.subdomain_takeover_tool import _ProbeStatus, _confirms_takeover
+
+    response = Mock()
+    response.status_code = 404
+    response.url = "https://app.example.com/"
+    mock_get.return_value = response
+
+    result = _confirms_takeover(
+        "app.example.com",
+        {"service": "Custom", "indicator": {"status": 404}},
+    )
+
+    assert result.status is _ProbeStatus.CONFIRMED
+    assert result.confidence == "medium"
+    assert result.evidence["matched_indicator"] == {"type": "status", "value": 404}
+    assert result.evidence["status_code"] == 404
+    assert result.evidence["cross_host_redirect"] is False
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+def test_status_match_after_cross_host_redirect_is_low_confidence(mock_get):
+    """A status-only match on content served by a different host is the weakest evidence."""
+    from tools.subdomain_takeover_tool import _ProbeStatus, _confirms_takeover
+
+    redirect_resp = Mock(
+        status_code=302,
+        headers={"Location": "https://www.app.example.com/"},
+    )
+    redirect_resp.url = "https://app.example.com"
+    response = Mock()
+    response.status_code = 404
+    response.url = "https://www.app.example.com/"
+    mock_get.side_effect = [redirect_resp, response]
+
+    result = _confirms_takeover(
+        "app.example.com",
+        {"service": "Custom", "indicator": {"status": 404}},
+    )
+
+    assert result.status is _ProbeStatus.CONFIRMED
+    assert result.confidence == "low"
+    assert result.evidence["cross_host_redirect"] is True
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+def test_no_indicator_result_still_carries_probe_evidence(mock_get):
+    """Even a negative probe records what was observed for debugging."""
+    from tools.subdomain_takeover_tool import _ProbeStatus, _confirms_takeover
+
+    response = Mock()
+    response.status_code = 200
+    response.text = "Welcome to a live site"
+    response.url = "https://app.example.com/"
+    mock_get.return_value = response
+
+    result = _confirms_takeover(
+        "app.example.com",
+        {"service": "Ghost", "indicator": {"body": "404 Domain Not Found"}},
+    )
+
+    assert result.status is _ProbeStatus.NO_INDICATOR
+    assert result.confidence is None
+    assert result.evidence["status_code"] == 200
+    assert result.evidence["matched_indicator"] is None
+    assert result.evidence["url"] == "https://app.example.com"
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+@patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
+@patch("tools.subdomain_takeover_tool.dns_enumeration")
+def test_probe_failure_evidence_records_attempted_urls(
+    mock_enum, mock_resolver_class, mock_get
+):
+    """Failed probes keep the attempted URL alongside each transport error."""
+    import requests as real_requests
+
+    mock_enum.return_value = _enumeration_result(["app.example.com"])
+    resolver = Mock()
+    resolver.resolve.side_effect = _cname_chain("app.azurewebsites.net.")
+    mock_resolver_class.return_value = resolver
+
+    mock_get.side_effect = real_requests.exceptions.ConnectionError("unreachable")
+
+    result = subdomain_takeover("example.com")
+
+    probe_errors = result["unknown"][0]["probe_errors"]
+    assert [error["url"] for error in probe_errors] == [
+        "https://app.example.com",
+        "http://app.example.com",
+    ]
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
