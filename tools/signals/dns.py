@@ -1,4 +1,4 @@
-def dns_extractor(result , signals):
+def dns_extractor(result, signals):
     if result.get("success"):
         records = result.get("records", {})
         missing_dns = []

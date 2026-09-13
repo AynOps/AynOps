@@ -130,7 +130,9 @@ def test_multihop_cname_reaches_takeover_fingerprint(
 @patch("tools.subdomain_takeover_tool.dns_enumeration")
 def test_vulnerable_subdomain_is_flagged(mock_enum, mock_resolver_class, mock_get):
     """Dangling CNAME to a fingerprinted service + takeover indicator => vulnerable."""
-    mock_enum.return_value = _enumeration_result(["blog.example.com", "www.example.com"])
+    mock_enum.return_value = _enumeration_result(
+        ["blog.example.com", "www.example.com"]
+    )
 
     import dns.resolver as real_dns
 
@@ -166,7 +168,9 @@ def test_vulnerable_subdomain_is_flagged(mock_enum, mock_resolver_class, mock_ge
 @patch("tools.subdomain_takeover_tool.requests.get")
 @patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
 @patch("tools.subdomain_takeover_tool.dns_enumeration")
-def test_fingerprint_match_without_indicator_is_not_vulnerable(mock_enum, mock_resolver_class, mock_get):
+def test_fingerprint_match_without_indicator_is_not_vulnerable(
+    mock_enum, mock_resolver_class, mock_get
+):
     """CNAME matches a fingerprint but the service is still live => not vulnerable."""
     mock_enum.return_value = _enumeration_result(["blog.example.com"])
 
@@ -204,7 +208,9 @@ def test_no_dangling_cname_is_not_vulnerable(
     mock_enum, mock_resolver_class, mock_get, no_cname_error
 ):
     """Subdomain with no CNAME record at all => not vulnerable, without an HTTP probe."""
-    mock_enum.return_value = _enumeration_result(["www.example.com", "mail.example.com"])
+    mock_enum.return_value = _enumeration_result(
+        ["www.example.com", "mail.example.com"]
+    )
 
     resolver = Mock()
     resolver.resolve.side_effect = no_cname_error
@@ -444,19 +450,27 @@ def test_both_schemes_fail_is_unknown(mock_enum, mock_resolver_class, mock_get):
     assert result["total_vulnerable"] == 0
     assert result["not_vulnerable"] == []
     assert result["unknown"][0]["subdomain"] == "app.example.com"
-    assert result["unknown"][0]["reason"] == "Unable to complete HTTP probe over HTTPS or HTTP"
+    assert (
+        result["unknown"][0]["reason"]
+        == "Unable to complete HTTP probe over HTTPS or HTTP"
+    )
     assert [error["scheme"] for error in result["unknown"][0]["probe_errors"]] == [
         "https",
         "http",
     ]
-    assert all("ConnectionError: unreachable" in error["error"] for error in result["unknown"][0]["probe_errors"])
+    assert all(
+        "ConnectionError: unreachable" in error["error"]
+        for error in result["unknown"][0]["probe_errors"]
+    )
     assert mock_get.call_count == 2
 
 
 @patch("tools.subdomain_takeover_tool.requests.get")
 @patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
 @patch("tools.subdomain_takeover_tool.dns_enumeration")
-def test_mixed_probe_outcomes_are_disjoint_and_total(mock_enum, mock_resolver_class, mock_get):
+def test_mixed_probe_outcomes_are_disjoint_and_total(
+    mock_enum, mock_resolver_class, mock_get
+):
     """Every subdomain lands in exactly one of vulnerable, not-vulnerable, or unknown."""
     import dns.resolver as real_dns
     import requests as real_requests
@@ -517,16 +531,12 @@ def test_mixed_probe_outcomes_are_disjoint_and_total(mock_enum, mock_resolver_cl
         "unknown": [item["subdomain"] for item in result.get("unknown", [])],
     }
     classified_subdomains = [
-        subdomain
-        for bucket in bucket_subdomains.values()
-        for subdomain in bucket
+        subdomain for bucket in bucket_subdomains.values() for subdomain in bucket
     ]
     assert len(classified_subdomains) == len(subdomains)
     assert len(set(classified_subdomains)) == len(classified_subdomains)
     assert set(classified_subdomains) == set(subdomains)
-    bucket_sets = {
-        name: set(bucket) for name, bucket in bucket_subdomains.items()
-    }
+    bucket_sets = {name: set(bucket) for name, bucket in bucket_subdomains.items()}
     for left_name, left_bucket in bucket_sets.items():
         for right_name, right_bucket in bucket_sets.items():
             if left_name != right_name:
@@ -543,7 +553,9 @@ def test_mixed_probe_outcomes_are_disjoint_and_total(mock_enum, mock_resolver_cl
 @patch("tools.subdomain_takeover_tool.requests.get")
 @patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
 @patch("tools.subdomain_takeover_tool.dns_enumeration")
-def test_s3_fingerprint_matches_only_s3_endpoints(mock_enum, mock_resolver_class, mock_get):
+def test_s3_fingerprint_matches_only_s3_endpoints(
+    mock_enum, mock_resolver_class, mock_get
+):
     """Only actual S3 bucket endpoint CNAMEs select the AWS S3 fingerprint; other AWS endpoints are unknown and unprobed."""
     mock_enum.return_value = _enumeration_result(["static.example.com"])
     resolver = Mock()
@@ -591,7 +603,9 @@ def test_s3_fingerprint_matches_only_s3_endpoints(mock_enum, mock_resolver_class
     ]
 
     failures = []
-    for cname, is_s3 in [(c, True) for c in s3_cnames] + [(c, False) for c in non_s3_cnames]:
+    for cname, is_s3 in [(c, True) for c in s3_cnames] + [
+        (c, False) for c in non_s3_cnames
+    ]:
         mock_get.reset_mock()
         resolver.resolve.side_effect = _cname_chain(cname)
         mock_response = Mock()
@@ -611,18 +625,21 @@ def test_s3_fingerprint_matches_only_s3_endpoints(mock_enum, mock_resolver_class
                 and mock_get.call_count == 1
             )
             if not matched:
-                failures.append(f"actual S3 bucket endpoint must match and be probed: {cname}")
+                failures.append(
+                    f"actual S3 bucket endpoint must match and be probed: {cname}"
+                )
         else:
             ignored = (
                 result["vulnerable"] == []
                 and result["not_vulnerable"] == []
-                and [
-                    entry["subdomain"] for entry in result["unknown"]
-                ] == ["static.example.com"]
+                and [entry["subdomain"] for entry in result["unknown"]]
+                == ["static.example.com"]
                 and mock_get.call_count == 0
             )
             if not ignored:
-                failures.append(f"non-bucket endpoint must not match or be probed: {cname}")
+                failures.append(
+                    f"non-bucket endpoint must not match or be probed: {cname}"
+                )
 
     assert failures == [], "wrong AWS S3 fingerprint selection:\n" + "\n".join(failures)
 
@@ -637,7 +654,10 @@ def test_invalid_domain(mock_enum):
 
 @patch("tools.subdomain_takeover_tool.dns_enumeration")
 def test_enumeration_failure_propagates(mock_enum):
-    mock_enum.return_value = {"success": False, "error": "Domain example.com does not exist"}
+    mock_enum.return_value = {
+        "success": False,
+        "error": "Domain example.com does not exist",
+    }
     result = subdomain_takeover("example.com")
     assert result["success"] is False
     assert "does not exist" in result["error"]
@@ -651,7 +671,7 @@ def test_invalid_utf8_dns_record_does_not_escape_enumeration(mock_resolver_class
     txt_record = dns.rdata.from_wire(
         dns.rdataclass.IN,
         dns.rdatatype.TXT,
-        bytes([4, 0xff, 0xfe, 0x41, 0x42]),
+        bytes([4, 0xFF, 0xFE, 0x41, 0x42]),
         0,
         5,
     )
@@ -761,7 +781,9 @@ def test_fastly_fingerprint_refined_indicator():
         text="Fastly error: unknown domain: sub.example.com",
         headers={"X-Served-By": "cache-iad-kiad7000000-IAD"},
     )
-    with patch("tools.subdomain_takeover_tool._probe", return_value=mock_probe_wrong_status):
+    with patch(
+        "tools.subdomain_takeover_tool._probe", return_value=mock_probe_wrong_status
+    ):
         res = _confirms_takeover("sub.example.com", fingerprint)
         assert res.status.value == "no_indicator"
 
@@ -772,7 +794,9 @@ def test_explicit_redirect_handling_cross_domain_halt(mock_get):
     from tools.subdomain_takeover_tool import _probe
 
     # First request returns redirect to an external parking domain
-    redirect_resp = Mock(status_code=302, headers={"Location": "https://external-parking.com/landing"})
+    redirect_resp = Mock(
+        status_code=302, headers={"Location": "https://external-parking.com/landing"}
+    )
     redirect_resp.is_redirect = True
     mock_get.return_value = redirect_resp
 
@@ -785,7 +809,9 @@ def test_explicit_redirect_handling_cross_domain_halt(mock_get):
     assert mock_get.call_count == 1
     assert "sub.example.com" in mock_get.call_args[0][0]
     # Explicitly verify the external parking domain was never contacted
-    assert all("external-parking.com" not in call.args[0] for call in mock_get.call_args_list)
+    assert all(
+        "external-parking.com" not in call.args[0] for call in mock_get.call_args_list
+    )
 
 
 @patch("tools.subdomain_takeover_tool.requests.get")
@@ -808,7 +834,9 @@ def test_probe_preserves_rejected_out_of_scope_redirect(mock_get):
     assert result.redirect_chain == ("https://sub.example.com",)
     assert result.rejected_redirect_url == "https://external-parking.com/landing"
     assert mock_get.call_count == 1
-    assert all("external-parking.com" not in call.args[0] for call in mock_get.call_args_list)
+    assert all(
+        "external-parking.com" not in call.args[0] for call in mock_get.call_args_list
+    )
 
 
 @patch("tools.subdomain_takeover_tool.requests.get")
@@ -858,7 +886,9 @@ def test_ssrf_protection_blocks_private_and_loopback_ips():
     assert _check_host_ssrf("93.184.216.34") is None
 
     # Resolving to private IP via dnspython record objects
-    private_record = dns.rdata.from_text(dns.rdataclass.IN, dns.rdatatype.A, "10.10.10.10")
+    private_record = dns.rdata.from_text(
+        dns.rdataclass.IN, dns.rdatatype.A, "10.10.10.10"
+    )
     resolver = Mock()
     resolver.resolve.return_value = _ResolverAnswer([private_record], ttl=60)
     err = _check_host_ssrf("internal.example.com", resolver=resolver)
@@ -875,12 +905,16 @@ def test_ssrf_protection_blocks_private_and_loopback_ips():
         mock_get.assert_not_called()
 
 
-@pytest.mark.xfail(reason="Known TOCTOU/DNS rebinding limitation: requests.get resolution is decoupled from pre-validation")
+@pytest.mark.xfail(
+    reason="Known TOCTOU/DNS rebinding limitation: requests.get resolution is decoupled from pre-validation"
+)
 def test_ssrf_toctou_dns_rebinding_risk():
     """Document known TOCTOU risk where DNS resolves to public IP during pre-check but rebinds to private IP during requests.get."""
     from tools.subdomain_takeover_tool import _check_host_ssrf, _probe
 
-    public_record = dns.rdata.from_text(dns.rdataclass.IN, dns.rdatatype.A, "93.184.216.34")
+    public_record = dns.rdata.from_text(
+        dns.rdataclass.IN, dns.rdatatype.A, "93.184.216.34"
+    )
     resolver = Mock()
     # Pre-check passes because hostname resolves to a public IP
     resolver.resolve.return_value = _ResolverAnswer([public_record], ttl=60)
@@ -890,7 +924,12 @@ def test_ssrf_toctou_dns_rebinding_risk():
     # Simulate DNS rebinding during actual HTTP fetch:
     # Pre-check passed, but during requests.get the connection targets an internal resource
     with patch("tools.subdomain_takeover_tool.requests.get") as mock_get:
-        mock_resp = Mock(status_code=200, text="internal private console", headers={}, is_redirect=False)
+        mock_resp = Mock(
+            status_code=200,
+            text="internal private console",
+            headers={},
+            is_redirect=False,
+        )
         mock_get.return_value = mock_resp
 
         probe_res = _probe("rebind.example.com", resolver=resolver)
@@ -904,117 +943,129 @@ def test_ssrf_toctou_dns_rebinding_risk():
 # Each test verifies that missing any ONE signal blocks a confirmed takeover.
 # ---------------------------------------------------------------------------
 
+
 def _make_fingerprint(service_name):
     from tools.subdomain_takeover_tool import VULNERABLE_FINGERPRINTS
+
     return next(f for f in VULNERABLE_FINGERPRINTS if f["service"] == service_name)
 
 
-@pytest.mark.parametrize("service,cname,body,status,headers", [
-    (
-        "GitHub Pages",
-        "user.github.io",
-        "There isn't a GitHub Pages site here.",
-        404,
-        {"Server": "GitHub.com"},
-    ),
-    (
-        "Heroku",
-        "myapp.herokuapp.com",
-        "No such app",
-        404,
-        {"X-Request-Id": "aabbccdd-1234"},
-    ),
-    (
-        "AWS S3",
-        "bucket.s3.amazonaws.com",
-        "NoSuchBucket",
-        404,
-        {"Server": "AmazonS3"},
-    ),
-    (
-        "Azure",
-        "site.azurewebsites.net",
-        "404 Web Site not found",
-        404,
-        {"X-Ms-Request-Id": "abc123"},
-    ),
-    (
-        "Ghost",
-        "pub.ghost.io",
-        "404 Domain Not Found",
-        404,
-        {"X-Ghost-Cache-Status": "MISS"},
-    ),
-    (
-        "Shopify",
-        "store.myshopify.com",
-        "Sorry, this shop",
-        404,
-        {"X-Shopid": "987654"},
-    ),
-])
+@pytest.mark.parametrize(
+    "service,cname,body,status,headers",
+    [
+        (
+            "GitHub Pages",
+            "user.github.io",
+            "There isn't a GitHub Pages site here.",
+            404,
+            {"Server": "GitHub.com"},
+        ),
+        (
+            "Heroku",
+            "myapp.herokuapp.com",
+            "No such app",
+            404,
+            {"X-Request-Id": "aabbccdd-1234"},
+        ),
+        (
+            "AWS S3",
+            "bucket.s3.amazonaws.com",
+            "NoSuchBucket",
+            404,
+            {"Server": "AmazonS3"},
+        ),
+        (
+            "Azure",
+            "site.azurewebsites.net",
+            "404 Web Site not found",
+            404,
+            {"X-Ms-Request-Id": "abc123"},
+        ),
+        (
+            "Ghost",
+            "pub.ghost.io",
+            "404 Domain Not Found",
+            404,
+            {"X-Ghost-Cache-Status": "MISS"},
+        ),
+        (
+            "Shopify",
+            "store.myshopify.com",
+            "Sorry, this shop",
+            404,
+            {"X-Shopid": "987654"},
+        ),
+    ],
+)
 def test_multi_signal_fingerprint_confirmed(service, cname, body, status, headers):
     """Issue #7: All signals present => confirmed for each of the 6 non-Fastly services."""
     from tools.subdomain_takeover_tool import _confirms_takeover
+
     fingerprint = _make_fingerprint(service)
     mock_probe = Mock()
     mock_probe.errors = ()
     mock_probe.response = Mock(status_code=status, text=body, headers=headers)
     with patch("tools.subdomain_takeover_tool._probe", return_value=mock_probe):
-        res = _confirms_takeover(f"sub.example.com", fingerprint)
-    assert res.status.value == "confirmed", f"{service}: expected confirmed with all signals"
+        res = _confirms_takeover("sub.example.com", fingerprint)
+    assert res.status.value == "confirmed", (
+        f"{service}: expected confirmed with all signals"
+    )
 
 
-@pytest.mark.parametrize("service,cname,body,status,headers", [
-    (
-        "GitHub Pages",
-        "user.github.io",
-        "There isn't a GitHub Pages site here.",
-        404,
-        {"Server": "GitHub.com"},
-    ),
-    (
-        "Heroku",
-        "myapp.herokuapp.com",
-        "No such app",
-        404,
-        {"X-Request-Id": "aabbccdd-1234"},
-    ),
-    (
-        "AWS S3",
-        "bucket.s3.amazonaws.com",
-        "NoSuchBucket",
-        404,
-        {"Server": "AmazonS3"},
-    ),
-    (
-        "Azure",
-        "site.azurewebsites.net",
-        "404 Web Site not found",
-        404,
-        {"X-Ms-Request-Id": "abc123"},
-    ),
-    (
-        "Ghost",
-        "pub.ghost.io",
-        "404 Domain Not Found",
-        404,
-        {"X-Ghost-Cache-Status": "MISS"},
-    ),
-    (
-        "Shopify",
-        "store.myshopify.com",
-        "Sorry, this shop",
-        404,
-        {"X-Shopid": "987654"},
-    ),
-])
+@pytest.mark.parametrize(
+    "service,cname,body,status,headers",
+    [
+        (
+            "GitHub Pages",
+            "user.github.io",
+            "There isn't a GitHub Pages site here.",
+            404,
+            {"Server": "GitHub.com"},
+        ),
+        (
+            "Heroku",
+            "myapp.herokuapp.com",
+            "No such app",
+            404,
+            {"X-Request-Id": "aabbccdd-1234"},
+        ),
+        (
+            "AWS S3",
+            "bucket.s3.amazonaws.com",
+            "NoSuchBucket",
+            404,
+            {"Server": "AmazonS3"},
+        ),
+        (
+            "Azure",
+            "site.azurewebsites.net",
+            "404 Web Site not found",
+            404,
+            {"X-Ms-Request-Id": "abc123"},
+        ),
+        (
+            "Ghost",
+            "pub.ghost.io",
+            "404 Domain Not Found",
+            404,
+            {"X-Ghost-Cache-Status": "MISS"},
+        ),
+        (
+            "Shopify",
+            "store.myshopify.com",
+            "Sorry, this shop",
+            404,
+            {"X-Shopid": "987654"},
+        ),
+    ],
+)
 @pytest.mark.parametrize("missing_signal", ["status", "body", "headers"])
 def test_multi_signal_fingerprint_missing_signal_no_confirm(
     service, cname, body, status, headers, missing_signal
 ):
     """Issue #7: Missing any ONE signal => no_indicator (not confirmed) for each service."""
     from tools.subdomain_takeover_tool import _confirms_takeover
+
     fingerprint = _make_fingerprint(service)
     mock_probe = Mock()
     mock_probe.errors = ()
@@ -1022,12 +1073,15 @@ def test_multi_signal_fingerprint_missing_signal_no_confirm(
     bad_status = 200 if missing_signal == "status" else status
     bad_body = "This site is live" if missing_signal == "body" else body
     bad_headers = {} if missing_signal == "headers" else headers
-    mock_probe.response = Mock(status_code=bad_status, text=bad_body, headers=bad_headers)
+    mock_probe.response = Mock(
+        status_code=bad_status, text=bad_body, headers=bad_headers
+    )
     with patch("tools.subdomain_takeover_tool._probe", return_value=mock_probe):
         res = _confirms_takeover("sub.example.com", fingerprint)
     assert res.status.value == "no_indicator", (
         f"{service}: expected no_indicator when {missing_signal!r} signal is absent"
     )
+
 
 @patch("tools.subdomain_takeover_tool.requests.get")
 @patch("tools.subdomain_takeover_tool.dns.resolver.Resolver")
@@ -1112,7 +1166,7 @@ def test_cross_host_redirect_is_recorded_and_lowers_confidence(
 @patch("tools.subdomain_takeover_tool.requests.get")
 def test_status_only_indicator_yields_medium_confidence(mock_get):
     """A bare status-code match is weaker evidence than a service-specific body marker."""
-    from tools.subdomain_takeover_tool import _ProbeStatus, _confirms_takeover
+    from tools.subdomain_takeover_tool import _confirms_takeover, _ProbeStatus
 
     response = Mock()
     response.status_code = 404
@@ -1134,7 +1188,7 @@ def test_status_only_indicator_yields_medium_confidence(mock_get):
 @patch("tools.subdomain_takeover_tool.requests.get")
 def test_status_match_after_cross_host_redirect_is_low_confidence(mock_get):
     """A status-only match on content served by a different host is the weakest evidence."""
-    from tools.subdomain_takeover_tool import _ProbeStatus, _confirms_takeover
+    from tools.subdomain_takeover_tool import _confirms_takeover, _ProbeStatus
 
     redirect_resp = Mock(
         status_code=302,
@@ -1159,7 +1213,7 @@ def test_status_match_after_cross_host_redirect_is_low_confidence(mock_get):
 @patch("tools.subdomain_takeover_tool.requests.get")
 def test_no_indicator_result_still_carries_probe_evidence(mock_get):
     """Even a negative probe records what was observed for debugging."""
-    from tools.subdomain_takeover_tool import _ProbeStatus, _confirms_takeover
+    from tools.subdomain_takeover_tool import _confirms_takeover, _ProbeStatus
 
     response = Mock()
     response.status_code = 200
@@ -1207,7 +1261,7 @@ def test_probe_failure_evidence_records_attempted_urls(
 @patch("tools.subdomain_takeover_tool.requests.get")
 def test_rejected_redirect_becomes_terminal_hop_in_evidence(mock_get):
     """A rejected out-of-scope Location ends the evidence chain, becomes final_url, and drops confidence."""
-    from tools.subdomain_takeover_tool import _ProbeStatus, _confirms_takeover
+    from tools.subdomain_takeover_tool import _confirms_takeover, _ProbeStatus
 
     redirect_resp = Mock(
         status_code=302,
@@ -1235,13 +1289,15 @@ def test_rejected_redirect_becomes_terminal_hop_in_evidence(mock_get):
     assert evidence["cross_host_redirect"] is True
     # The external target is evidence only — it was never requested.
     assert mock_get.call_count == 1
-    assert all("external-parking.com" not in call.args[0] for call in mock_get.call_args_list)
+    assert all(
+        "external-parking.com" not in call.args[0] for call in mock_get.call_args_list
+    )
 
 
 @patch("tools.subdomain_takeover_tool.requests.get")
 def test_body_match_with_rejected_redirect_is_medium_confidence(mock_get):
     """A body marker on a response whose redirect was rejected still downgrades confidence."""
-    from tools.subdomain_takeover_tool import _ProbeStatus, _confirms_takeover
+    from tools.subdomain_takeover_tool import _confirms_takeover, _ProbeStatus
 
     redirect_resp = Mock(
         status_code=302,
@@ -1258,10 +1314,18 @@ def test_body_match_with_rejected_redirect_is_medium_confidence(mock_get):
 
     assert result.status is _ProbeStatus.CONFIRMED
     assert result.confidence == "medium"
-    assert result.evidence["matched_indicator"] == {"type": "body", "value": "Redirecting"}
-    assert result.evidence["rejected_redirect_url"] == "https://external-parking.com/landing"
+    assert result.evidence["matched_indicator"] == {
+        "type": "body",
+        "value": "Redirecting",
+    }
+    assert (
+        result.evidence["rejected_redirect_url"]
+        == "https://external-parking.com/landing"
+    )
     assert result.evidence["cross_host_redirect"] is True
-    assert all("external-parking.com" not in call.args[0] for call in mock_get.call_args_list)
+    assert all(
+        "external-parking.com" not in call.args[0] for call in mock_get.call_args_list
+    )
 
 
 if __name__ == "__main__":

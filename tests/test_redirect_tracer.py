@@ -1,10 +1,12 @@
 import unittest
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
+
 import requests
+
 from tools.redirect_tracer import trace_redirects
 
 
-def _resp(status_code: int, headers: dict = None):
+def _resp(status_code: int, headers: dict | None = None):
     m = Mock()
     m.status_code = status_code
     m.headers = headers or {}
@@ -12,7 +14,6 @@ def _resp(status_code: int, headers: dict = None):
 
 
 class TestTraceRedirects(unittest.TestCase):
-
     # ------------------------------------------------------------------
     # Input validation / normalization
     # ------------------------------------------------------------------
@@ -67,7 +68,9 @@ class TestTraceRedirects(unittest.TestCase):
             _resp(200),
         ]
         result = trace_redirects("http://example.com/old-path")
-        self.assertEqual(result["chain"][0]["redirect_to"], "http://example.com/new-path")
+        self.assertEqual(
+            result["chain"][0]["redirect_to"], "http://example.com/new-path"
+        )
         self.assertEqual(result["final_url"], "http://example.com/new-path")
 
     @patch("tools.redirect_tracer.requests.Session.get")
@@ -90,7 +93,12 @@ class TestTraceRedirects(unittest.TestCase):
             _resp(200),
         ]
         result = trace_redirects("http://example.com")
-        self.assertFalse(any(i["type"] in ("tls_downgrade", "no_tls_upgrade") for i in result["issues_found"]))
+        self.assertFalse(
+            any(
+                i["type"] in ("tls_downgrade", "no_tls_upgrade")
+                for i in result["issues_found"]
+            )
+        )
         self.assertIn("HTTP to HTTPS upgrade present — good", result["security_notes"])
 
     @patch("tools.redirect_tracer.requests.Session.get")
@@ -100,7 +108,9 @@ class TestTraceRedirects(unittest.TestCase):
             _resp(200),
         ]
         result = trace_redirects("http://example.com")
-        no_upgrade = [i for i in result["issues_found"] if i["type"] == "no_tls_upgrade"]
+        no_upgrade = [
+            i for i in result["issues_found"] if i["type"] == "no_tls_upgrade"
+        ]
         self.assertEqual(len(no_upgrade), 1)
         self.assertEqual(no_upgrade[0]["severity"], "high")
 
@@ -117,7 +127,9 @@ class TestTraceRedirects(unittest.TestCase):
             _resp(200),
         ]
         result = trace_redirects("http://example.com")
-        no_upgrade = [i for i in result["issues_found"] if i["type"] == "no_tls_upgrade"]
+        no_upgrade = [
+            i for i in result["issues_found"] if i["type"] == "no_tls_upgrade"
+        ]
         self.assertEqual(len(no_upgrade), 0)
         self.assertEqual(result["final_url"], "https://www.example.com/?upgraded=1")
 
@@ -139,19 +151,32 @@ class TestTraceRedirects(unittest.TestCase):
             _resp(200),
         ]
         result = trace_redirects("https://example.com")
-        self.assertFalse(any(i["type"] in ("tls_downgrade", "no_tls_upgrade") for i in result["issues_found"]))
-        self.assertIn("Chain stayed on HTTPS throughout — good", result["security_notes"])
+        self.assertFalse(
+            any(
+                i["type"] in ("tls_downgrade", "no_tls_upgrade")
+                for i in result["issues_found"]
+            )
+        )
+        self.assertIn(
+            "Chain stayed on HTTPS throughout — good", result["security_notes"]
+        )
 
     @patch("tools.redirect_tracer.requests.Session.get")
-    def test_https_discovered_but_not_fetched_still_counts_as_reaching_https(self, mock_get):
+    def test_https_discovered_but_not_fetched_still_counts_as_reaching_https(
+        self, mock_get
+    ):
         """A chain that hits the hop cap right as it discovers an https
         target (never actually fetched) should still not be flagged as
         no_tls_upgrade. It DID reach https, just not within budget."""
-        hops = [_resp(301, {"Location": f"http://example.com/page{i}"}) for i in range(14)]
+        hops = [
+            _resp(301, {"Location": f"http://example.com/page{i}"}) for i in range(14)
+        ]
         hops.append(_resp(301, {"Location": "https://example.com/final"}))
         mock_get.side_effect = hops
         result = trace_redirects("http://example.com")
-        no_upgrade = [i for i in result["issues_found"] if i["type"] == "no_tls_upgrade"]
+        no_upgrade = [
+            i for i in result["issues_found"] if i["type"] == "no_tls_upgrade"
+        ]
         self.assertEqual(len(no_upgrade), 0)
 
     # ------------------------------------------------------------------
@@ -179,7 +204,9 @@ class TestTraceRedirects(unittest.TestCase):
         mock_get.return_value = _resp(200)
         result = trace_redirects("http://example.com")
         self.assertIn("No private IP redirects detected", result["security_notes"])
-        self.assertNotIn("No internal hostnames leaked in chain", result["security_notes"])
+        self.assertNotIn(
+            "No internal hostnames leaked in chain", result["security_notes"]
+        )
 
     @patch("tools.redirect_tracer.requests.Session.get")
     def test_private_ip_redirect_target_is_never_fetched(self, mock_get):
@@ -195,10 +222,14 @@ class TestTraceRedirects(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(mock_get.call_count, 1)
         self.assertEqual(result["total_hops"], 1)
-        self.assertEqual(result["chain"][0]["redirect_to"], "http://169.254.169.254/latest/meta-data/")
         self.assertEqual(
-            result["final_url"], "http://169.254.169.254/latest/meta-data/",
-            "final_url should report the discovered-but-unfetched target, not the last page actually fetched"
+            result["chain"][0]["redirect_to"],
+            "http://169.254.169.254/latest/meta-data/",
+        )
+        self.assertEqual(
+            result["final_url"],
+            "http://169.254.169.254/latest/meta-data/",
+            "final_url should report the discovered-but-unfetched target, not the last page actually fetched",
         )
         priv = [i for i in result["issues_found"] if i["type"] == "private_ip_leak"]
         self.assertEqual(len(priv), 1)
@@ -237,6 +268,7 @@ class TestTraceRedirects(unittest.TestCase):
         """A malformed redirect target with no parseable
         host must not raise, just report not-private."""
         from tools.redirect_tracer import _hostname_is_private_ip
+
         self.assertFalse(_hostname_is_private_ip(None))
         self.assertFalse(_hostname_is_private_ip(""))
 
@@ -254,7 +286,9 @@ class TestTraceRedirects(unittest.TestCase):
             _resp(200),
         ]
         result = trace_redirects("http://example.com")
-        cross = [i for i in result["issues_found"] if i["type"] == "cross_domain_redirect"]
+        cross = [
+            i for i in result["issues_found"] if i["type"] == "cross_domain_redirect"
+        ]
         self.assertEqual(len(cross), 0)
 
     @patch("tools.redirect_tracer.requests.Session.get")
@@ -264,7 +298,9 @@ class TestTraceRedirects(unittest.TestCase):
             _resp(200),
         ]
         result = trace_redirects("http://www.example.com")
-        cross = [i for i in result["issues_found"] if i["type"] == "cross_domain_redirect"]
+        cross = [
+            i for i in result["issues_found"] if i["type"] == "cross_domain_redirect"
+        ]
         self.assertEqual(len(cross), 0)
 
     @patch("tools.redirect_tracer.requests.Session.get")
@@ -274,7 +310,9 @@ class TestTraceRedirects(unittest.TestCase):
             _resp(200),
         ]
         result = trace_redirects("https://example.com")
-        cross = [i for i in result["issues_found"] if i["type"] == "cross_domain_redirect"]
+        cross = [
+            i for i in result["issues_found"] if i["type"] == "cross_domain_redirect"
+        ]
         self.assertEqual(len(cross), 1)
         self.assertEqual(cross[0]["severity"], "high")
 
@@ -310,7 +348,9 @@ class TestTraceRedirects(unittest.TestCase):
             ]
             result = trace_redirects("http://example.com")
 
-        loop_issue = [i for i in result["issues_found"] if i["type"] == "redirect_loop"][0]
+        loop_issue = next(
+            i for i in result["issues_found"] if i["type"] == "redirect_loop"
+        )
         chain_hop_numbers = [h["hop"] for h in result["chain"]]
         self.assertIn(loop_issue["hop"], chain_hop_numbers)
         self.assertEqual(loop_issue["hop"], len(result["chain"]))
@@ -324,7 +364,9 @@ class TestTraceRedirects(unittest.TestCase):
         self.assertEqual(len(loop), 1)
 
     @patch("tools.redirect_tracer.requests.Session.get")
-    def test_whitespace_only_location_resolves_to_self_and_is_flagged_as_loop(self, mock_get):
+    def test_whitespace_only_location_resolves_to_self_and_is_flagged_as_loop(
+        self, mock_get
+    ):
         """A Location header that is present but only whitespace is, per
         RFC 3986 reference resolution (as implemented by urljoin), an
         empty relative reference, it resolves back to the current URL,
@@ -372,28 +414,38 @@ class TestTraceRedirects(unittest.TestCase):
     def test_max_hops_cap_enforced(self, mock_get):
         """A chain of unique, never-repeating, never-resolving redirects
         must stop at the hop cap rather than making unbounded requests."""
-        hops = [_resp(301, {"Location": f"http://example.com/page{i}"}) for i in range(30)]
+        hops = [
+            _resp(301, {"Location": f"http://example.com/page{i}"}) for i in range(30)
+        ]
         mock_get.side_effect = hops
         result = trace_redirects("http://example.com")
         self.assertTrue(result["success"])
         self.assertLessEqual(mock_get.call_count, 15)
-        max_hops = [i for i in result["issues_found"] if i["type"] == "max_hops_exceeded"]
+        max_hops = [
+            i for i in result["issues_found"] if i["type"] == "max_hops_exceeded"
+        ]
         self.assertEqual(len(max_hops), 1)
         self.assertEqual(
-            result["final_url"], "http://example.com/page14",
+            result["final_url"],
+            "http://example.com/page14",
             "final_url should be the destination discovered on the capped-off 15th hop, "
-            "not the URL of the 15th hop itself"
+            "not the URL of the 15th hop itself",
         )
 
     def test_max_hops_exceeded_hop_number_matches_chain_length(self):
         """The hop reference on this issue must equal len(chain), not a
         module constant that happens to equal it today by coincidence."""
         with patch("tools.redirect_tracer.requests.Session.get") as mock_get:
-            hops = [_resp(301, {"Location": f"http://example.com/page{i}"}) for i in range(30)]
+            hops = [
+                _resp(301, {"Location": f"http://example.com/page{i}"})
+                for i in range(30)
+            ]
             mock_get.side_effect = hops
             result = trace_redirects("http://example.com")
 
-        max_hops_issue = [i for i in result["issues_found"] if i["type"] == "max_hops_exceeded"][0]
+        max_hops_issue = next(
+            i for i in result["issues_found"] if i["type"] == "max_hops_exceeded"
+        )
         self.assertEqual(max_hops_issue["hop"], len(result["chain"]))
 
     # ------------------------------------------------------------------
@@ -406,29 +458,37 @@ class TestTraceRedirects(unittest.TestCase):
         result = trace_redirects("http://example.com")
         self.assertTrue(result["success"])
         self.assertEqual(result["total_hops"], 1)
-        malformed = [i for i in result["issues_found"] if i["type"] == "malformed_redirect"]
+        malformed = [
+            i for i in result["issues_found"] if i["type"] == "malformed_redirect"
+        ]
         self.assertEqual(len(malformed), 1)
 
     # ------------------------------------------------------------------
     # Error handling
     # ------------------------------------------------------------------
 
-    @patch("tools.redirect_tracer.requests.Session.get",
-           side_effect=requests.exceptions.ConnectionError("refused"))
+    @patch(
+        "tools.redirect_tracer.requests.Session.get",
+        side_effect=requests.exceptions.ConnectionError("refused"),
+    )
     def test_connection_error_returns_failure(self, _):
         result = trace_redirects("http://example.com")
         self.assertFalse(result["success"])
         self.assertIn("Connection failed", result["error"])
 
-    @patch("tools.redirect_tracer.requests.Session.get",
-           side_effect=requests.exceptions.Timeout("timed out"))
+    @patch(
+        "tools.redirect_tracer.requests.Session.get",
+        side_effect=requests.exceptions.Timeout("timed out"),
+    )
     def test_timeout_returns_failure(self, _):
         result = trace_redirects("http://example.com")
         self.assertFalse(result["success"])
         self.assertIn("Connection failed", result["error"])
 
-    @patch("tools.redirect_tracer.requests.Session.get",
-           side_effect=Exception("Unexpected error"))
+    @patch(
+        "tools.redirect_tracer.requests.Session.get",
+        side_effect=Exception("Unexpected error"),
+    )
     def test_unexpected_exception_returns_failure(self, _):
         result = trace_redirects("http://example.com")
         self.assertFalse(result["success"])

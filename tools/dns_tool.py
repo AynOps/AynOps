@@ -4,6 +4,7 @@ from itertools import zip_longest
 import dns.exception
 import dns.name
 import dns.resolver
+
 from utils.helpers import is_valid_domain, normalize_domain
 
 
@@ -15,6 +16,7 @@ class _DnsExecutor(ThreadPoolExecutor):
         cancel_pending = getattr(self, "_cancel_pending", False)
         self.shutdown(wait=not cancel_pending, cancel_futures=cancel_pending)
         return False
+
 
 # Public resolvers used for every lookup.
 PUBLIC_RESOLVERS = ["1.1.1.1", "8.8.8.8"]
@@ -30,12 +32,71 @@ RECORD_TYPES = ["A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA", "CAA"]
 
 # Common subdomains tried during brute-force discovery; adjust to taste.
 COMMON_SUBDOMAINS = [
-    "www", "mail", "ftp", "admin", "api", "dev", "staging", "vpn", "remote", "portal",
-    "webmail", "smtp", "pop", "imap", "autodiscover", "autoconfig", "mx", "ns1", "ns2", "cpanel","whm", 
-    "blog", "store", "app", "shop", "mobile", "test", "demo", "beta", "testing","sandbox","local",
-    "cdn", "edge", "static", "proxy", "origin", "media", "assets", "images", "docs", "help","support","status",
-    "git", "jenkins", "jira", "wiki","pipeline","sso", "auth", "login", "gateway","secure", "files", "upload", "backup",
-    "db", "monitor", "dashboard","cloud", "chat", "forum", "cluster", "aws"
+    "www",
+    "mail",
+    "ftp",
+    "admin",
+    "api",
+    "dev",
+    "staging",
+    "vpn",
+    "remote",
+    "portal",
+    "webmail",
+    "smtp",
+    "pop",
+    "imap",
+    "autodiscover",
+    "autoconfig",
+    "mx",
+    "ns1",
+    "ns2",
+    "cpanel",
+    "whm",
+    "blog",
+    "store",
+    "app",
+    "shop",
+    "mobile",
+    "test",
+    "demo",
+    "beta",
+    "testing",
+    "sandbox",
+    "local",
+    "cdn",
+    "edge",
+    "static",
+    "proxy",
+    "origin",
+    "media",
+    "assets",
+    "images",
+    "docs",
+    "help",
+    "support",
+    "status",
+    "git",
+    "jenkins",
+    "jira",
+    "wiki",
+    "pipeline",
+    "sso",
+    "auth",
+    "login",
+    "gateway",
+    "secure",
+    "files",
+    "upload",
+    "backup",
+    "db",
+    "monitor",
+    "dashboard",
+    "cloud",
+    "chat",
+    "forum",
+    "cluster",
+    "aws",
 ]
 
 # A subdomain counts as found if any of these record types resolves for it.
@@ -305,5 +366,5 @@ def dns_enumeration(domain: str) -> dict:
         "subdomains_found": found_subdomains,
         "subdomain_errors": subdomain_errors,
         "ttl": ttls,
-        "resolver": _resolver_metadata(resolver)
+        "resolver": _resolver_metadata(resolver),
     }

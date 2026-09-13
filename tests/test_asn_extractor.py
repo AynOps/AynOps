@@ -1,4 +1,5 @@
 """Regression tests for ASN signal extraction (issue #117)."""
+
 from tools.signals.asn import asn_extractor
 from tools.signals.extractor import extract_signals
 

@@ -1,7 +1,10 @@
 import re
 from datetime import datetime
 
-_DOMAIN_PATTERN = re.compile(r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$")
+_DOMAIN_PATTERN = re.compile(
+    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
+)
+
 
 def is_valid_domain(domain: str) -> bool:
     """Return whether a domain is a valid fully qualified domain name.
@@ -16,6 +19,7 @@ def is_valid_domain(domain: str) -> bool:
 
     return _DOMAIN_PATTERN.fullmatch(domain) is not None
 
+
 def normalize_domain(domain: str | None) -> str:
     """Normalize a user-provided domain for consistent validation.
 
@@ -29,6 +33,7 @@ def normalize_domain(domain: str | None) -> str:
         return ""
     normalized = str(domain).strip().lower().rstrip(".")
     return normalized
+
 
 def get_cvss_details(cve: dict) -> dict:
     """Extract CVSS severity and base score from an NVD CVE object.
@@ -51,9 +56,12 @@ def get_cvss_details(cve: dict) -> dict:
     cvss_data = metric.get("cvssData", {})
 
     return {
-        "severity": metric.get("baseSeverity") or cvss_data.get("baseSeverity") or "Unknown",
+        "severity": metric.get("baseSeverity")
+        or cvss_data.get("baseSeverity")
+        or "Unknown",
         "score": cvss_data.get("baseScore"),
     }
+
 
 def get_english_description(cve: dict) -> str:
     """Return the English description from an NVD CVE object.
@@ -63,6 +71,7 @@ def get_english_description(cve: dict) -> str:
     descriptions = cve.get("descriptions", [])
     english = next((item for item in descriptions if item.get("lang") == "en"), None)
     return english.get("value", "") if english else ""
+
 
 def safe_parse_datetime(date_input) -> datetime | None:
     """Helper to catch and resolve structural variances in string dates."""
@@ -85,14 +94,21 @@ def safe_parse_datetime(date_input) -> datetime | None:
         return None
 
     clean_str = str(date_input).strip().replace("Z", "+00:00")
-    
+
     # Try common formats sequentially
-    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S%z", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%d %H:%M:%S%z",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d",
+    ):
         try:
-            return datetime.strptime(clean_str, fmt)
+            # Naive results for non-%z formats are intentional: callers normalize
+            # missing tzinfo themselves (see tools/signals/whois.py).
+            return datetime.strptime(clean_str, fmt)  # noqa: DTZ007
         except (ValueError, TypeError):
             continue
-            
+
     # Fallback onto standard ISO parsing
     try:
         return datetime.fromisoformat(clean_str)

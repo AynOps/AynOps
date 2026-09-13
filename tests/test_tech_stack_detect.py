@@ -18,16 +18,16 @@ Contract under test
 from __future__ import annotations
 
 import unittest
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import requests
 
 from tools.techstack_tool import MAX_BODY_BYTES, tech_stack_detect
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_response(
     html: str = "",
@@ -77,8 +77,8 @@ def _detect(
 # Success-path: top-level shape
 # ---------------------------------------------------------------------------
 
-class TestResultShape(unittest.TestCase):
 
+class TestResultShape(unittest.TestCase):
     def test_success_keys_are_present(self):
         result = _detect()
         self.assertTrue(result["success"])
@@ -90,8 +90,8 @@ class TestResultShape(unittest.TestCase):
     def test_fingerprints_subkeys_always_present(self):
         result = _detect()
         fp = result["fingerprints"]
-        self.assertIn("headers",   fp)
-        self.assertIn("cookies",   fp)
+        self.assertIn("headers", fp)
+        self.assertIn("cookies", fp)
         self.assertIn("meta_tags", fp)
 
     def test_empty_page_yields_empty_technologies(self):
@@ -101,24 +101,27 @@ class TestResultShape(unittest.TestCase):
 
     def test_url_and_status_code_passthrough(self):
         result = _detect(
-            html="", headers={},
+            html="",
+            headers={},
             url="https://www.example.com/landing",
             status=418,
         )
-        self.assertEqual(result["url"],         "https://www.example.com/landing")
+        self.assertEqual(result["url"], "https://www.example.com/landing")
         self.assertEqual(result["status_code"], 418)
-        self.assertEqual(result["domain"],      "example.com")
+        self.assertEqual(result["domain"], "example.com")
 
 
 # ---------------------------------------------------------------------------
 # Success-path: detection accuracy (new schema)
 # ---------------------------------------------------------------------------
 
-class TestDetections(unittest.TestCase):
 
+class TestDetections(unittest.TestCase):
     def _assert_detected(self, result: dict, category: str, name: str):
         """Assert that *name* appears in *category* with confidence > 0."""
-        self.assertIn(category, result["technologies"], f"Category {category!r} missing")
+        self.assertIn(
+            category, result["technologies"], f"Category {category!r} missing"
+        )
         names = [d["name"] for d in result["technologies"][category]]
         self.assertIn(name, names, f"{name!r} not detected in {category!r}: {names}")
 
@@ -144,7 +147,6 @@ class TestDetections(unittest.TestCase):
     def test_gws_detected_as_google_web_server(self):
         result = _detect(headers={"Server": "gws"})
         self._assert_detected(result, "web_servers", "Google Web Server")
-    
 
     # ── programming language ──
 
@@ -165,9 +167,7 @@ class TestDetections(unittest.TestCase):
         self._assert_detected(result, "cms", "WordPress")
 
     def test_wordpress_detected_from_meta_generator(self):
-        result = _detect(
-            html='<meta name="generator" content="WordPress 6.4.2">'
-        )
+        result = _detect(html='<meta name="generator" content="WordPress 6.4.2">')
         self._assert_detected(result, "cms", "WordPress")
         det = self._get_detection(result, "cms", "WordPress")
         # meta generator should carry higher confidence
@@ -177,7 +177,7 @@ class TestDetections(unittest.TestCase):
         """wp-content in HTML + meta generator → evidence list contains both."""
         result = _detect(
             html='<meta name="generator" content="WordPress 6.4">'
-                 '<link href="/wp-content/x.css">'
+            '<link href="/wp-content/x.css">'
         )
         det = self._get_detection(result, "cms", "WordPress")
         # at least two evidence strings
@@ -231,9 +231,9 @@ class TestDetections(unittest.TestCase):
         for category, detections in result["technologies"].items():
             for det in detections:
                 with self.subTest(category=category, det=det):
-                    self.assertIn("name",       det)
+                    self.assertIn("name", det)
                     self.assertIn("confidence", det)
-                    self.assertIn("evidence",   det)
+                    self.assertIn("evidence", det)
                     self.assertIsInstance(det["evidence"], list)
                     self.assertGreater(det["confidence"], 0)
 
@@ -242,24 +242,24 @@ class TestDetections(unittest.TestCase):
 # fingerprints artefact
 # ---------------------------------------------------------------------------
 
-class TestFingerprints(unittest.TestCase):
 
+class TestFingerprints(unittest.TestCase):
     def test_headers_artefact_is_normalised_to_lowercase(self):
         result = _detect(headers={"Server": "nginx/1.18", "CF-Ray": "abc"})
         fp_headers = result["fingerprints"]["headers"]
-        self.assertIn("server",  fp_headers)
-        self.assertIn("cf-ray",  fp_headers)
-        self.assertNotIn("Server",  fp_headers)
+        self.assertIn("server", fp_headers)
+        self.assertIn("cf-ray", fp_headers)
+        self.assertNotIn("Server", fp_headers)
 
     def test_cookies_artefact_contains_cookie_names(self):
         result = _detect(cookies=["PHPSESSID=xyz", "wordpress_logged_in=1"])
         self.assertIn("PHPSESSID", result["fingerprints"]["cookies"])
 
     def test_meta_tags_artefact_captures_generator(self):
-        result = _detect(
-            html='<meta name="generator" content="Ghost 5.0">'
+        result = _detect(html='<meta name="generator" content="Ghost 5.0">')
+        self.assertEqual(
+            result["fingerprints"]["meta_tags"].get("generator"), "Ghost 5.0"
         )
-        self.assertEqual(result["fingerprints"]["meta_tags"].get("generator"), "Ghost 5.0")
 
     def test_meta_tags_empty_when_no_generator_tag(self):
         result = _detect(html="<html><body>Hello</body></html>")
@@ -270,8 +270,8 @@ class TestFingerprints(unittest.TestCase):
 # HTTPS → HTTP fallback
 # ---------------------------------------------------------------------------
 
-class TestHttpsFallback(unittest.TestCase):
 
+class TestHttpsFallback(unittest.TestCase):
     def test_ssl_error_on_https_retries_with_http(self):
         good_resp = _make_response(html="", headers={})
 
@@ -286,7 +286,7 @@ class TestHttpsFallback(unittest.TestCase):
         self.assertEqual(mock_fetch.call_count, 2)
         calls = mock_fetch.call_args_list
         self.assertIn("https://", calls[0][0][0])
-        self.assertIn("http://",  calls[1][0][0])
+        self.assertIn("http://", calls[1][0][0])
 
     def test_connection_error_on_https_retries_with_http(self):
         good_resp = _make_response(html="", headers={})
@@ -313,8 +313,8 @@ class TestHttpsFallback(unittest.TestCase):
 # HTML size cap
 # ---------------------------------------------------------------------------
 
-class TestBodySizeCap(unittest.TestCase):
 
+class TestBodySizeCap(unittest.TestCase):
     def test_body_larger_than_cap_is_truncated(self):
         """The engine must only see MAX_BODY_BYTES of the body."""
         oversized_html = "A" * (MAX_BODY_BYTES * 2)
@@ -335,8 +335,10 @@ class TestBodySizeCap(unittest.TestCase):
             captured.append(raw_text)
             return {}, {"headers": {}, "cookies": [], "meta_tags": {}}
 
-        with patch("tools.techstack_tool._fetch", return_value=resp), \
-             patch("tools.techstack_tool.fingerprint", side_effect=fake_fingerprint):
+        with (
+            patch("tools.techstack_tool._fetch", return_value=resp),
+            patch("tools.techstack_tool.fingerprint", side_effect=fake_fingerprint),
+        ):
             tech_stack_detect("example.com")
 
         self.assertEqual(len(captured), 1)
@@ -347,8 +349,8 @@ class TestBodySizeCap(unittest.TestCase):
 # Improved error handling
 # ---------------------------------------------------------------------------
 
-class TestErrorHandling(unittest.TestCase):
 
+class TestErrorHandling(unittest.TestCase):
     def _error_result(self, exc) -> dict:
         with patch("tools.techstack_tool._fetch", side_effect=exc):
             return tech_stack_detect("example.com")
@@ -364,15 +366,19 @@ class TestErrorHandling(unittest.TestCase):
         self.assertEqual(result["error"], "Too many redirects")
 
     def test_ssl_error_on_both_schemes_surfaces_ssl_error(self):
-        with patch("tools.techstack_tool._fetch",
-                   side_effect=requests.exceptions.SSLError("bad cert")):
+        with patch(
+            "tools.techstack_tool._fetch",
+            side_effect=requests.exceptions.SSLError("bad cert"),
+        ):
             result = tech_stack_detect("example.com")
         self.assertFalse(result["success"])
         self.assertIn("SSL error", result["error"])
 
     def test_connection_error_surfaces_connect_error(self):
-        with patch("tools.techstack_tool._fetch",
-                   side_effect=requests.exceptions.ConnectionError()):
+        with patch(
+            "tools.techstack_tool._fetch",
+            side_effect=requests.exceptions.ConnectionError(),
+        ):
             result = tech_stack_detect("example.com")
         self.assertFalse(result["success"])
         self.assertIn("connect", result["error"].lower())
@@ -392,15 +398,19 @@ class TestErrorHandling(unittest.TestCase):
         """
         good_resp = _make_response(html="", headers={})
 
-        with patch("tools.techstack_tool._fetch", return_value=good_resp), \
-             patch("tools.techstack_tool.fingerprint",
-                   side_effect=RuntimeError("unexpected engine failure")):
+        with (
+            patch("tools.techstack_tool._fetch", return_value=good_resp),
+            patch(
+                "tools.techstack_tool.fingerprint",
+                side_effect=RuntimeError("unexpected engine failure"),
+            ),
+        ):
             result = tech_stack_detect("example.com")
 
-        self.assertFalse(result["success"],
-                         "Expected success=False when fingerprint() raises")
-        self.assertIn("error", result,
-                      "Expected 'error' key in failure response")
+        self.assertFalse(
+            result["success"], "Expected success=False when fingerprint() raises"
+        )
+        self.assertIn("error", result, "Expected 'error' key in failure response")
         self.assertIsInstance(result["error"], str)
         self.assertGreater(len(result["error"]), 0)
 
@@ -414,32 +424,34 @@ class TestErrorHandling(unittest.TestCase):
         """
         result = _detect(headers={"Server": "gws"})
         self.assertTrue(result["success"])
-        web_servers = [
-            d["name"]
-            for d in result["technologies"].get("web_servers", [])
-        ]
-        self.assertNotIn("Apache", web_servers,
-                         "Apache falsely detected from 'Server: gws'")
-        self.assertNotIn("nginx", web_servers,
-                         "nginx falsely detected from 'Server: gws'")
+        web_servers = [d["name"] for d in result["technologies"].get("web_servers", [])]
+        self.assertNotIn(
+            "Apache", web_servers, "Apache falsely detected from 'Server: gws'"
+        )
+        self.assertNotIn(
+            "nginx", web_servers, "nginx falsely detected from 'Server: gws'"
+        )
 
 
 # ---------------------------------------------------------------------------
 # Seam test: fingerprint engine is called correctly
 # ---------------------------------------------------------------------------
 
-class TestFingerprintSeam(unittest.TestCase):
 
+class TestFingerprintSeam(unittest.TestCase):
     def test_fingerprint_receives_raw_headers_and_body(self):
         raw_headers = {"Server": "nginx/1.18"}
         html = "<html>/wp-content/</html>"
         resp = _make_response(html=html, headers=raw_headers, cookies=["PHPSESSID=x"])
 
-        with patch("tools.techstack_tool._fetch", return_value=resp), \
-             patch("tools.techstack_tool.fingerprint") as mock_fp:
-            mock_fp.return_value = ({"sentinel": [{"name": "X", "confidence": 99,
-                                                    "evidence": []}]},
-                                    {"headers": {}, "cookies": [], "meta_tags": {}})
+        with (
+            patch("tools.techstack_tool._fetch", return_value=resp),
+            patch("tools.techstack_tool.fingerprint") as mock_fp,
+        ):
+            mock_fp.return_value = (
+                {"sentinel": [{"name": "X", "confidence": 99, "evidence": []}]},
+                {"headers": {}, "cookies": [], "meta_tags": {}},
+            )
             result = tech_stack_detect("example.com")
 
         mock_fp.assert_called_once()
@@ -452,7 +464,7 @@ class TestFingerprintSeam(unittest.TestCase):
         self.assertIn("PHPSESSID", call_kwargs[1]["cookie_names"])
         # result carries both fields
         self.assertIn("technologies", result)
-        self.assertIn("fingerprints",  result)
+        self.assertIn("fingerprints", result)
 
 
 if __name__ == "__main__":

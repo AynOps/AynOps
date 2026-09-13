@@ -1,10 +1,12 @@
+from typing import Any
+
 from curl_cffi import requests
 from curl_cffi.requests.errors import RequestsError
-from typing import Dict, Any
 
 from utils.helpers import is_valid_domain, normalize_domain
 
-def cert_transparency(domain: str) -> Dict[str, Any]:
+
+def cert_transparency(domain: str) -> dict[str, Any]:
     """
     Query crt.sh Certificate Transparency logs for a domain and extract
     certificate and subdomain information.
@@ -15,16 +17,15 @@ def cert_transparency(domain: str) -> Dict[str, Any]:
 
     domain = normalize_domain(domain)
     if not is_valid_domain(domain):
-        return {
-            "success": False,
-            "error": "Invalid domain format"
-        }
+        return {"success": False, "error": "Invalid domain format"}
 
     url = f"https://crt.sh/?q=%.{domain}&output=json"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
 
     try:
-        response = requests.get(url, headers=headers, timeout=50, impersonate='chrome')
+        response = requests.get(url, headers=headers, timeout=50, impersonate="chrome")
         response.raise_for_status()
         data = response.json()
 
@@ -35,9 +36,9 @@ def cert_transparency(domain: str) -> Dict[str, Any]:
 
         for entry in data:
             issuer = entry.get("issuer_name", "Unknown")
-            not_before = (entry.get("not_before", "").split("T")[0])
-            not_after = (entry.get("not_after", "").split("T")[0])
-            names = (entry.get("name_value", "").split("\n"))
+            not_before = entry.get("not_before", "").split("T")[0]
+            not_after = entry.get("not_after", "").split("T")[0]
+            names = entry.get("name_value", "").split("\n")
 
             for name in names:
                 name = name.strip().lower()
@@ -47,7 +48,10 @@ def cert_transparency(domain: str) -> Dict[str, Any]:
 
                 if name.startswith("*."):
                     wildcard_pattern = name[1:]  # "*.example.com" -> ".example.com"
-                    if wildcard_pattern.endswith("." + domain) or wildcard_pattern == "." + domain:
+                    if (
+                        wildcard_pattern.endswith("." + domain)
+                        or wildcard_pattern == "." + domain
+                    ):
                         wildcards.add(wildcard_pattern)
                     continue
 
@@ -61,12 +65,14 @@ def cert_transparency(domain: str) -> Dict[str, Any]:
                     continue
                 seen.add(cert_key)
 
-                certificates.append({
-                    "subdomain": name,
-                    "issuer": issuer,
-                    "not_before": not_before,
-                    "not_after": not_after
-                })
+                certificates.append(
+                    {
+                        "subdomain": name,
+                        "issuer": issuer,
+                        "not_before": not_before,
+                        "not_after": not_after,
+                    }
+                )
 
         return {
             "success": True,
@@ -78,26 +84,22 @@ def cert_transparency(domain: str) -> Dict[str, Any]:
             "wildcards_found": sorted(wildcards),
             "returned_certificates": min(50, len(certificates)),
             "truncated": len(certificates) > 50,
-            "certificates": certificates[:50]
+            "certificates": certificates[:50],
         }
 
     except RequestsError as e:
-        return {
-            "success": False,
-            "domain": domain,
-            "error": f"Network error: {e}"
-        }
+        return {"success": False, "domain": domain, "error": f"Network error: {e}"}
 
     except ValueError as e:
         return {
             "success": False,
             "domain": domain,
-            "error": f"Invalid response data: {e}"
+            "error": f"Invalid response data: {e}",
         }
 
     except Exception as e:
         return {
             "success": False,
             "domain": domain,
-            "error": f"Certificate Transparency lookup failed. Unexpected error: {type(e).__name__}: {e}"
+            "error": f"Certificate Transparency lookup failed. Unexpected error: {type(e).__name__}: {e}",
         }

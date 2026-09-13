@@ -1,24 +1,24 @@
-def email_security_extractor(result , signals):
+def email_security_extractor(result, signals):
     if result.get("success"):
-        spf   = result.get("spf")
-        dkim  = result.get("dkim")
+        spf = result.get("spf")
+        dkim = result.get("dkim")
         dmarc = result.get("dmarc")
 
-        spf_found   = spf.get("found", False)
-        dkim_found  = dkim.get("found", False)
+        spf_found = spf.get("found", False)
+        dkim_found = dkim.get("found", False)
         dmarc_found = dmarc.get("found", False)
 
-        spf_policy  = spf.get("policy", "none")
+        spf_policy = spf.get("policy", "none")
         dmarc_policy = dmarc.get("policy", "none")
 
         signals["email_security"] = {
             "security_score": result.get("security_score"),
-            "rating":         result.get("rating"),
-            "spf_found":      spf_found,
-            "spf_policy":     spf_policy,
-            "dkim_found":     dkim_found,
-            "dmarc_found":    dmarc_found,
-            "dmarc_policy":   dmarc_policy,
+            "rating": result.get("rating"),
+            "spf_found": spf_found,
+            "spf_policy": spf_policy,
+            "dkim_found": dkim_found,
+            "dmarc_found": dmarc_found,
+            "dmarc_policy": dmarc_policy,
             "recommendations": result.get("recommendations", []),
         }
 
@@ -32,7 +32,7 @@ def email_security_extractor(result , signals):
             signals["auto_warnings"].append(
                 "SPF missing — senders cannot be validated, enables phishing from this domain"
             )
-            
+
         elif spf_policy in ("neutral", "pass", "+all"):
             signals["auto_warnings"].append(
                 f"SPF policy is '{spf_policy}' — provides no real protection; use '-all'"

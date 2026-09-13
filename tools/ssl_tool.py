@@ -1,6 +1,7 @@
-import ssl
 import socket
-from datetime import datetime, timezone
+import ssl
+from datetime import UTC, datetime
+
 from utils.helpers import is_valid_domain, normalize_domain
 
 try:
@@ -8,25 +9,41 @@ try:
     # cryptography) but is not a direct requirement; degrade gracefully.
     from cryptography import x509
     from cryptography.hazmat.primitives.asymmetric import dsa, ec, ed448, ed25519, rsa
+
     _HAS_CRYPTOGRAPHY = True
 except ImportError:  # pragma: no cover
     _HAS_CRYPTOGRAPHY = False
 
 # --- Security analysis thresholds (issue #100) ------------------------------
 # Heuristics chosen for the analysis below; tune to taste.
-EXPIRING_SOON_DAYS = 30             # cert is "Expiring Soon" within this window
-MAX_PREFERRED_VALIDITY_DAYS = 398   # CA/B Forum maximum lifetime for public TLS certs
+EXPIRING_SOON_DAYS = 30  # cert is "Expiring Soon" within this window
+MAX_PREFERRED_VALIDITY_DAYS = 398  # CA/B Forum maximum lifetime for public TLS certs
 MAX_ACCEPTABLE_VALIDITY_DAYS = 825  # pre-2020 CA/B Forum maximum
-MIN_CIPHER_BITS = 128               # below this a cipher is considered weak
+MIN_CIPHER_BITS = 128  # below this a cipher is considered weak
 
 # Well-known weak cipher indicators, per RFC 7457, NIST SP 800-131A and
 # BSI TR-02102-2: RC4, 3DES/single-DES, NULL, EXPORT-grade, MD5 MACs, RC2
 # and anonymous (unauthenticated) key exchange.
-WEAK_CIPHER_PATTERNS = ("RC4", "3DES", "DES-CBC", "NULL", "EXPORT", "EXP",
-                        "MD5", "RC2", "ADH", "AECDH")
+WEAK_CIPHER_PATTERNS = (
+    "RC4",
+    "3DES",
+    "DES-CBC",
+    "NULL",
+    "EXPORT",
+    "EXP",
+    "MD5",
+    "RC2",
+    "ADH",
+    "AECDH",
+)
 
 _TLS_VERSION_RANK = {
-    "SSLv2": 0, "SSLv3": 1, "TLSv1": 2, "TLSv1.1": 3, "TLSv1.2": 4, "TLSv1.3": 5,
+    "SSLv2": 0,
+    "SSLv3": 1,
+    "TLSv1": 2,
+    "TLSv1.1": 3,
+    "TLSv1.2": 4,
+    "TLSv1.3": 5,
 }
 
 
@@ -168,10 +185,14 @@ def ssl_inspect(domain: str, port: int = 443) -> dict:
             public_key_type = _public_key_type(conn)
 
         # Parse dates and make them timezone-aware (UTC)
-        not_before = datetime.strptime(cert["notBefore"], "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
-        not_after  = datetime.strptime(cert["notAfter"],  "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+        not_before = datetime.strptime(
+            cert["notBefore"], "%b %d %H:%M:%S %Y %Z"
+        ).replace(tzinfo=UTC)
+        not_after = datetime.strptime(cert["notAfter"], "%b %d %H:%M:%S %Y %Z").replace(
+            tzinfo=UTC
+        )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         days_left = (not_after - now).days
 
         # Subject Alternative Names
@@ -204,11 +225,7 @@ def ssl_inspect(domain: str, port: int = 443) -> dict:
             "domain": domain,
             "port": port,
             "tls_version": tls_version,
-            "cipher": {
-                "name": cipher[0],
-                "protocol": cipher[1],
-                "bits": cipher[2]
-            },
+            "cipher": {"name": cipher[0], "protocol": cipher[1], "bits": cipher[2]},
             "certificate": {
                 "subject": subject,
                 "issuer": issuer,
@@ -219,7 +236,7 @@ def ssl_inspect(domain: str, port: int = 443) -> dict:
                 "expired": days_left < 0,
                 "expiring_soon": 0 <= days_left <= 30,
                 "subject_alt_names": sans,
-                "version": cert.get("version")
+                "version": cert.get("version"),
             },
             # Certificate fingerprinting
             "wildcard_certificate": wildcard,
@@ -235,17 +252,19 @@ def ssl_inspect(domain: str, port: int = 443) -> dict:
             "weak_tls_version": weak_tls,
             "weak_cipher": weak_cipher,
             # Overall rating + extensions
-            "security_rating": _security_rating(tls_version, cipher[0], cipher[2], days_left, validity_days),
+            "security_rating": _security_rating(
+                tls_version, cipher[0], cipher[2], days_left, validity_days
+            ),
             "certificate_extensions": {
                 "ocsp_url": ocsp[0] if ocsp else None,
                 "ca_issuer_url": ca_issuers[0] if ca_issuers else None,
-                "crl_distribution_points": list(cert.get("crlDistributionPoints", ()))
-            }
+                "crl_distribution_points": list(cert.get("crlDistributionPoints", ())),
+            },
         }
 
     except ssl.SSLCertVerificationError as e:
-        return {"success": False, "error": f"SSL verification failed: {str(e)}"}
-    except socket.timeout:
+        return {"success": False, "error": f"SSL verification failed: {e!s}"}
+    except TimeoutError:
         return {"success": False, "error": "Connection timed out"}
     except Exception as e:
         return {"success": False, "error": str(e)}

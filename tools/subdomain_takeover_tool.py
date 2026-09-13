@@ -51,7 +51,9 @@ _S3_ENDPOINT_RE = re.compile(
 
 _GITHUB_PAGES_RE = re.compile(r"(?:^|\.)github\.io$")
 _HEROKU_RE = re.compile(r"(?:^|\.)(?:herokuapp\.com|herokussl\.com|herokudns\.com)$")
-_AZURE_RE = re.compile(r"(?:^|\.)(?:azurewebsites\.net|cloudapp\.net|trafficmanager\.net)$")
+_AZURE_RE = re.compile(
+    r"(?:^|\.)(?:azurewebsites\.net|cloudapp\.net|trafficmanager\.net)$"
+)
 _GHOST_RE = re.compile(r"(?:^|\.)ghost\.io$")
 _SHOPIFY_RE = re.compile(r"(?:^|\.)myshopify\.com$")
 _FASTLY_RE = re.compile(r"(?:^|\.)(?:fastly\.net|fastlylb\.net)$")
@@ -214,9 +216,10 @@ def _check_host_ssrf(hostname: str, resolver=None) -> str | None:
                 for ans in answers:
                     ip_str = str(ans).strip()
                     if _is_private_or_reserved_ip(ip_str):
-                        return f"Host {hostname} resolved to private/reserved IP {ip_str}"
-            except Exception:
-                # Intentional fail-open on resolver query errors during pre-check;
+                        return (
+                            f"Host {hostname} resolved to private/reserved IP {ip_str}"
+                        )
+            except Exception:  # noqa: S112 - intentional fail-open during pre-check;
                 # unreachable or failing hosts will safely fail downstream in requests.
                 continue
 
@@ -307,11 +310,13 @@ def _probe(subdomain: str, resolver=None) -> _ProbeResult:
 
             hop_ssrf = _check_host_ssrf(host, resolver)
             if hop_ssrf:
-                errors.append({
-                    "scheme": scheme,
-                    "url": current_url,
-                    "error": f"SSRFBlocked: {hop_ssrf}",
-                })
+                errors.append(
+                    {
+                        "scheme": scheme,
+                        "url": current_url,
+                        "error": f"SSRFBlocked: {hop_ssrf}",
+                    }
+                )
                 scheme_failed = True
                 break
 
@@ -327,11 +332,13 @@ def _probe(subdomain: str, resolver=None) -> _ProbeResult:
                 )
                 last_response = response
             except requests.exceptions.RequestException as exc:
-                errors.append({
-                    "scheme": scheme,
-                    "url": current_url,
-                    "error": f"{type(exc).__name__}: {exc}",
-                })
+                errors.append(
+                    {
+                        "scheme": scheme,
+                        "url": current_url,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
                 scheme_failed = True
                 break
 
@@ -352,7 +359,11 @@ def _probe(subdomain: str, resolver=None) -> _ProbeResult:
 
                 # Stop redirect following if target leaves the original target subdomain scope
                 target_scope = subdomain_clean.lower()
-                if next_host and next_host != target_scope and not next_host.endswith("." + target_scope):
+                if (
+                    next_host
+                    and next_host != target_scope
+                    and not next_host.endswith("." + target_scope)
+                ):
                     # Preserve the rejected Location as evidence without
                     # requesting it — fetching it would defeat the scope guard.
                     rejected_redirect_url = next_url
@@ -384,7 +395,9 @@ def _response_url(response) -> str | None:
     return url if isinstance(url, str) else None
 
 
-def _assess_confidence(matched_indicator: dict | None, cross_host_redirect: bool) -> str:
+def _assess_confidence(
+    matched_indicator: dict | None, cross_host_redirect: bool
+) -> str:
     """Rate how conclusively the probe evidence supports a real takeover.
 
     Severity describes the impact if the finding is exploitable; confidence
@@ -402,7 +415,9 @@ def _assess_confidence(matched_indicator: dict | None, cross_host_redirect: bool
     return "high"
 
 
-def _confirms_takeover(subdomain: str, fingerprint: dict, resolver=None) -> _TakeoverResult:
+def _confirms_takeover(
+    subdomain: str, fingerprint: dict, resolver=None
+) -> _TakeoverResult:
     """Return the tri-state takeover result with probe evidence and confidence."""
     probe = _probe(subdomain, resolver=resolver)
     if probe.response is None:
@@ -411,9 +426,11 @@ def _confirms_takeover(subdomain: str, fingerprint: dict, resolver=None) -> _Tak
     response = probe.response
     indicator = fingerprint["indicator"]
     confirmed = True
-    if "status" in indicator:
-        if getattr(response, "status_code", None) != indicator["status"]:
-            confirmed = False
+    if (
+        "status" in indicator
+        and getattr(response, "status_code", None) != indicator["status"]
+    ):
+        confirmed = False
     if "body" in indicator:
         text = getattr(response, "text", "")
         if isinstance(text, str):
@@ -424,14 +441,20 @@ def _confirms_takeover(subdomain: str, fingerprint: dict, resolver=None) -> _Tak
     if "headers" in indicator:
         raw_headers = getattr(response, "headers", {})
         # Support both CaseInsensitiveDict (requests) and plain dicts (tests)
-        headers = {str(k).lower(): v for k, v in raw_headers.items()} if hasattr(raw_headers, "items") else raw_headers
+        headers = (
+            {str(k).lower(): v for k, v in raw_headers.items()}
+            if hasattr(raw_headers, "items")
+            else raw_headers
+        )
         for header, expected in indicator["headers"].items():
             actual = headers.get(header.lower()) if hasattr(headers, "get") else None
             if actual is None:
                 # Header must be present; absence is not a match
                 confirmed = False
                 break
-            if expected != "" and (not isinstance(actual, str) or expected.lower() not in actual.lower()):
+            if expected != "" and (
+                not isinstance(actual, str) or expected.lower() not in actual.lower()
+            ):
                 # Header present but value doesn't contain the required substring
                 confirmed = False
                 break
@@ -448,7 +471,11 @@ def _confirms_takeover(subdomain: str, fingerprint: dict, resolver=None) -> _Tak
             matched_indicator = {"type": "headers", "value": indicator["headers"]}
 
     request_url = probe.request_url if isinstance(probe.request_url, str) else None
-    chain = list(probe.redirect_chain) if isinstance(probe.redirect_chain, (list, tuple)) else []
+    chain = (
+        list(probe.redirect_chain)
+        if isinstance(probe.redirect_chain, (list, tuple))
+        else []
+    )
     rejected_redirect_url = getattr(probe, "rejected_redirect_url", None)
     if not isinstance(rejected_redirect_url, str):
         rejected_redirect_url = None
@@ -458,7 +485,11 @@ def _confirms_takeover(subdomain: str, fingerprint: dict, resolver=None) -> _Tak
     if rejected_redirect_url is not None:
         chain.append(rejected_redirect_url)
 
-    final_url = rejected_redirect_url or _response_url(response) or (chain[-1] if chain else request_url)
+    final_url = (
+        rejected_redirect_url
+        or _response_url(response)
+        or (chain[-1] if chain else request_url)
+    )
     final_host = (urlparse(final_url).hostname or "").lower() if final_url else ""
     target_host = subdomain.strip().rstrip(".").lower()
     cross_host_redirect = bool(final_host) and final_host != target_host
@@ -513,11 +544,13 @@ def subdomain_takeover(domain: str) -> dict:
         if cname_result.chain:
             cname_chains[subdomain] = list(cname_result.chain)
         if cname_result.error is not None:
-            unknown.append({
-                "subdomain": subdomain,
-                "reason": "Unable to resolve CNAME record",
-                "dns_error": cname_result.error,
-            })
+            unknown.append(
+                {
+                    "subdomain": subdomain,
+                    "reason": "Unable to resolve CNAME record",
+                    "dns_error": cname_result.error,
+                }
+            )
             continue
         if cname_result.cname is None:
             not_vulnerable.append(subdomain)
@@ -526,31 +559,37 @@ def subdomain_takeover(domain: str) -> dict:
 
         fingerprint = _match_fingerprint(cname)
         if not fingerprint:
-            unknown.append({
-                "subdomain": subdomain,
-                "reason": "CNAME points to an unsupported service",
-            })
+            unknown.append(
+                {
+                    "subdomain": subdomain,
+                    "reason": "CNAME points to an unsupported service",
+                }
+            )
             continue
 
         probe_result = _confirms_takeover(subdomain, fingerprint, resolver=resolver)
         if probe_result.status is _ProbeStatus.CONFIRMED:
-            vulnerable.append({
-                "subdomain": subdomain,
-                "cname": cname,
-                "service": fingerprint["service"],
-                "reason": f"CNAME points to unclaimed {fingerprint['service']} service",
-                "severity": "HIGH",
-                "confidence": probe_result.confidence,
-                "evidence": probe_result.evidence,
-            })
+            vulnerable.append(
+                {
+                    "subdomain": subdomain,
+                    "cname": cname,
+                    "service": fingerprint["service"],
+                    "reason": f"CNAME points to unclaimed {fingerprint['service']} service",
+                    "severity": "HIGH",
+                    "confidence": probe_result.confidence,
+                    "evidence": probe_result.evidence,
+                }
+            )
         elif probe_result.status is _ProbeStatus.NO_INDICATOR:
             not_vulnerable.append(subdomain)
         else:
-            unknown.append({
-                "subdomain": subdomain,
-                "reason": "Unable to complete HTTP probe over HTTPS or HTTP",
-                "probe_errors": list(probe_result.probe_errors),
-            })
+            unknown.append(
+                {
+                    "subdomain": subdomain,
+                    "reason": "Unable to complete HTTP probe over HTTPS or HTTP",
+                    "probe_errors": list(probe_result.probe_errors),
+                }
+            )
 
     return {
         "success": True,

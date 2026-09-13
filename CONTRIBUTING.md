@@ -244,6 +244,7 @@ Module implementation for my_tool.
 
 from utils.helpers import is_valid_domain, normalize_domain
 
+
 def my_tool(domain: str) -> dict:
     """
     Perform a specialized security audit on the specified domain.
@@ -263,14 +264,10 @@ def my_tool(domain: str) -> dict:
         findings = {
             "target": domain,
             "inspected_endpoints": ["api", "admin"],
-            "status": "secure"
+            "status": "secure",
         }
 
-        return {
-            "success": True,
-            "domain": domain,
-            "data": findings
-        }
+        return {"success": True, "domain": domain, "data": findings}
 
     except Exception as e:
         return {"success": False, "error": f"Execution failed: {str(e)}"}
@@ -280,6 +277,7 @@ def my_tool(domain: str) -> dict:
 
 ```python
 import ipaddress
+
 
 def my_ip_tool(ip_address: str) -> dict:
     try:
@@ -313,11 +311,13 @@ Create a corresponding test suite in `tests/test_my_tool.py`:
 ```python
 from tools.my_tool import my_tool
 
+
 def test_my_tool_success():
     # Test valid input path
     result = my_tool("example.com")
     assert result["success"] is True
     assert result["domain"] == "example.com"
+
 
 def test_my_tool_invalid_domain():
     # Test failure path for invalid domain

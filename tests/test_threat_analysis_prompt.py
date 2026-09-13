@@ -5,13 +5,15 @@ so they have to describe the same cutoff the extractors apply. A rule that
 drifts from the code changes how findings are reported with nothing else in
 the tree noticing.
 """
+
 from tools.prompts.threat_analysis import THREAT_ANALYSIS_PROMPT
 
 
 def _headers_evidence_rule():
     """The single evidence-quality bullet governing the headers scan."""
     rules = [
-        line for line in THREAT_ANALYSIS_PROMPT.splitlines()
+        line
+        for line in THREAT_ANALYSIS_PROMPT.splitlines()
         if line.startswith("• IF the headers scan")
     ]
     assert len(rules) == 1, f"expected one headers evidence rule, found {len(rules)}"

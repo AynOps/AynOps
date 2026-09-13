@@ -1,7 +1,10 @@
 import unittest
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
+
 from curl_cffi.requests.errors import RequestsError
+
 from tools.crt_sh_tool import cert_transparency
+
 
 @patch("tools.crt_sh_tool.requests.get")
 def test_cert_transparency_success(mock_get):
@@ -25,7 +28,7 @@ def test_cert_transparency_success(mock_get):
             "issuer_name": "Let's Encrypt",
             "not_before": "2026-02-01T00:00:00",
             "not_after": "2026-05-01T00:00:00",
-        }
+        },
     ]
     mock_get.return_value = mock_response
 
@@ -37,7 +40,11 @@ def test_cert_transparency_success(mock_get):
     assert "api.example.com" in result["unique_subdomains"]
     assert "dev.example.com" in result["unique_subdomains"]
     assert "www.example.com" in result["unique_subdomains"]
-    assert result["unique_subdomains"] == ["api.example.com", "dev.example.com", "www.example.com"]
+    assert result["unique_subdomains"] == [
+        "api.example.com",
+        "dev.example.com",
+        "www.example.com",
+    ]
     assert result["wildcards_found"] == [".example.com"]
     assert result["total_unique_subdomains"] == 3
     assert result["total_certificates"] == 3
@@ -123,6 +130,7 @@ def test_wildcard_on_root_domain_is_captured(mock_get):
     assert result["unique_subdomains"] == []
     assert result["total_unique_subdomains"] == 0
 
+
 @patch("tools.crt_sh_tool.requests.get")
 def test_mixed_wildcard_and_concrete_subdomain(mock_get):
     mock_response = Mock()
@@ -143,6 +151,7 @@ def test_mixed_wildcard_and_concrete_subdomain(mock_get):
     assert "api.example.com" in result["unique_subdomains"]
     assert result["total_unique_subdomains"] == 1
 
+
 @patch("tools.crt_sh_tool.requests.get")
 def test_unrelated_wildcard_is_filtered_out(mock_get):
     mock_response = Mock()
@@ -158,10 +167,11 @@ def test_unrelated_wildcard_is_filtered_out(mock_get):
     mock_get.return_value = mock_response
 
     result = cert_transparency("example.com")
-    
+
     assert result["wildcards_found"] == []
     assert result["unique_subdomains"] == []
     assert result["total_certificates"] == 0
+
 
 @patch("tools.crt_sh_tool.requests.get")
 def test_wildcard_suffix_collision_is_filtered_out(mock_get):
@@ -206,6 +216,7 @@ def test_results_are_truncated_at_50_certificates(mock_get):
     assert result["truncated"] is True
     assert len(result["certificates"]) == 50
     assert result["total_unique_subdomains"] == 51
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

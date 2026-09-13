@@ -1,11 +1,21 @@
 import unittest
 from unittest.mock import MagicMock, patch
+
 from tools.portscan_tool import port_scan
 
-class TestPortScan(unittest.TestCase):
 
-    def _make_scanner_mock(self, host="93.184.216.34", open_ports=None, os_matches=None, elapsed="1.23", nmap_xml=None):
-        open_ports = open_ports or {80: {"state": "open", "name": "http", "product": "nginx", "version": "1.18"}}
+class TestPortScan(unittest.TestCase):
+    def _make_scanner_mock(
+        self,
+        host="93.184.216.34",
+        open_ports=None,
+        os_matches=None,
+        elapsed="1.23",
+        nmap_xml=None,
+    ):
+        open_ports = open_ports or {
+            80: {"state": "open", "name": "http", "product": "nginx", "version": "1.18"}
+        }
         scanner = MagicMock()
         scanner.all_hosts.return_value = [host]
         scanner[host].hostname.return_value = "example.com"
@@ -93,7 +103,12 @@ class TestPortScan(unittest.TestCase):
     @patch("tools.portscan_tool.nmap.PortScanner")
     def test_os_scan_includes_os_matches(self, mock_cls):
         os_matches = [
-            {"name": "Linux 4.19 - 5.15", "accuracy": "98", "line": "52790", "osclass": []},
+            {
+                "name": "Linux 4.19 - 5.15",
+                "accuracy": "98",
+                "line": "52790",
+                "osclass": [],
+            },
             {"name": "Linux 4.15", "accuracy": "94", "line": "52791", "osclass": []},
         ]
         mock_cls.return_value = self._make_scanner_mock(os_matches=os_matches)
@@ -127,7 +142,9 @@ class TestPortScan(unittest.TestCase):
     @patch("tools.portscan_tool.nmap.PortScanner")
     def test_duration_defaults_to_none_when_scanstats_unavailable(self, mock_cls):
         scanner = self._make_scanner_mock()
-        scanner.scanstats.side_effect = AssertionError("Do a scan before trying to get result !")
+        scanner.scanstats.side_effect = AssertionError(
+            "Do a scan before trying to get result !"
+        )
         mock_cls.return_value = scanner
 
         result = port_scan("example.com", "basic")
@@ -207,9 +224,7 @@ class TestPortScan(unittest.TestCase):
         result = port_scan("2606:4700::6810:84e5", "basic")
 
         self.assertTrue(result["success"])
-        self.assertEqual(
-            result["host_timeout_status"], {"2606:4700::6810:84e5": True}
-        )
+        self.assertEqual(result["host_timeout_status"], {"2606:4700::6810:84e5": True})
 
     @patch("tools.portscan_tool.nmap.PortScanner")
     def test_host_timeout_status_supports_multiple_hosts(self, mock_cls):
@@ -278,6 +293,7 @@ class TestPortScan(unittest.TestCase):
     @patch("tools.portscan_tool.nmap.PortScanner")
     def test_nmap_not_installed_error(self, mock_cls):
         import nmap
+
         mock_cls.return_value.scan.side_effect = nmap.PortScannerError("nmap not found")
         result = port_scan("example.com")
 
@@ -287,6 +303,7 @@ class TestPortScan(unittest.TestCase):
     @patch("tools.portscan_tool.nmap.PortScanner")
     def test_scan_timeout_returns_structured_error(self, mock_cls):
         import nmap
+
         timeout_exc = getattr(nmap, "PortScannerTimeout", TimeoutError)
         mock_cls.return_value.scan.side_effect = timeout_exc("timed out")
 
@@ -314,6 +331,7 @@ class TestPortScan(unittest.TestCase):
             ["basic", "service", "os", "full", "vuln"],
         )
         mock_cls.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
