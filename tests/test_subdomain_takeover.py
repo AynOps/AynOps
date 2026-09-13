@@ -666,5 +666,120 @@ def test_invalid_utf8_dns_record_does_not_escape_enumeration(mock_resolver_class
     assert result["subdomains_checked"] == 0
 
 
+def test_resolve_cname_udp_first_without_forced_tcp():
+    """Item 12: Verify CNAME resolution relies on UDP-first resolution without forcing tcp=True."""
+    from tools.subdomain_takeover_tool import _resolve_cname
+
+    resolver = Mock()
+    record = Mock()
+    record.__str__ = lambda self: "target.example.net."
+    resolver.resolve.return_value = [record]
+
+    result = _resolve_cname("sub.example.com", resolver)
+
+    assert result.cname == "target.example.net"
+    assert resolver.resolve.call_count == 2
+    for call in resolver.resolve.call_args_list:
+        assert "tcp" not in call.kwargs or call.kwargs["tcp"] is False
+
+
+def test_fingerprint_regex_patterns_anchored_and_normalized():
+    """Item 6: Verify regex patterns match valid service targets and reject spoofed/unanchored domains."""
+    from tools.subdomain_takeover_tool import _match_fingerprint
+
+    # Valid service hostnames with various casings and trailing dots
+    assert _match_fingerprint("myblog.github.io.")["service"] == "GitHub Pages"
+    assert _match_fingerprint("APP.HEROKUAPP.COM")["service"] == "Heroku"
+    assert _match_fingerprint("secure.herokussl.com.")["service"] == "Heroku"
+    assert _match_fingerprint("dns.herokudns.com")["service"] == "Heroku"
+    assert _match_fingerprint("site.azurewebsites.net.")["service"] == "Azure"
+    assert _match_fingerprint("cloud.cloudapp.net")["service"] == "Azure"
+    assert _match_fingerprint("routing.trafficmanager.net.")["service"] == "Azure"
+    assert _match_fingerprint("publication.ghost.io")["service"] == "Ghost"
+    assert _match_fingerprint("store.myshopify.com.")["service"] == "Shopify"
+    assert _match_fingerprint("cdn.fastly.net")["service"] == "Fastly"
+    assert _match_fingerprint("lb.fastlylb.net.")["service"] == "Fastly"
+
+    # Spoofed/unanchored lookalike domains must NOT match
+    assert _match_fingerprint("github.io.attacker.com") is None
+    assert _match_fingerprint("fake-github.io.com") is None
+    assert _match_fingerprint("herokuapp.com.phishing.org") is None
+    assert _match_fingerprint("azurewebsites.net.badsite.io") is None
+    assert _match_fingerprint("ghost.io.evil.com") is None
+    assert _match_fingerprint("myshopify.com.scam.net") is None
+    assert _match_fingerprint("fastly.net.malicious.com") is None
+
+
+def test_fastly_fingerprint_refined_indicator():
+    """Item 5: Fastly takeover requires specific 'unknown domain' indicator rather than generic errors."""
+    from tools.subdomain_takeover_tool import _confirms_takeover, _match_fingerprint
+
+    fingerprint = _match_fingerprint("mycdn.fastly.net")
+    assert fingerprint is not None
+    assert fingerprint["service"] == "Fastly"
+
+    # Specific unknown domain indicator confirms takeover
+    mock_probe = Mock()
+    mock_probe.response = Mock(status_code=500, text="Fastly error: unknown domain: sub.example.com", headers={})
+    res_confirmed = _confirms_takeover("sub.example.com", fingerprint, resolver=None)
+    with patch("tools.subdomain_takeover_tool._probe", return_value=mock_probe):
+        res = _confirms_takeover("sub.example.com", fingerprint)
+        assert res.status.value == "confirmed"
+
+    # Generic error without 'unknown domain' does NOT confirm takeover
+    mock_probe_generic = Mock()
+    mock_probe_generic.response = Mock(status_code=500, text="Fastly error: configuration fetch failed", headers={})
+    with patch("tools.subdomain_takeover_tool._probe", return_value=mock_probe_generic):
+        res = _confirms_takeover("sub.example.com", fingerprint)
+        assert res.status.value == "no_indicator"
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+def test_explicit_redirect_handling_cross_domain_halt(mock_get):
+    """Item 8: Redirect handling halts when target leaves subdomain scope to avoid third-party false positives."""
+    from tools.subdomain_takeover_tool import _probe
+
+    # First request returns redirect to an external parking domain
+    redirect_resp = Mock(status_code=302, headers={"Location": "https://external-parking.com/landing"})
+    redirect_resp.is_redirect = True
+    mock_get.return_value = redirect_resp
+
+    result = _probe("sub.example.com")
+    assert result.response is not None
+    assert result.response.status_code == 302
+    # Only 1 request should be made for https (and 0 hops followed to external host)
+    assert mock_get.call_count == 1
+    assert "sub.example.com" in mock_get.call_args[0][0]
+
+
+def test_ssrf_protection_blocks_private_and_loopback_ips():
+    """Item 9: Subdomains resolving to loopback or RFC 1918 private IPs are blocked for SSRF protection."""
+    from tools.subdomain_takeover_tool import _check_host_ssrf, _probe
+
+    # Direct private and loopback IP literals
+    assert _check_host_ssrf("127.0.0.1") is not None
+    assert _check_host_ssrf("10.0.0.1") is not None
+    assert _check_host_ssrf("192.168.1.100") is not None
+    assert _check_host_ssrf("169.254.169.254") is not None
+    assert _check_host_ssrf("::1") is not None
+
+    # Public IP literals are safe
+    assert _check_host_ssrf("93.184.216.34") is None
+
+    # Resolving to private IP via resolver mock
+    resolver = Mock()
+    resolver.resolve.return_value = ["10.10.10.10"]
+    err = _check_host_ssrf("internal.example.com", resolver=resolver)
+    assert err is not None
+    assert "private/reserved IP" in err
+
+    # _probe returns SSRFBlocked error and avoids making any HTTP requests
+    with patch("tools.subdomain_takeover_tool.requests.get") as mock_get:
+        probe_res = _probe("internal.example.com", resolver=resolver)
+        assert probe_res.response is None
+        assert any("SSRFBlocked" in e["error"] for e in probe_res.errors)
+        mock_get.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
