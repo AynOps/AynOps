@@ -1,34 +1,54 @@
 from __future__ import annotations
+
 import concurrent.futures
-import dns.resolver
+from typing import Any
+
 import dns.exception
-from typing import Any, Dict, List, Tuple
+import dns.resolver
+
 from utils.helpers import is_valid_domain, normalize_domain
 
 # Base generic defaults
 BASE_DKIM_SELECTORS = [
-    "default", "google", "selector1", "selector2", "k1", "k2",
-    "dkim", "mail", "smtp", "s1", "s2", "mandrill", "mxvault",
-    "zoho", "amazonses",
+    "default",
+    "google",
+    "selector1",
+    "selector2",
+    "k1",
+    "k2",
+    "dkim",
+    "mail",
+    "smtp",
+    "s1",
+    "s2",
+    "mandrill",
+    "mxvault",
+    "zoho",
+    "amazonses",
 ]
 
-def _query_txt(name: str) -> Tuple[List[str], bool]:
+
+def _query_txt(name: str) -> tuple[list[str], bool]:
     """Return (txt_record_strings, resolution_failed) for a DNS name."""
     resolver = dns.resolver.Resolver()
     resolver.lifetime = 4.0
     resolver.timeout = 2.0
-    
+
     try:
         answers = resolver.resolve(name, "TXT")
-        records = [b"".join(r.strings).decode("utf-8", errors="replace") for r in answers]
+        records = [
+            b"".join(r.strings).decode("utf-8", errors="replace") for r in answers
+        ]
         return records, False
     except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
         return [], False
     except (dns.resolver.Timeout, dns.exception.DNSException):
         try:
-            resolver.nameservers = ['1.1.1.1', '8.8.8.8']
+            resolver.nameservers = ["1.1.1.1", "8.8.8.8"]
             answers = resolver.resolve(name, "TXT")
-            records = [b"".join(r.strings).decode("utf-8", errors="replace") for r in answers]
+            records = [
+                b"".join(r.strings).decode("utf-8", errors="replace") for r in answers
+            ]
             return records, False
         except Exception:
             return [], True
@@ -36,17 +56,18 @@ def _query_txt(name: str) -> Tuple[List[str], bool]:
         return [], True
 
 
-def _discover_dynamic_selectors(domain: str) -> List[str]:
+def _discover_dynamic_selectors(domain: str) -> list[str]:
     """
     Inspects MX records to append smart infrastructure-specific selectors.
-    For example, if a domain uses Google Workspace, it adds specific internal 
+    For example, if a domain uses Google Workspace, it adds specific internal
     Google infrastructure selectors.
     """
     dynamic_selectors = set()
-    
+
     # 1. Inject temporal/historical pattern-matching common in enterprise setups (e.g., 2023, 2024, 2025, 2026)
     import datetime
-    current_year = datetime.datetime.now().year
+
+    current_year = datetime.datetime.now(datetime.UTC).year
     for year in range(current_year - 3, current_year + 1):
         dynamic_selectors.add(f"google{year}")
         dynamic_selectors.add(str(year))
@@ -60,7 +81,7 @@ def _discover_dynamic_selectors(domain: str) -> List[str]:
         resolver.lifetime = 3.0
         mx_answers = resolver.resolve(domain, "MX")
         mx_hosts = [str(mx.exchange).lower() for mx in mx_answers]
-        
+
         for host in mx_hosts:
             if "google" in host or "aspmx" in host:
                 # Add known custom variants Google uses internally for corporate components
@@ -69,7 +90,7 @@ def _discover_dynamic_selectors(domain: str) -> List[str]:
                 dynamic_selectors.update(["pp", "proofpoint", "selector"])
             if "protection.outlook" in host:
                 dynamic_selectors.update(["selector1", "msft", "microsoft"])
-    except Exception:
+    except Exception:  # noqa: S110 - MX-based selector discovery is best-effort; failure is non-fatal
         pass  # Fail gracefully if MX discovery hits a hitch
 
     return list(dynamic_selectors)
@@ -88,7 +109,7 @@ def _spf_policy(record: str) -> str:
     return "unknown"
 
 
-def _check_spf(domain: str, recommendations: List[str]) -> Dict[str, Any]:
+def _check_spf(domain: str, recommendations: list[str]) -> dict[str, Any]:
     txt_records, failed = _query_txt(domain)
 
     if failed:
@@ -107,15 +128,19 @@ def _check_spf(domain: str, recommendations: List[str]) -> Dict[str, Any]:
     spf_score = 30
     if policy == "softfail":
         spf_score = 20
-        recommendations.append("SPF uses softfail (~all) — consider a hard fail (-all) for stronger protection")
+        recommendations.append(
+            "SPF uses softfail (~all) — consider a hard fail (-all) for stronger protection"
+        )
     elif policy in ("neutral", "pass"):
         spf_score = 10
-        recommendations.append(f"SPF policy is '{policy}' — provides little protection.")
+        recommendations.append(
+            f"SPF policy is '{policy}' — provides little protection."
+        )
 
     return {"found": True, "record": record, "policy": policy, "score": spf_score}
 
 
-def _check_dmarc(domain: str, recommendations: List[str]) -> Dict[str, Any]:
+def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
     txt_records, failed = _query_txt(f"_dmarc.{domain}")
 
     if failed:
@@ -143,7 +168,9 @@ def _check_dmarc(domain: str, recommendations: List[str]) -> Dict[str, Any]:
         dmarc_score = 35
     elif policy == "quarantine":
         dmarc_score = 25
-        recommendations.append("DMARC policy is 'quarantine' — failing mail goes to spam.")
+        recommendations.append(
+            "DMARC policy is 'quarantine' — failing mail goes to spam."
+        )
 
     if "rua" not in tags:
         dmarc_score = max(0, dmarc_score - 5)
@@ -152,7 +179,7 @@ def _check_dmarc(domain: str, recommendations: List[str]) -> Dict[str, Any]:
     return {"found": True, "record": record, "policy": policy, "score": dmarc_score}
 
 
-def _check_dkim(domain: str, recommendations: List[str]) -> Dict[str, Any]:
+def _check_dkim(domain: str, recommendations: list[str]) -> dict[str, Any]:
     # Combine baseline guesses with dynamically generated infrastructure keys
     dynamic_keys = _discover_dynamic_selectors(domain)
     selectors_to_check = list(set(BASE_DKIM_SELECTORS + dynamic_keys))
@@ -164,7 +191,9 @@ def _check_dkim(domain: str, recommendations: List[str]) -> Dict[str, Any]:
         return None
 
     # Threading prevents the added dynamic keys from slowing down execution time
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(selectors_to_check)) as executor:
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=len(selectors_to_check)
+    ) as executor:
         results = executor.map(check_selector, selectors_to_check)
         found_selectors = [s for s in results if s is not None]
 
@@ -175,10 +204,10 @@ def _check_dkim(domain: str, recommendations: List[str]) -> Dict[str, Any]:
         recommendations.append("DKIM not found — add DKIM record to prevent spoofing")
 
     return {
-        "found": found, 
+        "found": found,
         "selectors_checked": selectors_to_check,
         "found_selectors": found_selectors,
-        "score": dkim_score
+        "score": dkim_score,
     }
 
 
@@ -198,7 +227,7 @@ def email_security_check(domain: str) -> dict:
         return {"success": False, "error": "Invalid domain format"}
 
     try:
-        recommendations: List[str] = []
+        recommendations: list[str] = []
 
         spf = _check_spf(domain, recommendations)
         dmarc = _check_dmarc(domain, recommendations)

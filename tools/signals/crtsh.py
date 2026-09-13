@@ -1,4 +1,4 @@
-def crt_extractor(result , signals):
+def crt_extractor(result, signals):
     if result.get("success"):
         count = result.get("total_unique_subdomains")
         signals["subdomain_count"] = count

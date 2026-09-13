@@ -3,12 +3,14 @@
 Analyzes the actual values of HTTP security headers and flags
 misconfigurations with severity ratings.
 """
+
 from __future__ import annotations
 
+from typing import Any
 from urllib.parse import urljoin
+
 from curl_cffi import requests
 from curl_cffi.requests.errors import RequestsError
-from typing import Any, List, Dict
 
 from utils.helpers import is_valid_domain, normalize_domain
 
@@ -19,7 +21,11 @@ _MAX_REDIRECT_HOPS = 8
 # to all origins. Not exhaustive, these are the ones with the most
 # direct privacy/security impact if left unrestricted.
 _SENSITIVE_PERMISSIONS_FEATURES = (
-    "camera", "microphone", "geolocation", "payment", "usb",
+    "camera",
+    "microphone",
+    "geolocation",
+    "payment",
+    "usb",
 )
 
 _GOOD_REFERRER_POLICIES = {
@@ -40,9 +46,7 @@ _ALL_VALID_REFERRER_POLICIES = {
     "unsafe-url",
 }
 
-_WAF_BLOCK_PAGE_HEADER_SIGNATURES = (
-    ("cf-mitigated", "challenge", "Cloudflare", None),
-)
+_WAF_BLOCK_PAGE_HEADER_SIGNATURES = (("cf-mitigated", "challenge", "Cloudflare", None),)
 
 # Body-content signatures: (substring to search for in the lowercased
 # response body, provider label, minimum status code required or None).
@@ -85,14 +89,21 @@ _WAF_BLOCK_PAGE_BODY_SIGNATURES = (
 )
 
 
-def _detect_waf_block_page(raw_headers: dict, status_code: int, body: str) -> str | None:
+def _detect_waf_block_page(
+    raw_headers: dict, status_code: int, body: str
+) -> str | None:
     """Return the provider name if this response (headers and/or body)
     looks like a WAF's own block/challenge page rather than real site
     content, else None. Header signatures are checked first since
     they're a cheap dict lookup; body signatures require a substring
     search over the full response body.
     """
-    for header_name, expected_value, provider, min_status in _WAF_BLOCK_PAGE_HEADER_SIGNATURES:
+    for (
+        header_name,
+        expected_value,
+        provider,
+        min_status,
+    ) in _WAF_BLOCK_PAGE_HEADER_SIGNATURES:
         if raw_headers.get(header_name, "").lower() != expected_value:
             continue
         if min_status is not None and status_code < min_status:
@@ -111,7 +122,9 @@ def _detect_waf_block_page(raw_headers: dict, status_code: int, body: str) -> st
     return None
 
 
-def _walk_redirect_chain(url: str, max_hops: int = _MAX_REDIRECT_HOPS) -> List[Dict[str, Any]]:
+def _walk_redirect_chain(
+    url: str, max_hops: int = _MAX_REDIRECT_HOPS
+) -> list[dict[str, Any]]:
     """Manually follow redirects one hop at a time, capturing each
     response's status, headers, and body along the way.
 
@@ -134,7 +147,7 @@ def _walk_redirect_chain(url: str, max_hops: int = _MAX_REDIRECT_HOPS) -> List[D
     of "differs from DevTools" reports, since DevTools shows every hop
     in the chain as a separate entry.
     """
-    hops: List[Dict[str, Any]] = []
+    hops: list[dict[str, Any]] = []
     current_url = url
     seen = set()
 
@@ -146,12 +159,14 @@ def _walk_redirect_chain(url: str, max_hops: int = _MAX_REDIRECT_HOPS) -> List[D
         resp = requests.get(
             current_url, timeout=10, impersonate="chrome", allow_redirects=False
         )
-        hops.append({
-            "url": current_url,
-            "status_code": resp.status_code,
-            "headers": dict(resp.headers.items()),
-            "body": resp.text,
-        })
+        hops.append(
+            {
+                "url": current_url,
+                "status_code": resp.status_code,
+                "headers": dict(resp.headers.items()),
+                "body": resp.text,
+            }
+        )
 
         if resp.status_code in _REDIRECT_STATUSES:
             location = resp.headers.get("location")
@@ -274,7 +289,7 @@ def headers_analyzer(domain: str) -> dict:
             }
 
     except RequestsError as e:
-        return {"success": False, "error": f"Connection failed: {str(e)}"}
+        return {"success": False, "error": f"Connection failed: {e!s}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -285,12 +300,14 @@ def headers_analyzer(domain: str) -> dict:
         # Computed once, reused for both the raw view and the analysis
         # below, avoids lowercasing the same dict twice per hop.
         hop_headers = {k.lower(): v for k, v in h["headers"].items()}
-        redirect_chain.append({
-            "url": h["url"],
-            "status_code": h["status_code"],
-            "headers": hop_headers,
-            "analysis": _analyze_raw_headers(hop_headers),
-        })
+        redirect_chain.append(
+            {
+                "url": h["url"],
+                "status_code": h["status_code"],
+                "headers": hop_headers,
+                "analysis": _analyze_raw_headers(hop_headers),
+            }
+        )
 
     return {
         "success": True,
@@ -336,10 +353,14 @@ def _analyze_raw_headers(raw_headers: dict) -> dict:
             try:
                 max_age = int(hsts_lower.split("max-age=")[1].split(";")[0].strip())
                 if max_age < 0:
-                    issues.append(f"max-age is {max_age}, which is invalid (must be non-negative)")
+                    issues.append(
+                        f"max-age is {max_age}, which is invalid (must be non-negative)"
+                    )
                     severity = "high"
                 elif max_age == 0:
-                    issues.append("max-age is 0 — this actively disables HSTS, removing protection")
+                    issues.append(
+                        "max-age is 0 — this actively disables HSTS, removing protection"
+                    )
                     severity = "high"
                 elif max_age < 31536000:
                     issues.append(f"max-age is {max_age}, recommend 31536000 (1 year)")
@@ -387,12 +408,12 @@ def _analyze_raw_headers(raw_headers: dict) -> dict:
             issues.append("Contains 'unsafe-eval' which allows eval()")
             severity = "high"
         has_wildcard = False
-        for directive_str in csp_lower.split(';'):
+        for directive_str in csp_lower.split(";"):
             tokens = directive_str.split()
             if not tokens:
                 continue
             name = tokens[0]
-            if name in ('default-src', 'script-src') and '*' in tokens[1:]:
+            if name in ("default-src", "script-src") and "*" in tokens[1:]:
                 has_wildcard = True
                 break
 
@@ -402,12 +423,17 @@ def _analyze_raw_headers(raw_headers: dict) -> dict:
         # A CSP without a restrictive default-src (neither 'self' nor
         # 'none') leaves an implicit fallback that's effectively
         # unrestricted for any directive not explicitly listed.
-        if "default-src 'none'" not in csp_lower and "default-src 'self'" not in csp_lower:
+        if (
+            "default-src 'none'" not in csp_lower
+            and "default-src 'self'" not in csp_lower
+        ):
             issues.append("No restrictive default-src directive found")
             if severity == "low":
                 severity = "medium"
         if report_only:
-            issues.insert(0, "CSP is report-only mode — violations are reported but not enforced")
+            issues.insert(
+                0, "CSP is report-only mode — violations are reported but not enforced"
+            )
             if severity == "low":
                 severity = "medium"
         headers["content-security-policy"] = {
@@ -514,7 +540,9 @@ def _analyze_raw_headers(raw_headers: dict) -> dict:
         # provides essentially no restriction despite being "present".
         for feature in _SENSITIVE_PERMISSIONS_FEATURES:
             if f"{feature}=*" in pp_lower:
-                issues.append(f"'{feature}' is granted to all origins (wildcard) — consider restricting")
+                issues.append(
+                    f"'{feature}' is granted to all origins (wildcard) — consider restricting"
+                )
                 severity = "medium"
         headers["permissions-policy"] = {
             "present": True,

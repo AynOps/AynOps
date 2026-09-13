@@ -1,7 +1,7 @@
-def ip_reputation_extractor(result , signals):
+def ip_reputation_extractor(result, signals):
     if result.get("success"):
-        flagged    = result.get("is_malicious")
-        rep_score  = result.get("abuse_confidence_score")
+        flagged = result.get("is_malicious")
+        rep_score = result.get("abuse_confidence_score")
         signals["ip_reputation_flagged"] = flagged
         try:
             rep_score = int(rep_score)
@@ -13,8 +13,8 @@ def ip_reputation_extractor(result , signals):
         signals["ip_abuse_score"] = rep_score
         if flagged:
             signals["auto_warnings"].append(
-                f"IP flagged as MALICIOUS "
-                f"— hosting may be blacklisted by mail servers and firewalls"
+                "IP flagged as MALICIOUS "
+                "— hosting may be blacklisted by mail servers and firewalls"
             )
         elif rep_score > 20:
             signals["auto_warnings"].append(
@@ -22,6 +22,7 @@ def ip_reputation_extractor(result , signals):
             )
     else:
         return
+
 
 def extract_ip(results: dict) -> str | None:
     """

@@ -1,10 +1,10 @@
-from unittest.mock import MagicMock, patch
-import socket
 import unittest
+from unittest.mock import MagicMock, patch
+
 from tools.whois_tool import whois_lookup
 
-class TestWhoisLookup(unittest.TestCase):
 
+class TestWhoisLookup(unittest.TestCase):
     def _mock_whois_result(self):
         m = MagicMock()
         m.domain_name = "example.com"
@@ -47,20 +47,27 @@ class TestWhoisLookup(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("error", result)
 
-    @patch("tools.whois_tool.whois.whois", side_effect=Exception("WHOIS server timeout"))
+    @patch(
+        "tools.whois_tool.whois.whois", side_effect=Exception("WHOIS server timeout")
+    )
     def test_whois_exception_caught(self, _):
         result = whois_lookup("example.com")
         self.assertFalse(result["success"])
         self.assertIn("WHOIS server timeout", result["error"])
 
-    @patch("tools.whois_tool.whois.whois", side_effect=TimeoutError("WHOIS lookup timed out"))
+    @patch(
+        "tools.whois_tool.whois.whois",
+        side_effect=TimeoutError("WHOIS lookup timed out"),
+    )
     def test_whois_timeout_error_caught(self, _):
         result = whois_lookup("example.com")
         self.assertFalse(result["success"])
         self.assertIn("timed out after", result["error"])
         self.assertIn("10 seconds", result["error"])
 
-    @patch("tools.whois_tool.whois.whois", side_effect=socket.timeout("connection timed out"))
+    @patch(
+        "tools.whois_tool.whois.whois", side_effect=TimeoutError("connection timed out")
+    )
     def test_whois_socket_timeout_caught(self, _):
         result = whois_lookup("example.com")
         self.assertFalse(result["success"])
@@ -77,6 +84,7 @@ class TestWhoisLookup(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertIsNone(result["expiration_date"])
         self.assertIsNone(result["creation_date"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

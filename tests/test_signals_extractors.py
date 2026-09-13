@@ -6,14 +6,15 @@ especially important for the ip_abuse_score signal, which was silently
 always 0 between PR #84 and the fix that moved the assignment into
 ip_reputation_extractor (the AbuseIPDB-backed canonical source).
 """
+
 from unittest.mock import patch
 
 from tools.headers_tool import headers_analyzer
 from tools.signals.asn import asn_extractor
-from tools.signals.ip_reputation import ip_reputation_extractor
-from tools.signals.tech_stack import techstack_extractor
 from tools.signals.extractor import extract_signals
+from tools.signals.ip_reputation import ip_reputation_extractor
 from tools.signals.registry import TOOL_REGISTRY
+from tools.signals.tech_stack import techstack_extractor
 
 
 def _base_signals():
@@ -38,6 +39,7 @@ def _base_signals():
 
 
 # ── ip_reputation_extractor ──────────────────────────────────────────────
+
 
 def test_ip_reputation_extractor_populates_abuse_score():
     """ip_reputation_extractor must assign abuse_confidence_score to ip_abuse_score.
@@ -137,6 +139,7 @@ def test_ip_reputation_extractor_elevated_warning_above_20():
 
 # ── asn_extractor ────────────────────────────────────────────────────────
 
+
 def test_asn_extractor_does_not_touch_ip_abuse_score():
     """asn_extractor must NOT zero out ip_abuse_score.
 
@@ -169,6 +172,7 @@ def test_asn_extractor_skips_on_unsuccessful_result():
 
 
 # ── extract_signals integration ──────────────────────────────────────────
+
 
 def test_extract_signals_populates_ip_abuse_score_from_ip_reputation():
     """End-to-end: extract_signals must populate ip_abuse_score from the
@@ -246,6 +250,7 @@ def test_asn_extractor_populates_metadata_signals():
     assert signals["asn_country"] == "US"
     assert signals["ip_abuse_score"] == 0
 
+
 def test_asn_extractor_skips_metadata_on_failure():
     """Failed ASN lookups leave asn_* fields unset."""
     result = {"success": False, "error": "Failed to resolve domain"}
@@ -258,6 +263,7 @@ def test_asn_extractor_skips_metadata_on_failure():
 
 
 # ── techstack_extractor ──────────────────────────────────────────────────
+
 
 def test_techstack_extractor_flattens_list_valued_technologies():
     """Detection dicts in each category must be flattened into individual names."""
@@ -275,7 +281,7 @@ def test_techstack_extractor_flattens_list_valued_technologies():
                 {"name": "Google Analytics", "confidence": 90, "evidence": ["gtag"]},
             ],
             "frameworks": [
-                {"name": "React",  "confidence": 85, "evidence": ["__react"]},
+                {"name": "React", "confidence": 85, "evidence": ["__react"]},
                 {"name": "Vue.js", "confidence": 85, "evidence": ["__vue__"]},
             ],
         },
@@ -303,10 +309,10 @@ def test_techstack_extractor_skips_empty_and_none_technologies():
             "cms": [],
             "analytics": None,
             "frameworks": [
-                {"name": "React",   "confidence": 85, "evidence": []},
-                {"name": "",        "confidence": 70, "evidence": []},
+                {"name": "React", "confidence": 85, "evidence": []},
+                {"name": "", "confidence": 70, "evidence": []},
                 {"name": "Unknown", "confidence": 70, "evidence": []},
-                {"name": "None",    "confidence": 70, "evidence": []},
+                {"name": "None", "confidence": 70, "evidence": []},
             ],
         },
     }
@@ -314,7 +320,6 @@ def test_techstack_extractor_skips_empty_and_none_technologies():
     techstack_extractor(result, signals)
 
     assert signals["software_detected"] == ["nginx", "React"]
-
 
 
 # ── headers_extractor ────────────────────────────────────────────────────
@@ -357,20 +362,26 @@ def _hop(url, status_code, raw_headers):
 
 def _headers_result(raw_headers, status_code=200):
     """Run the real headers_analyzer over one canned HTTP response."""
-    return _headers_result_over([_hop("https://example.com/", status_code, raw_headers)])
+    return _headers_result_over(
+        [_hop("https://example.com/", status_code, raw_headers)]
+    )
 
 
 def _raw_headers_without(*omitted):
     """The fully hardened header set minus the named headers."""
     dropped = {h.lower() for h in omitted}
-    return {k: v for k, v in _RAW_HEADERS_ALL_PRESENT.items() if k.lower() not in dropped}
+    return {
+        k: v for k, v in _RAW_HEADERS_ALL_PRESENT.items() if k.lower() not in dropped
+    }
 
 
 def _registry_results(**overrides):
     """A full_recon-shaped results dict: every registered tool failed,
     except the ones overridden here."""
-    results = {t["name"]: {"success": False, "error": "not run in this test"}
-               for t in TOOL_REGISTRY}
+    results = {
+        t["name"]: {"success": False, "error": "not run in this test"}
+        for t in TOOL_REGISTRY
+    }
     results.update(overrides)
     return results
 
@@ -412,10 +423,20 @@ def test_extract_signals_reads_the_headers_of_the_final_redirect_hop():
     """A chain that resolves to a 2xx page did reach the site, so the page's
     absent headers must still reach the signal."""
     results = _registry_results(
-        headers=_headers_result_over([
-            _hop("https://example.com/", 301, {"Location": "https://www.example.com/"}),
-            _hop("https://www.example.com/", 200, _raw_headers_without("Content-Security-Policy")),
-        ])
+        headers=_headers_result_over(
+            [
+                _hop(
+                    "https://example.com/",
+                    301,
+                    {"Location": "https://www.example.com/"},
+                ),
+                _hop(
+                    "https://www.example.com/",
+                    200,
+                    _raw_headers_without("Content-Security-Policy"),
+                ),
+            ]
+        )
     )
     signals = extract_signals(results)
 
@@ -513,7 +534,9 @@ def test_headers_extractor_warns_softly_on_two_missing():
     extractor = _registry_entry("headers")["extractor"]
     signals = _base_signals()
     extractor(
-        _headers_result(_raw_headers_without("Content-Security-Policy", "Referrer-Policy")),
+        _headers_result(
+            _raw_headers_without("Content-Security-Policy", "Referrer-Policy")
+        ),
         signals,
     )
 

@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-
 ROOT = Path(__file__).resolve().parents[1]
 _APPROVED_ACTION_USES = frozenset(
     {
@@ -26,8 +25,8 @@ _DIRECT_TOKEN_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-"
 )
 _DIRECT_COMMAND_PATTERN = (
-    rf"[ \t]*(?:uv[ \t]+sync[ \t]+--locked"
-    rf"|uv[ \t]+run[ \t]+pytest[ \t]+tests/[ \t]+-v)[ \t]*"
+    r"[ \t]*(?:uv[ \t]+sync[ \t]+--locked"
+    r"|uv[ \t]+run[ \t]+pytest[ \t]+tests/[ \t]+-v)[ \t]*"
 )
 _DIRECT_RUN_PATTERN = re.compile(
     rf"{_DIRECT_COMMAND_PATTERN}(?:\n{_DIRECT_COMMAND_PATTERN})*\n?"
@@ -159,9 +158,7 @@ def _workflow_from_run_scalars(*run_scalars):
     return yaml.safe_dump(
         {
             "jobs": {
-                "test": {
-                    "steps": [{"run": run_scalar} for run_scalar in run_scalars]
-                }
+                "test": {"steps": [{"run": run_scalar} for run_scalar in run_scalars]}
             }
         },
         allow_unicode=False,
@@ -177,7 +174,8 @@ def _is_pip_install(command):
     return (
         command[:2] == ["pip", "install"]
         or command[:3] == ["uv", "pip", "install"]
-        or command[:4] in (
+        or command[:4]
+        in (
             ["python", "-m", "pip", "install"],
             ["python3", "-m", "pip", "install"],
         )
@@ -186,8 +184,7 @@ def _is_pip_install(command):
 
 def _is_requirements_install(command):
     return any(
-        token.startswith("requirements") and token.endswith(".txt")
-        for token in command
+        token.startswith("requirements") and token.endswith(".txt") for token in command
     )
 
 
@@ -195,7 +192,8 @@ def _is_pytest_invocation(command):
     return (
         command[:3] == ["uv", "run", "pytest"]
         or command[:1] == ["pytest"]
-        or command[:3] in (
+        or command[:3]
+        in (
             ["python", "-m", "pytest"],
             ["python3", "-m", "pytest"],
         )
@@ -211,9 +209,7 @@ def _assert_locked_uv_workflow(workflow_text):
     ]
     assert len(locked_sync) == 1
 
-    uv_sync = [
-        command for _, command in commands if command[:2] == ["uv", "sync"]
-    ]
+    uv_sync = [command for _, command in commands if command[:2] == ["uv", "sync"]]
     assert uv_sync == [["uv", "sync", "--locked"]]
 
     assert not any(_is_pip_install(command) for _, command in commands)
@@ -446,8 +442,7 @@ def test_workflow_contract_rejects_executable_local_actions():
             id="self-repository-action",
         ),
         pytest.param(
-            "gaoharimran29-glitch/AynOps/.github/actions/"
-            "dependency-installer@main",
+            "gaoharimran29-glitch/AynOps/.github/actions/dependency-installer@main",
             id="same-repository-action-at-ref",
         ),
     ],
@@ -509,9 +504,7 @@ def test_workflow_contract_rejects_job_level_reusable_workflows():
         ),
     ],
 )
-def test_workflow_contract_rejects_custom_execution_environment(
-    runs_on, environment
-):
+def test_workflow_contract_rejects_custom_execution_environment(runs_on, environment):
     """Custom environments cannot alter project or executable authority."""
     with pytest.raises(AssertionError):
         _assert_locked_uv_workflow(
@@ -653,10 +646,10 @@ def test_workflow_contract_rejects_midword_hash_suffixes():
 @pytest.mark.parametrize(
     ("install_command", "pytest_command"),
     [
-        ("uv sync \"--locked\"", "uv run pytest tests/ -v"),
+        ('uv sync "--locked"', "uv run pytest tests/ -v"),
         ('uv "sync" --locked', "uv run pytest tests/ -v"),
-        ("uv sync --locked", "uv \"run\" pytest tests/ -v"),
-        ("uv sync --locked", "uv run \"pytest\" tests/ -v"),
+        ("uv sync --locked", 'uv "run" pytest tests/ -v'),
+        ("uv sync --locked", 'uv run "pytest" tests/ -v'),
     ],
 )
 def test_workflow_contract_rejects_quoted_command_tokens(
@@ -887,9 +880,7 @@ def test_workflow_contract_rejects_pytest_argument_gutting(pytest_command):
             id="job-condition",
         ),
         pytest.param(
-            _canonical_job(
-                "    runs-on: ubuntu-latest\n", "        if: false\n"
-            ),
+            _canonical_job("    runs-on: ubuntu-latest\n", "        if: false\n"),
             id="step-condition",
         ),
     ],
@@ -904,9 +895,7 @@ def test_workflow_contract_rejects_conditional_execution(workflow):
     "workflow",
     [
         pytest.param(
-            _canonical_job(
-                "    runs-on: ubuntu-latest\n    continue-on-error: true\n"
-            ),
+            _canonical_job("    runs-on: ubuntu-latest\n    continue-on-error: true\n"),
             id="job-continue-on-error",
         ),
         pytest.param(

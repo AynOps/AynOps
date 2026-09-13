@@ -1,7 +1,9 @@
 import unittest
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
+
 from curl_cffi.requests.errors import RequestsError
 from curl_cffi.requests.headers import Headers
+
 from tools.headers_tool import _analyze_raw_headers, headers_analyzer
 
 
@@ -34,7 +36,6 @@ def _resp(status_code: int, headers: dict, body: str = ""):
 
 
 class TestHeadersAnalyzer(unittest.TestCase):
-
     # ------------------------------------------------------------------
     # Domain validation
     # ------------------------------------------------------------------
@@ -54,11 +55,14 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_success_returns_correct_structure(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-            "X-Frame-Options": "DENY",
-            "X-Content-Type-Options": "nosniff",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+                "X-Frame-Options": "DENY",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
         self.assertIn("domain", result)
@@ -67,9 +71,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_hsts_present_and_valid(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+            },
+        )
         result = headers_analyzer("example.com")
         hsts = result["headers"]["strict-transport-security"]
         self.assertTrue(hsts["present"])
@@ -86,9 +93,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_hsts_low_max_age_flagged_medium(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Strict-Transport-Security": "max-age=3600",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Strict-Transport-Security": "max-age=3600",
+            },
+        )
         result = headers_analyzer("example.com")
         hsts = result["headers"]["strict-transport-security"]
         self.assertTrue(hsts["present"])
@@ -97,9 +107,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_hsts_max_age_zero_flagged_high(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Strict-Transport-Security": "max-age=0",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Strict-Transport-Security": "max-age=0",
+            },
+        )
         result = headers_analyzer("example.com")
         hsts = result["headers"]["strict-transport-security"]
         self.assertEqual(hsts["severity"], "high")
@@ -107,9 +120,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_hsts_negative_max_age_flagged_high(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Strict-Transport-Security": "max-age=-1",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Strict-Transport-Security": "max-age=-1",
+            },
+        )
         result = headers_analyzer("example.com")
         hsts = result["headers"]["strict-transport-security"]
         self.assertEqual(hsts["severity"], "high")
@@ -117,9 +133,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_hsts_malformed_max_age_value_caught(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Strict-Transport-Security": "max-age=notanumber",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Strict-Transport-Security": "max-age=notanumber",
+            },
+        )
         result = headers_analyzer("example.com")
         hsts = result["headers"]["strict-transport-security"]
         self.assertTrue(hsts["present"])
@@ -128,9 +147,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_hsts_present_without_max_age_directive(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Strict-Transport-Security": "includeSubDomains",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Strict-Transport-Security": "includeSubDomains",
+            },
+        )
         result = headers_analyzer("example.com")
         hsts = result["headers"]["strict-transport-security"]
         self.assertTrue(hsts["present"])
@@ -139,9 +161,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_hsts_missing_includesubdomains_upgrades_severity(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Strict-Transport-Security": "max-age=31536000",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Strict-Transport-Security": "max-age=31536000",
+            },
+        )
         result = headers_analyzer("example.com")
         hsts = result["headers"]["strict-transport-security"]
         self.assertTrue(hsts["present"])
@@ -158,9 +183,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_csp_unsafe_inline_flagged(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Content-Security-Policy": "default-src 'self'; script-src 'unsafe-inline'",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Content-Security-Policy": "default-src 'self'; script-src 'unsafe-inline'",
+            },
+        )
         result = headers_analyzer("example.com")
         csp = result["headers"]["content-security-policy"]
         self.assertTrue(csp["present"])
@@ -169,9 +197,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_csp_unsafe_eval_flagged(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Content-Security-Policy": "default-src 'self'; script-src 'unsafe-eval'",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Content-Security-Policy": "default-src 'self'; script-src 'unsafe-eval'",
+            },
+        )
         result = headers_analyzer("example.com")
         csp = result["headers"]["content-security-policy"]
         self.assertIn("unsafe-eval", csp["issue"])
@@ -179,9 +210,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_csp_wildcard_source_flagged(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Content-Security-Policy": "default-src *",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Content-Security-Policy": "default-src *",
+            },
+        )
         result = headers_analyzer("example.com")
         csp = result["headers"]["content-security-policy"]
         self.assertIn("Wildcard", csp["issue"])
@@ -189,18 +223,24 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_csp_wildcard_source_scoped_not_flagged(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Content-Security-Policy": "script-src *.trusted-cdn.com; default-src *.example.com",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Content-Security-Policy": "script-src *.trusted-cdn.com; default-src *.example.com",
+            },
+        )
         result = headers_analyzer("example.com")
         csp = result["headers"]["content-security-policy"]
         self.assertNotIn("Wildcard", csp["issue"])
 
     @patch("tools.headers_tool.requests.get")
     def test_csp_wildcard_irregular_whitespace_flagged(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Content-Security-Policy": "script-src   * ;",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Content-Security-Policy": "script-src   * ;",
+            },
+        )
         result = headers_analyzer("example.com")
         csp = result["headers"]["content-security-policy"]
         self.assertIn("Wildcard", csp["issue"])
@@ -208,18 +248,24 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_csp_wildcard_in_unrelated_directive(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Content-Security-Policy": "img-src *; script-src 'self'",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Content-Security-Policy": "img-src *; script-src 'self'",
+            },
+        )
         result = headers_analyzer("example.com")
         csp = result["headers"]["content-security-policy"]
         self.assertNotIn("Wildcard", csp["issue"])
 
     @patch("tools.headers_tool.requests.get")
     def test_csp_missing_default_src_flagged_once(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Content-Security-Policy": "script-src 'self'",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Content-Security-Policy": "script-src 'self'",
+            },
+        )
         result = headers_analyzer("example.com")
         csp = result["headers"]["content-security-policy"]
         issue_count = csp["issue"].count("No restrictive default-src")
@@ -228,9 +274,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_csp_report_only_mode_detected(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Content-Security-Policy-Report-Only": "default-src 'self'",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Content-Security-Policy-Report-Only": "default-src 'self'",
+            },
+        )
         result = headers_analyzer("example.com")
         csp = result["headers"]["content-security-policy"]
         self.assertTrue(csp["present"])
@@ -253,9 +302,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
         for the test that covers the merging mechanism itself using
         genuinely separate header entries.
         """
-        mock_get.return_value = _resp(200, {
-            "Content-Security-Policy": "default-src 'self', script-src 'unsafe-inline'",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Content-Security-Policy": "default-src 'self', script-src 'unsafe-inline'",
+            },
+        )
         result = headers_analyzer("example.com")
         csp = result["headers"]["content-security-policy"]
         self.assertIn("default-src 'self'", csp["value"])
@@ -283,10 +335,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
         mock_resp = Mock()
         mock_resp.status_code = 200
         mock_resp.text = ""
-        mock_resp.headers = Headers([
-            ("Content-Security-Policy", "script-src 'unsafe-inline'"),
-            ("Content-Security-Policy", "default-src 'self'"),
-        ])
+        mock_resp.headers = Headers(
+            [
+                ("Content-Security-Policy", "script-src 'unsafe-inline'"),
+                ("Content-Security-Policy", "default-src 'self'"),
+            ]
+        )
         mock_get.return_value = mock_resp
 
         result = headers_analyzer("example.com")
@@ -306,7 +360,9 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_x_frame_options_unrecognized_value_flagged(self, mock_get):
-        mock_get.return_value = _resp(200, {"X-Frame-Options": "ALLOW-FROM https://example.com"})
+        mock_get.return_value = _resp(
+            200, {"X-Frame-Options": "ALLOW-FROM https://example.com"}
+        )
         result = headers_analyzer("example.com")
         xfo = result["headers"]["x-frame-options"]
         self.assertTrue(xfo["present"])
@@ -330,12 +386,15 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_information_disclosure_headers_use_hyphenated_keys(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Server": "Apache/2.4.41",
-            "X-Powered-By": "Express",
-            "X-AspNet-Version": "4.0.30319",
-            "X-Generator": "Drupal 7",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Server": "Apache/2.4.41",
+                "X-Powered-By": "Express",
+                "X-AspNet-Version": "4.0.30319",
+                "X-Generator": "Drupal 7",
+            },
+        )
         result = headers_analyzer("example.com")
         headers = result["headers"]
         # Hyphenated keys should be present
@@ -380,12 +439,18 @@ class TestHeadersAnalyzer(unittest.TestCase):
         self.assertEqual(set(analyzed.keys()), expected_keys)
         # Structural assertion: no header-derived keys contain underscores
         for key in analyzed:
-            self.assertNotIn("_", key, f"Header key '{key}' should not contain underscores")
-            self.assertEqual(key, key.lower(), f"Header key '{key}' should be lowercased")
+            self.assertNotIn(
+                "_", key, f"Header key '{key}' should not contain underscores"
+            )
+            self.assertEqual(
+                key, key.lower(), f"Header key '{key}' should be lowercased"
+            )
 
     @patch("tools.headers_tool.requests.get")
     def test_referrer_policy_good_value_accepted(self, mock_get):
-        mock_get.return_value = _resp(200, {"Referrer-Policy": "strict-origin-when-cross-origin"})
+        mock_get.return_value = _resp(
+            200, {"Referrer-Policy": "strict-origin-when-cross-origin"}
+        )
         result = headers_analyzer("example.com")
         rp = result["headers"]["referrer-policy"]
         self.assertTrue(rp["present"])
@@ -403,9 +468,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_referrer_policy_fallback_list_safe_last(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Referrer-Policy": "unsafe-url, strict-origin-when-cross-origin",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Referrer-Policy": "unsafe-url, strict-origin-when-cross-origin",
+            },
+        )
         result = headers_analyzer("example.com")
         rp = result["headers"]["referrer-policy"]
         self.assertTrue(rp["present"])
@@ -414,9 +482,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_referrer_policy_fallback_list_unsafe_last(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Referrer-Policy": "strict-origin-when-cross-origin, unsafe-url",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Referrer-Policy": "strict-origin-when-cross-origin, unsafe-url",
+            },
+        )
         result = headers_analyzer("example.com")
         rp = result["headers"]["referrer-policy"]
         self.assertTrue(rp["present"])
@@ -425,18 +496,24 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_referrer_policy_fallback_list_whitespace_tolerant(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Referrer-Policy": "no-referrer ,  unsafe-url",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Referrer-Policy": "no-referrer ,  unsafe-url",
+            },
+        )
         result = headers_analyzer("example.com")
         rp = result["headers"]["referrer-policy"]
         self.assertTrue(rp["present"])
         self.assertIn("may leak", rp["issue"])
         self.assertEqual(rp["severity"], "medium")
 
-        mock_get.return_value = _resp(200, {
-            "Referrer-Policy": "unsafe-url ,  no-referrer",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Referrer-Policy": "unsafe-url ,  no-referrer",
+            },
+        )
         result2 = headers_analyzer("example.com")
         rp2 = result2["headers"]["referrer-policy"]
         self.assertTrue(rp2["present"])
@@ -445,9 +522,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_referrer_policy_fallback_list_unknown_token_ignored(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Referrer-Policy": "strict-origin-when-cross-origin, future-unknown-policy",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Referrer-Policy": "strict-origin-when-cross-origin, future-unknown-policy",
+            },
+        )
         result = headers_analyzer("example.com")
         rp = result["headers"]["referrer-policy"]
         self.assertTrue(rp["present"])
@@ -460,9 +540,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_permissions_policy_restrictive_clean(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Permissions-Policy": "camera=(), microphone=()",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Permissions-Policy": "camera=(), microphone=()",
+            },
+        )
         result = headers_analyzer("example.com")
         pp = result["headers"]["permissions-policy"]
         self.assertTrue(pp["present"])
@@ -471,9 +554,12 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_permissions_policy_wildcard_sensitive_feature_flagged(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Permissions-Policy": "camera=*, geolocation=()",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Permissions-Policy": "camera=*, geolocation=()",
+            },
+        )
         result = headers_analyzer("example.com")
         pp = result["headers"]["permissions-policy"]
         self.assertTrue(pp["present"])
@@ -494,32 +580,45 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_cloudflare_challenge_page_is_rejected_not_analyzed(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Server": "cloudflare",
-            "cf-mitigated": "challenge",
-            "X-Frame-Options": "SAMEORIGIN",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Server": "cloudflare",
+                "cf-mitigated": "challenge",
+                "X-Frame-Options": "SAMEORIGIN",
+            },
+        )
         result = headers_analyzer("example.com")
         self.assertFalse(result["success"])
         self.assertIn("challenge", result["error"].lower())
 
     @patch("tools.headers_tool.requests.get")
-    def test_normal_cloudflare_site_without_challenge_is_analyzed_normally(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Server": "cloudflare",
-            "X-Frame-Options": "DENY",
-            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-        })
+    def test_normal_cloudflare_site_without_challenge_is_analyzed_normally(
+        self, mock_get
+    ):
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Server": "cloudflare",
+                "X-Frame-Options": "DENY",
+                "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+            },
+        )
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
         self.assertTrue(result["headers"]["x-frame-options"]["present"])
 
     @patch("tools.headers_tool.requests.get")
-    def test_cloudflare_fronted_403_without_challenge_header_is_analyzed_normally(self, mock_get):
-        mock_get.return_value = _resp(403, {
-            "Server": "cloudflare",
-            "X-Frame-Options": "DENY",
-        })
+    def test_cloudflare_fronted_403_without_challenge_header_is_analyzed_normally(
+        self, mock_get
+    ):
+        mock_get.return_value = _resp(
+            403,
+            {
+                "Server": "cloudflare",
+                "X-Frame-Options": "DENY",
+            },
+        )
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
         self.assertTrue(result["headers"]["x-frame-options"]["present"])
@@ -532,27 +631,34 @@ class TestHeadersAnalyzer(unittest.TestCase):
         # fingerprint is required since #194 -- Server: AkamaiGHost
         # alone is on every response from an Akamai-fronted origin,
         # blocked or not.
-        mock_get.return_value = _resp(403, {
-            "Server": "AkamaiGHost",
-            "Content-Type": "text/html",
-        }, body=(
-            "<html><head><title>Access Denied</title></head><body>"
-            "<h1>Access Denied</h1><p>You don't have permission to "
-            "access this page.</p><p>Reference #18.4a2b3c4d.1757000000.0</p>"
-            "</body></html>"
-        ))
+        mock_get.return_value = _resp(
+            403,
+            {
+                "Server": "AkamaiGHost",
+                "Content-Type": "text/html",
+            },
+            body=(
+                "<html><head><title>Access Denied</title></head><body>"
+                "<h1>Access Denied</h1><p>You don't have permission to "
+                "access this page.</p><p>Reference #18.4a2b3c4d.1757000000.0</p>"
+                "</body></html>"
+            ),
+        )
         result = headers_analyzer("example.com")
         self.assertFalse(result["success"])
         self.assertIn("akamai", result["error"].lower())
 
     @patch("tools.headers_tool.requests.get")
     def test_normal_akamai_fronted_site_is_analyzed_normally(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Server": "Apache",
-            "x-akamai-transformed": "9 16447 0 pmb=mRUM,2",
-            "Set-Cookie": "ak_bmsc=abc123; Domain=.example.com; Path=/",
-            "X-Frame-Options": "SAMEORIGIN",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Server": "Apache",
+                "x-akamai-transformed": "9 16447 0 pmb=mRUM,2",
+                "Set-Cookie": "ak_bmsc=abc123; Domain=.example.com; Path=/",
+                "X-Frame-Options": "SAMEORIGIN",
+            },
+        )
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
         self.assertTrue(result["headers"]["x-frame-options"]["present"])
@@ -561,21 +667,27 @@ class TestHeadersAnalyzer(unittest.TestCase):
     def test_akamai_ordinary_404_is_not_classified_as_block(self, mock_get):
         # #194 regression: Server: AkamaiGHost + 404 + an ordinary origin
         # error body must NOT abort analysis as a bot-detection block.
-        mock_get.return_value = _resp(404, {
-            "Server": "AkamaiGHost",
-            "X-Frame-Options": "SAMEORIGIN",
-        }, body="<html><body><h1>404 Not Found</h1></body></html>")
+        mock_get.return_value = _resp(
+            404,
+            {
+                "Server": "AkamaiGHost",
+                "X-Frame-Options": "SAMEORIGIN",
+            },
+            body="<html><body><h1>404 Not Found</h1></body></html>",
+        )
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
-        self.assertEqual(
-            result["headers"]["x-frame-options"]["value"], "SAMEORIGIN"
-        )
+        self.assertEqual(result["headers"]["x-frame-options"]["value"], "SAMEORIGIN")
 
     @patch("tools.headers_tool.requests.get")
     def test_akamai_ordinary_403_is_not_classified_as_block(self, mock_get):
-        mock_get.return_value = _resp(403, {
-            "Server": "AkamaiGHost",
-        }, body="<html><body>403 Forbidden</body></html>")
+        mock_get.return_value = _resp(
+            403,
+            {
+                "Server": "AkamaiGHost",
+            },
+            body="<html><body>403 Forbidden</body></html>",
+        )
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
         self.assertEqual(result["headers"]["server"]["value"], "AkamaiGHost")
@@ -583,21 +695,33 @@ class TestHeadersAnalyzer(unittest.TestCase):
     @patch("tools.headers_tool.requests.get")
     def test_akamai_ordinary_5xx_is_not_classified_as_block(self, mock_get):
         for status in (500, 502, 503):
-            mock_get.return_value = _resp(status, {
-                "Server": "AkamaiGHost",
-            }, body="<html><body>Internal Server Error</body></html>")
+            mock_get.return_value = _resp(
+                status,
+                {
+                    "Server": "AkamaiGHost",
+                },
+                body="<html><body>Internal Server Error</body></html>",
+            )
             result = headers_analyzer("example.com")
-            self.assertTrue(result["success"], f"status {status} should be analyzed, not blocked")
+            self.assertTrue(
+                result["success"], f"status {status} should be analyzed, not blocked"
+            )
             self.assertEqual(result["headers"]["server"]["value"], "AkamaiGHost")
 
     @patch("tools.headers_tool.requests.get")
-    def test_akamai_block_fingerprint_without_error_status_is_not_blocked(self, mock_get):
+    def test_akamai_block_fingerprint_without_error_status_is_not_blocked(
+        self, mock_get
+    ):
         # The fingerprint on a 200 must not trigger either -- the status
         # floor is part of the signature.
-        mock_get.return_value = _resp(200, {
-            "Server": "AkamaiGHost",
-            "X-Frame-Options": "DENY",
-        }, body="<html><body>Access Denied Reference #18.4a2b.0</body></html>")
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Server": "AkamaiGHost",
+                "X-Frame-Options": "DENY",
+            },
+            body="<html><body>Access Denied Reference #18.4a2b.0</body></html>",
+        )
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
         self.assertEqual(result["headers"]["x-frame-options"]["value"], "DENY")
@@ -606,9 +730,13 @@ class TestHeadersAnalyzer(unittest.TestCase):
     def test_akamai_partial_fingerprint_is_not_blocked(self, mock_get):
         # Only one of the two body markers -> ordinary content (e.g. a
         # forum post mentioning "access denied"), not a block page.
-        mock_get.return_value = _resp(403, {
-            "Server": "AkamaiGHost",
-        }, body="<html><body>Access Denied is what the admin said</body></html>")
+        mock_get.return_value = _resp(
+            403,
+            {
+                "Server": "AkamaiGHost",
+            },
+            body="<html><body>Access Denied is what the admin said</body></html>",
+        )
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
         self.assertEqual(result["headers"]["server"]["value"], "AkamaiGHost")
@@ -618,19 +746,26 @@ class TestHeadersAnalyzer(unittest.TestCase):
         # The AND-check has a second path: "reference #" present without
         # "access denied" -- e.g. a ticketing page citing a reference
         # number for unrelated reasons.
-        mock_get.return_value = _resp(403, {
-            "Server": "AkamaiGHost",
-        }, body="<html><body>Reference #AB-1942 has been escalated to support.</body></html>")
+        mock_get.return_value = _resp(
+            403,
+            {
+                "Server": "AkamaiGHost",
+            },
+            body="<html><body>Reference #AB-1942 has been escalated to support.</body></html>",
+        )
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
         self.assertEqual(result["headers"]["server"]["value"], "AkamaiGHost")
 
     @patch("tools.headers_tool.requests.get")
     def test_akamaighost_on_a_2xx_response_is_not_rejected(self, mock_get):
-        mock_get.return_value = _resp(200, {
-            "Server": "AkamaiGHost",
-            "X-Frame-Options": "DENY",
-        })
+        mock_get.return_value = _resp(
+            200,
+            {
+                "Server": "AkamaiGHost",
+                "X-Frame-Options": "DENY",
+            },
+        )
         result = headers_analyzer("example.com")
         self.assertTrue(result["success"])
         self.assertTrue(result["headers"]["x-frame-options"]["present"])
@@ -695,13 +830,19 @@ class TestHeadersAnalyzer(unittest.TestCase):
     @patch("tools.headers_tool.requests.get")
     def test_redirect_captures_each_hops_distinct_headers(self, mock_get):
         mock_get.side_effect = [
-            _resp(301, {
-                "Location": "https://www.example.com/home",
-                "X-Frame-Options": "SAMEORIGIN",
-            }),
-            _resp(200, {
-                "X-Frame-Options": "DENY",
-            }),
+            _resp(
+                301,
+                {
+                    "Location": "https://www.example.com/home",
+                    "X-Frame-Options": "SAMEORIGIN",
+                },
+            ),
+            _resp(
+                200,
+                {
+                    "X-Frame-Options": "DENY",
+                },
+            ),
         ]
         result = headers_analyzer("example.com")
 
@@ -729,10 +870,13 @@ class TestHeadersAnalyzer(unittest.TestCase):
 
     @patch("tools.headers_tool.requests.get")
     def test_self_redirecting_url_fails_explicitly(self, mock_get):
-        mock_get.return_value = _resp(301, {
-            "Location": "https://example.com",
-            "X-Frame-Options": "SAMEORIGIN",
-        })
+        mock_get.return_value = _resp(
+            301,
+            {
+                "Location": "https://example.com",
+                "X-Frame-Options": "SAMEORIGIN",
+            },
+        )
         result = headers_analyzer("example.com")
         self.assertFalse(result["success"])
         self.assertIn("error", result)
@@ -752,6 +896,7 @@ class TestHeadersAnalyzer(unittest.TestCase):
     def test_redirect_chain_caps_at_max_hops(self, mock_get):
         def make_redirect(i):
             return _resp(301, {"Location": f"https://example.com/{i}"})
+
         mock_get.side_effect = [make_redirect(i) for i in range(20)]
         result = headers_analyzer("example.com")
         self.assertFalse(result["success"])
@@ -781,22 +926,26 @@ class TestHeadersAnalyzer(unittest.TestCase):
     @patch("tools.headers_tool.requests.get")
     def test_intermediate_redirect_hop_gets_its_own_severity_analysis(self, mock_get):
         mock_get.side_effect = [
-            _resp(301, {
-                "Location": "https://example.com/home",
-            }),
-            _resp(200, {
-                "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-                "Content-Security-Policy": "default-src 'self'",
-                "X-Frame-Options": "DENY",
-            }),
+            _resp(
+                301,
+                {
+                    "Location": "https://example.com/home",
+                },
+            ),
+            _resp(
+                200,
+                {
+                    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+                    "Content-Security-Policy": "default-src 'self'",
+                    "X-Frame-Options": "DENY",
+                },
+            ),
         ]
         result = headers_analyzer("example.com")
 
         first_hop = result["redirect_chain"][0]
         self.assertIn("analysis", first_hop)
-        self.assertFalse(
-            first_hop["analysis"]["strict-transport-security"]["present"]
-        )
+        self.assertFalse(first_hop["analysis"]["strict-transport-security"]["present"])
         self.assertEqual(
             first_hop["analysis"]["strict-transport-security"]["severity"], "high"
         )
@@ -811,15 +960,16 @@ class TestHeadersAnalyzer(unittest.TestCase):
         """
         mock_get.side_effect = [
             _resp(301, {"Location": "https://example.com/home"}),
-            _resp(200, {
-                "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-                "X-Frame-Options": "DENY",
-            }),
+            _resp(
+                200,
+                {
+                    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+                    "X-Frame-Options": "DENY",
+                },
+            ),
         ]
         result = headers_analyzer("example.com")
-        self.assertEqual(
-            result["headers"], result["redirect_chain"][-1]["analysis"]
-        )
+        self.assertEqual(result["headers"], result["redirect_chain"][-1]["analysis"])
 
     @patch("tools.headers_tool.requests.get")
     def test_single_hop_chain_still_has_analysis_key(self, mock_get):
@@ -827,16 +977,16 @@ class TestHeadersAnalyzer(unittest.TestCase):
         result = headers_analyzer("example.com")
         self.assertEqual(len(result["redirect_chain"]), 1)
         self.assertIn("analysis", result["redirect_chain"][0])
-        self.assertEqual(
-            result["redirect_chain"][0]["analysis"], result["headers"]
-        )
+        self.assertEqual(result["redirect_chain"][0]["analysis"], result["headers"])
 
     # ------------------------------------------------------------------
     # Error handling
     # ------------------------------------------------------------------
 
-    @patch("tools.headers_tool.requests.get",
-           side_effect=RequestsError("Failed to connect"))
+    @patch(
+        "tools.headers_tool.requests.get",
+        side_effect=RequestsError("Failed to connect"),
+    )
     def test_connection_error_returns_failure(self, _):
         result = headers_analyzer("example.com")
         self.assertFalse(result["success"])
@@ -848,8 +998,7 @@ class TestHeadersAnalyzer(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("error", result)
 
-    @patch("tools.headers_tool.requests.get",
-           side_effect=Exception("Unexpected error"))
+    @patch("tools.headers_tool.requests.get", side_effect=Exception("Unexpected error"))
     def test_unexpected_exception_returns_failure(self, _):
         result = headers_analyzer("example.com")
         self.assertFalse(result["success"])

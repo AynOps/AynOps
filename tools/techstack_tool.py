@@ -27,7 +27,7 @@ from utils.helpers import is_valid_domain, normalize_domain
 # in the first few kilobytes anyway.
 MAX_BODY_BYTES: int = 512_000  # 500 KB
 
-_SET_COOKIE_NAME_RE = re.compile(r'^([^=;,\s]+)')
+_SET_COOKIE_NAME_RE = re.compile(r"^([^=;,\s]+)")
 
 _REQUEST_HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; SecurityScanner/1.0)",
@@ -51,7 +51,7 @@ def _fetch(url: str) -> requests.Response:
         timeout=10,
         allow_redirects=True,
         headers=_REQUEST_HEADERS,
-        stream=True,          # stream=True so we can cap the body size
+        stream=True,  # stream=True so we can cap the body size
     )
 
 
@@ -125,16 +125,19 @@ def tech_stack_detect(domain: str) -> dict:
             return {"success": False, "error": "Request timed out"}
         except requests.exceptions.TooManyRedirects:
             return {"success": False, "error": "Too many redirects"}
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return {"success": False, "error": str(exc)}
 
     if resp is None:
-        return {"success": False, "error": last_error or "Could not connect to the domain"}
+        return {
+            "success": False,
+            "error": last_error or "Could not connect to the domain",
+        }
 
     try:
         body = _read_body(resp)
         cookie_names = _extract_cookie_names(resp)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"success": False, "error": str(exc)}
     finally:
         resp.close()
@@ -145,14 +148,14 @@ def tech_stack_detect(domain: str) -> dict:
             body,
             cookie_names=cookie_names,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"success": False, "error": f"Fingerprinting error: {exc}"}
 
     return {
-        "success":      True,
-        "domain":       domain,
-        "url":          resp.url,
-        "status_code":  resp.status_code,
+        "success": True,
+        "domain": domain,
+        "url": resp.url,
+        "status_code": resp.status_code,
         "technologies": technologies,
         "fingerprints": fp_artefacts,
     }

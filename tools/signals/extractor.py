@@ -1,26 +1,27 @@
 from tools.signals.registry import TOOL_REGISTRY
 
+
 def extract_signals(results):
     """Run each tool's extractor to build a shared signals dictionary."""
 
     signals = {
-    # ── per-tool signals ──────────────────────────────────
-    "domain_expiry_days":       None,   # whois``
-    "dns_missing_records":      [],     # dns  (SPF / DMARC / DKIM)
-    "open_ports":               [],     # ports
-    "ssl_days_remaining":       None,   # ssl
-    "software_detected":        [],     # techstack
-    "ip_abuse_score":           0,      # ip_reputation
-    "subdomain_count":          0,      # ct_logs
-    "missing_security_headers": [],     # headers
-    "email_security":           {},     # email_security_tool
-    "ip_reputation_flagged":    False,  # ip_reputation
-    "asn_number":               None,   # asn number
-    "asn_org":                  None,   # asn organization
-    "asn_ip":                  None,    # asn ip
-    "asn_country":              None,   # asn country
-    # ── pre-flagged warnings for Claude ──────────────────
-    "auto_warnings":            [],
+        # ── per-tool signals ──────────────────────────────────
+        "domain_expiry_days": None,  # whois``
+        "dns_missing_records": [],  # dns  (SPF / DMARC / DKIM)
+        "open_ports": [],  # ports
+        "ssl_days_remaining": None,  # ssl
+        "software_detected": [],  # techstack
+        "ip_abuse_score": 0,  # ip_reputation
+        "subdomain_count": 0,  # ct_logs
+        "missing_security_headers": [],  # headers
+        "email_security": {},  # email_security_tool
+        "ip_reputation_flagged": False,  # ip_reputation
+        "asn_number": None,  # asn number
+        "asn_org": None,  # asn organization
+        "asn_ip": None,  # asn ip
+        "asn_country": None,  # asn country
+        # ── pre-flagged warnings for Claude ──────────────────
+        "auto_warnings": [],
     }
 
     for tool in TOOL_REGISTRY:

@@ -1,5 +1,6 @@
 import re
 import xml.etree.ElementTree as ET
+
 import nmap
 
 SCAN_CONFIG = {
@@ -12,7 +13,10 @@ SCAN_CONFIG = {
 
 TIMEOUT_MARGIN = 0.2
 
-PORT_SCAN_TIMEOUT_ERRORS = (TimeoutError, getattr(nmap, "PortScannerTimeout", TimeoutError))
+PORT_SCAN_TIMEOUT_ERRORS = (
+    TimeoutError,
+    getattr(nmap, "PortScannerTimeout", TimeoutError),
+)
 
 _DURATION_UNITS = {"s": 1, "m": 60, "h": 3600}
 
@@ -58,7 +62,9 @@ def _extract_host_timeout_status(nmap_output: bytes) -> dict:
     return result
 
 
-def port_scan(target: str, scan_type: str = "basic", timeout: int | None = None) -> dict:
+def port_scan(
+    target: str, scan_type: str = "basic", timeout: int | None = None
+) -> dict:
     """
     Perform Nmap port scan on a target IP or domain.
 
@@ -92,7 +98,9 @@ def port_scan(target: str, scan_type: str = "basic", timeout: int | None = None)
         scanner = nmap.PortScanner()
 
         config = SCAN_CONFIG[scan_type]
-        effective_timeout = timeout if timeout is not None else _default_timeout(config["args"])
+        effective_timeout = (
+            timeout if timeout is not None else _default_timeout(config["args"])
+        )
         scanner.scan(
             hosts=target,
             arguments=config["args"],
@@ -105,7 +113,7 @@ def port_scan(target: str, scan_type: str = "basic", timeout: int | None = None)
                 "host": host,
                 "hostname": scanner[host].hostname(),
                 "state": scanner[host].state(),
-                "protocols": {}
+                "protocols": {},
             }
 
             os_matches = scanner[host].get("osmatch", [])
@@ -141,7 +149,7 @@ def port_scan(target: str, scan_type: str = "basic", timeout: int | None = None)
             raw = scanner.scanstats().get("elapsed")
             if raw is not None:
                 duration = float(raw)
-        except Exception:
+        except Exception:  # noqa: S110 - elapsed-time metadata is optional; failure is non-fatal
             pass
 
         host_timeout_status = {}
@@ -149,7 +157,7 @@ def port_scan(target: str, scan_type: str = "basic", timeout: int | None = None)
             raw_xml = scanner.get_nmap_last_output()
             if raw_xml:
                 host_timeout_status = _extract_host_timeout_status(raw_xml)
-        except Exception:
+        except Exception:  # noqa: S110 - per-host timeout status is optional; failure is non-fatal
             pass
 
         return {
@@ -165,6 +173,6 @@ def port_scan(target: str, scan_type: str = "basic", timeout: int | None = None)
     except PORT_SCAN_TIMEOUT_ERRORS:
         return {"success": False, "error": "Port scan timed out"}
     except nmap.PortScannerError as e:
-        return {"success": False, "error": f"Nmap not found or not installed: {str(e)}"}
+        return {"success": False, "error": f"Nmap not found or not installed: {e!s}"}
     except Exception as e:
         return {"success": False, "error": str(e)}

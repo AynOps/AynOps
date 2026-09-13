@@ -46,13 +46,41 @@ _S3_ENDPOINT_RE = re.compile(
 # (cname_contains or cname_pattern, service, takeover indicator)
 # indicator key "status" matches on the HTTP status code, "body" on response text.
 VULNERABLE_FINGERPRINTS = [
-    {"cname_contains": "github.io", "service": "GitHub Pages", "indicator": {"body": "There isn't a GitHub Pages site here."}},
-    {"cname_contains": "herokuapp.com", "service": "Heroku", "indicator": {"body": "No such app"}},
-    {"cname_pattern": _S3_ENDPOINT_RE, "service": "AWS S3", "indicator": {"body": "NoSuchBucket"}},
-    {"cname_contains": "azurewebsites.net", "service": "Azure", "indicator": {"body": "404 Web Site not found"}},
-    {"cname_contains": "ghost.io", "service": "Ghost", "indicator": {"body": "404 Domain Not Found"}},
-    {"cname_contains": "myshopify.com", "service": "Shopify", "indicator": {"body": "Sorry, this shop"}},
-    {"cname_contains": "fastly.net", "service": "Fastly", "indicator": {"body": "Fastly error"}},
+    {
+        "cname_contains": "github.io",
+        "service": "GitHub Pages",
+        "indicator": {"body": "There isn't a GitHub Pages site here."},
+    },
+    {
+        "cname_contains": "herokuapp.com",
+        "service": "Heroku",
+        "indicator": {"body": "No such app"},
+    },
+    {
+        "cname_pattern": _S3_ENDPOINT_RE,
+        "service": "AWS S3",
+        "indicator": {"body": "NoSuchBucket"},
+    },
+    {
+        "cname_contains": "azurewebsites.net",
+        "service": "Azure",
+        "indicator": {"body": "404 Web Site not found"},
+    },
+    {
+        "cname_contains": "ghost.io",
+        "service": "Ghost",
+        "indicator": {"body": "404 Domain Not Found"},
+    },
+    {
+        "cname_contains": "myshopify.com",
+        "service": "Shopify",
+        "indicator": {"body": "Sorry, this shop"},
+    },
+    {
+        "cname_contains": "fastly.net",
+        "service": "Fastly",
+        "indicator": {"body": "Fastly error"},
+    },
 ]
 
 _REQUEST_HEADERS = {
@@ -162,10 +190,12 @@ def _probe(subdomain: str) -> _ProbeResult:
             )
             return _ProbeResult(response=response)
         except requests.exceptions.RequestException as exc:
-            errors.append({
-                "scheme": scheme,
-                "error": f"{type(exc).__name__}: {exc}",
-            })
+            errors.append(
+                {
+                    "scheme": scheme,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
             continue
     return _ProbeResult(response=None, errors=tuple(errors))
 
@@ -216,11 +246,13 @@ def subdomain_takeover(domain: str) -> dict:
         if cname_result.chain:
             cname_chains[subdomain] = list(cname_result.chain)
         if cname_result.error is not None:
-            unknown.append({
-                "subdomain": subdomain,
-                "reason": "Unable to resolve CNAME record",
-                "dns_error": cname_result.error,
-            })
+            unknown.append(
+                {
+                    "subdomain": subdomain,
+                    "reason": "Unable to resolve CNAME record",
+                    "dns_error": cname_result.error,
+                }
+            )
             continue
         if cname_result.cname is None:
             not_vulnerable.append(subdomain)
@@ -229,29 +261,35 @@ def subdomain_takeover(domain: str) -> dict:
 
         fingerprint = _match_fingerprint(cname)
         if not fingerprint:
-            unknown.append({
-                "subdomain": subdomain,
-                "reason": "CNAME points to an unsupported service",
-            })
+            unknown.append(
+                {
+                    "subdomain": subdomain,
+                    "reason": "CNAME points to an unsupported service",
+                }
+            )
             continue
 
         probe_result = _confirms_takeover(subdomain, fingerprint)
         if probe_result.status is _ProbeStatus.CONFIRMED:
-            vulnerable.append({
-                "subdomain": subdomain,
-                "cname": cname,
-                "service": fingerprint["service"],
-                "reason": f"CNAME points to unclaimed {fingerprint['service']} service",
-                "severity": "HIGH",
-            })
+            vulnerable.append(
+                {
+                    "subdomain": subdomain,
+                    "cname": cname,
+                    "service": fingerprint["service"],
+                    "reason": f"CNAME points to unclaimed {fingerprint['service']} service",
+                    "severity": "HIGH",
+                }
+            )
         elif probe_result.status is _ProbeStatus.NO_INDICATOR:
             not_vulnerable.append(subdomain)
         else:
-            unknown.append({
-                "subdomain": subdomain,
-                "reason": "Unable to complete HTTP probe over HTTPS or HTTP",
-                "probe_errors": list(probe_result.probe_errors),
-            })
+            unknown.append(
+                {
+                    "subdomain": subdomain,
+                    "reason": "Unable to complete HTTP probe over HTTPS or HTTP",
+                    "probe_errors": list(probe_result.probe_errors),
+                }
+            )
 
     return {
         "success": True,

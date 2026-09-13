@@ -1,9 +1,16 @@
-from utils.helpers import is_valid_domain, normalize_domain, get_cvss_details, get_english_description, safe_parse_datetime
-from datetime import datetime, timezone
 import unittest
+from datetime import UTC, datetime
+
+from utils.helpers import (
+    get_cvss_details,
+    get_english_description,
+    is_valid_domain,
+    normalize_domain,
+    safe_parse_datetime,
+)
+
 
 class TestHelpers(unittest.TestCase):
-
     # ── is_valid_domain ──────────────────────────────────────
     def test_valid_domains(self):
         for d in ["example.com", "sub.example.com", "a.b.c.org", "xn--nxasmq6b.com"]:
@@ -11,10 +18,16 @@ class TestHelpers(unittest.TestCase):
                 self.assertTrue(is_valid_domain(d))
 
     def test_invalid_domains(self):
-        for d in ["", "localhost", "192.168.1.1", "no-tld", "bad domain.com", "-start.com"]:
+        for d in [
+            "",
+            "localhost",
+            "192.168.1.1",
+            "no-tld",
+            "bad domain.com",
+            "-start.com",
+        ]:
             with self.subTest(domain=d):
                 self.assertFalse(is_valid_domain(d))
-
 
     # ── normalize_domain ─────────────────────────────────────
     def test_normalize_domain_strips_and_lowercases(self):
@@ -30,6 +43,7 @@ class TestHelpers(unittest.TestCase):
     def test_normalize_domain_then_validates(self):
         self.assertTrue(is_valid_domain(normalize_domain("Google.COM")))
         self.assertTrue(is_valid_domain(normalize_domain("google.com.")))
+
     # ── get_cvss_details ─────────────────────────────────────
     def test_cvss_v31_extraction(self):
         cve = {
@@ -61,7 +75,12 @@ class TestHelpers(unittest.TestCase):
 
     # ── get_english_description ──────────────────────────────
     def test_english_description_extracted(self):
-        cve = {"descriptions": [{"lang": "fr", "value": "Bonjour"}, {"lang": "en", "value": "Hello"}]}
+        cve = {
+            "descriptions": [
+                {"lang": "fr", "value": "Bonjour"},
+                {"lang": "en", "value": "Hello"},
+            ]
+        }
         self.assertEqual(get_english_description(cve), "Hello")
 
     def test_no_english_description_returns_empty(self):
@@ -72,11 +91,14 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(get_english_description({}), "")
 
     # ── safe_parse_datetime ─────────────────────────────────
+    # Note: safe_parse_datetime intentionally returns naive datetimes when the
+    # input carries no timezone info, so the expected values below are naive
+    # on purpose (noqa: DTZ001).
 
     def test_safe_parse_datetime_iso_string(self):
         """A standard ISO datetime string parses correctly."""
         result = safe_parse_datetime("2025-12-25 00:00:00")
-        self.assertEqual(result, datetime(2025, 12, 25, 0, 0, 0))
+        self.assertEqual(result, datetime(2025, 12, 25, 0, 0, 0))  # noqa: DTZ001
 
     def test_safe_parse_datetime_none_input(self):
         """None or empty input returns None."""
@@ -86,7 +108,7 @@ class TestHelpers(unittest.TestCase):
 
     def test_safe_parse_datetime_passthrough_datetime_object(self):
         """A datetime object is returned as-is."""
-        dt = datetime(2025, 12, 25, 0, 0, 0, tzinfo=timezone.utc)
+        dt = datetime(2025, 12, 25, 0, 0, 0, tzinfo=UTC)
         self.assertEqual(safe_parse_datetime(dt), dt)
 
     def test_safe_parse_datetime_list_takes_first_element(self):
@@ -97,12 +119,12 @@ class TestHelpers(unittest.TestCase):
         suppressing domain-expiry warnings in whois_extractor.
         """
         result = safe_parse_datetime(["2025-12-25 00:00:00", "2026-01-01 00:00:00"])
-        self.assertEqual(result, datetime(2025, 12, 25, 0, 0, 0))
+        self.assertEqual(result, datetime(2025, 12, 25, 0, 0, 0))  # noqa: DTZ001
 
     def test_safe_parse_datetime_list_of_datetime_objects(self):
         """A list of datetime objects takes the first element as-is."""
-        dt1 = datetime(2025, 12, 25, 0, 0, 0, tzinfo=timezone.utc)
-        dt2 = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        dt1 = datetime(2025, 12, 25, 0, 0, 0, tzinfo=UTC)
+        dt2 = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
         self.assertEqual(safe_parse_datetime([dt1, dt2]), dt1)
 
     def test_safe_parse_datetime_empty_list_returns_none(self):
@@ -112,30 +134,33 @@ class TestHelpers(unittest.TestCase):
     def test_safe_parse_datetime_single_element_list(self):
         """A single-element list parses correctly."""
         result = safe_parse_datetime(["2025-12-25 00:00:00"])
-        self.assertEqual(result, datetime(2025, 12, 25, 0, 0, 0))
+        self.assertEqual(result, datetime(2025, 12, 25, 0, 0, 0))  # noqa: DTZ001
 
     def test_safe_parse_datetime_list_fallback_when_earlier_elements_invalid(self):
         """A list falls back to subsequent candidates when earlier elements are invalid, empty, or None."""
         self.assertEqual(
             safe_parse_datetime([None, "2025-12-25 00:00:00"]),
-            datetime(2025, 12, 25, 0, 0, 0),
+            datetime(2025, 12, 25, 0, 0, 0),  # noqa: DTZ001
         )
         self.assertEqual(
             safe_parse_datetime(["", "2025-12-25 00:00:00"]),
-            datetime(2025, 12, 25, 0, 0, 0),
+            datetime(2025, 12, 25, 0, 0, 0),  # noqa: DTZ001
         )
         self.assertEqual(
             safe_parse_datetime(["not-a-real-date", "2028-09-14 04:00:00+00:00"]),
-            datetime(2028, 9, 14, 4, 0, 0, tzinfo=timezone.utc),
+            datetime(2028, 9, 14, 4, 0, 0, tzinfo=UTC),
         )
 
     def test_safe_parse_datetime_list_all_elements_unparseable_returns_none(self):
         """A list where all candidates are unparseable returns None."""
-        self.assertIsNone(safe_parse_datetime([None, "", "not-a-date", "invalid-date-string"]))
+        self.assertIsNone(
+            safe_parse_datetime([None, "", "not-a-date", "invalid-date-string"])
+        )
 
     def test_safe_parse_datetime_invalid_string_returns_none(self):
         """A genuinely unparseable string returns None, not a crash."""
         self.assertIsNone(safe_parse_datetime("not-a-date"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

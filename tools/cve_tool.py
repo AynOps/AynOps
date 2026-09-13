@@ -1,6 +1,7 @@
 import requests
+from packaging.version import InvalidVersion, Version
+
 from utils.helpers import get_cvss_details, get_english_description
-from packaging.version import Version, InvalidVersion
 
 
 def _query_nvd(keyword: str) -> list:
@@ -86,9 +87,7 @@ def _version_in_range(target: Version, match: dict) -> bool:
             return False
         if end_including and target > Version(end_including):
             return False
-        if end_excluding and target >= Version(end_excluding):
-            return False
-        return True
+        return not (end_excluding and target >= Version(end_excluding))
     except InvalidVersion:
         # If any constraint version is unparseable, skip this match.
         return False
@@ -107,6 +106,7 @@ def _cve_affects_version(cve: dict, target: Version, software: str) -> bool:
     without structured ``configurations``, or whose cpeMatch entries do not
     satisfy both conditions above, are excluded.
     """
+
     def _node_matches(node: dict) -> bool:
         for match in node.get("cpeMatch") or []:
             if not match.get("vulnerable", False):
@@ -163,7 +163,8 @@ def cve_lookup(software: str, version: str) -> dict:
         # Stage 1: search with software + version, then filter.
         items = _query_nvd(f"{software} {version}")
         filtered = [
-            item for item in items
+            item
+            for item in items
             if _cve_affects_version(item.get("cve", {}), target, software)
         ]
         if filtered:
@@ -178,7 +179,8 @@ def cve_lookup(software: str, version: str) -> dict:
         # Stage 2: broader query + version filtering.
         items = _query_nvd(software)
         filtered = [
-            item for item in items
+            item
+            for item in items
             if _cve_affects_version(item.get("cve", {}), target, software)
         ]
         return {
@@ -191,10 +193,10 @@ def cve_lookup(software: str, version: str) -> dict:
         }
 
     except requests.exceptions.HTTPError as e:
-        return {"success": False, "error": f"NVD API request failed: {str(e)}"}
+        return {"success": False, "error": f"NVD API request failed: {e!s}"}
     except requests.exceptions.Timeout:
         return {"success": False, "error": "NVD API request timed out"}
     except requests.exceptions.RequestException as e:
-        return {"success": False, "error": f"Could not connect to NVD API: {str(e)}"}
+        return {"success": False, "error": f"Could not connect to NVD API: {e!s}"}
     except Exception as e:
         return {"success": False, "error": str(e)}

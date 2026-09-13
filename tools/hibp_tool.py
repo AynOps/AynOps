@@ -95,7 +95,9 @@ def hibp_check(query: str) -> dict:
 
             pastes_found = 0
             try:
-                paste_url = f"{HIBP_API_BASE}/pasteAccount/{requests.utils.quote(query)}"
+                paste_url = (
+                    f"{HIBP_API_BASE}/pasteAccount/{requests.utils.quote(query)}"
+                )
                 paste_resp = requests.get(paste_url, headers=headers, timeout=20)
                 if paste_resp.status_code == 200:
                     pastes = paste_resp.json() or []
@@ -145,16 +147,19 @@ def hibp_check(query: str) -> dict:
     except requests.exceptions.HTTPError as e:
         status = getattr(getattr(e, "response", None), "status_code", None)
         if status == 401:
-            return {"success": False, "error": "HIBP API key is invalid or unauthorized"}
+            return {
+                "success": False,
+                "error": "HIBP API key is invalid or unauthorized",
+            }
         if status == 429:
             return {
                 "success": False,
                 "error": "HIBP rate limit exceeded. Retry after a short delay.",
             }
-        return {"success": False, "error": f"HIBP API request failed: {str(e)}"}
+        return {"success": False, "error": f"HIBP API request failed: {e!s}"}
     except requests.exceptions.Timeout:
         return {"success": False, "error": "HIBP API request timed out"}
     except requests.exceptions.RequestException as e:
-        return {"success": False, "error": f"Could not connect to HIBP API: {str(e)}"}
+        return {"success": False, "error": f"Could not connect to HIBP API: {e!s}"}
     except Exception as e:
         return {"success": False, "error": str(e)}

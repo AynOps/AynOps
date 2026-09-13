@@ -20,10 +20,20 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest==9.0.3",
+    "ruff==0.16.7",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.ruff.lint]
+# AynOps enforces fail-safe tool boundaries: an MCP server process must never
+# crash, so tool entry points intentionally catch broad `Exception` and return
+# structured {"success": False, "error": ...} payloads instead (see
+# CONTRIBUTING.md, "Fail-Safe Server Resilience"). `BLE001` (blind-except) is
+# therefore disabled project-wide; narrower handlers are still used wherever
+# specific failure modes are expected (timeouts, parser errors, ...).
+ignore = ["BLE001"]
 
 [tool.mcp]
 name = "io.github.AynOps/AynOps"

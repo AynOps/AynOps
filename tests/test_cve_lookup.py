@@ -1,8 +1,10 @@
-from unittest.mock import Mock, patch
 import unittest
+from unittest.mock import Mock, patch
+
 import requests
 from packaging.version import Version
-from tools.cve_tool import cve_lookup, _cve_affects_version
+
+from tools.cve_tool import _cve_affects_version, cve_lookup
 
 
 def _make_raw_cve(cve_id, cpe_matches, configurations=None, software="someproduct"):
@@ -30,9 +32,7 @@ def _make_raw_cve(cve_id, cpe_matches, configurations=None, software="someproduc
         "lastModified": "2021-01-01T00:00:00.000",
         "descriptions": [{"lang": "en", "value": "Test vulnerability"}],
         "metrics": {
-            "cvssMetricV31": [
-                {"baseSeverity": "HIGH", "cvssData": {"baseScore": 7.5}}
-            ]
+            "cvssMetricV31": [{"baseSeverity": "HIGH", "cvssData": {"baseScore": 7.5}}]
         },
     }
     if configurations is not None:
@@ -43,7 +43,6 @@ def _make_raw_cve(cve_id, cpe_matches, configurations=None, software="someproduc
 
 
 class TestCveLookup(unittest.TestCase):
-
     @patch("tools.cve_tool.requests.get")
     def test_cve_lookup_returns_nvd_results(self, mock_get):
         response = Mock()
@@ -52,11 +51,13 @@ class TestCveLookup(unittest.TestCase):
             "vulnerabilities": [
                 _make_raw_cve(
                     "CVE-2021-41773",
-                    [{
-                        "vulnerable": True,
-                        "versionStartIncluding": "2.4.49",
-                        "versionEndIncluding": "2.4.50",
-                    }],
+                    [
+                        {
+                            "vulnerable": True,
+                            "versionStartIncluding": "2.4.49",
+                            "versionEndIncluding": "2.4.50",
+                        }
+                    ],
                     software="apache",
                 ),
             ],
@@ -105,12 +106,24 @@ class TestCveLookup(unittest.TestCase):
     def test_cve_lookup_multiple_cves(self, mock_get):
         cve_a = _make_raw_cve(
             "CVE-2021-00001",
-            [{"vulnerable": True, "versionStartIncluding": "1.0.0", "versionEndIncluding": "2.0.0"}],
+            [
+                {
+                    "vulnerable": True,
+                    "versionStartIncluding": "1.0.0",
+                    "versionEndIncluding": "2.0.0",
+                }
+            ],
             software="nginx",
         )
         cve_b = _make_raw_cve(
             "CVE-2021-00002",
-            [{"vulnerable": True, "versionStartIncluding": "1.0.0", "versionEndIncluding": "2.0.0"}],
+            [
+                {
+                    "vulnerable": True,
+                    "versionStartIncluding": "1.0.0",
+                    "versionEndIncluding": "2.0.0",
+                }
+            ],
             software="nginx",
         )
         response = Mock()
@@ -143,11 +156,13 @@ class TestCveLookup(unittest.TestCase):
             "vulnerabilities": [
                 _make_raw_cve(
                     "CVE-2021-41773",
-                    [{
-                        "vulnerable": True,
-                        "versionStartIncluding": "2.4.49",
-                        "versionEndIncluding": "2.4.50",
-                    }],
+                    [
+                        {
+                            "vulnerable": True,
+                            "versionStartIncluding": "2.4.49",
+                            "versionEndIncluding": "2.4.50",
+                        }
+                    ],
                     software="apache",
                 ),
             ],
@@ -172,7 +187,13 @@ class TestCveLookup(unittest.TestCase):
                 _make_raw_cve(
                     "CVE-2021-41773",
                     # Target 2.4.49 is below this range -> filtered out.
-                    [{"vulnerable": True, "versionStartIncluding": "2.4.51", "versionEndIncluding": "2.4.52"}],
+                    [
+                        {
+                            "vulnerable": True,
+                            "versionStartIncluding": "2.4.51",
+                            "versionEndIncluding": "2.4.52",
+                        }
+                    ],
                     software="apache",
                 ),
             ],
@@ -194,15 +215,33 @@ class TestCveLookup(unittest.TestCase):
 
         cve_matching_1 = _make_raw_cve(
             "CVE-2020-0001",
-            [{"vulnerable": True, "versionStartIncluding": "1.0.0", "versionEndIncluding": "2.0.0"}],
+            [
+                {
+                    "vulnerable": True,
+                    "versionStartIncluding": "1.0.0",
+                    "versionEndIncluding": "2.0.0",
+                }
+            ],
         )
         cve_matching_2 = _make_raw_cve(
             "CVE-2020-0002",
-            [{"vulnerable": True, "versionStartIncluding": "1.5.0", "versionEndExcluding": "3.0.0"}],
+            [
+                {
+                    "vulnerable": True,
+                    "versionStartIncluding": "1.5.0",
+                    "versionEndExcluding": "3.0.0",
+                }
+            ],
         )
         cve_non_matching = _make_raw_cve(
             "CVE-2020-0003",
-            [{"vulnerable": True, "versionStartIncluding": "5.0.0", "versionEndIncluding": "6.0.0"}],
+            [
+                {
+                    "vulnerable": True,
+                    "versionStartIncluding": "5.0.0",
+                    "versionEndIncluding": "6.0.0",
+                }
+            ],
         )
         data_response = Mock()
         data_response.json.return_value = {
@@ -228,7 +267,13 @@ class TestCveLookup(unittest.TestCase):
 
         cve_1 = _make_raw_cve(
             "CVE-2020-0001",
-            [{"vulnerable": True, "versionStartIncluding": "5.0.0", "versionEndIncluding": "6.0.0"}],
+            [
+                {
+                    "vulnerable": True,
+                    "versionStartIncluding": "5.0.0",
+                    "versionEndIncluding": "6.0.0",
+                }
+            ],
         )
         cve_2 = _make_raw_cve(
             "CVE-2020-0002",
@@ -304,11 +349,13 @@ class TestCveLookup(unittest.TestCase):
                 {
                     "nodes": [
                         {
-                            "cpeMatch": [{
-                                "vulnerable": True,
-                                "criteria": f"cpe:2.3:a:{software}:{software}:*:*:*:*:*:*:*:*",
-                                **match_kwargs,
-                            }]
+                            "cpeMatch": [
+                                {
+                                    "vulnerable": True,
+                                    "criteria": f"cpe:2.3:a:{software}:{software}:*:*:*:*:*:*:*:*",
+                                    **match_kwargs,
+                                }
+                            ]
                         }
                     ]
                 }
@@ -318,13 +365,17 @@ class TestCveLookup(unittest.TestCase):
     def test_version_start_including(self):
         cve = self._cve_with_single_match({"versionStartIncluding": "1.0.0"})
         self.assertTrue(_cve_affects_version(cve, Version("1.5.0"), "someproduct"))
-        self.assertTrue(_cve_affects_version(cve, Version("1.0.0"), "someproduct"))  # boundary inclusive
+        self.assertTrue(
+            _cve_affects_version(cve, Version("1.0.0"), "someproduct")
+        )  # boundary inclusive
         self.assertFalse(_cve_affects_version(cve, Version("0.9.9"), "someproduct"))
 
     def test_version_end_excluding(self):
         cve = self._cve_with_single_match({"versionEndExcluding": "2.0.0"})
         self.assertTrue(_cve_affects_version(cve, Version("1.9.9"), "someproduct"))
-        self.assertFalse(_cve_affects_version(cve, Version("2.0.0"), "someproduct"))  # excluded boundary
+        self.assertFalse(
+            _cve_affects_version(cve, Version("2.0.0"), "someproduct")
+        )  # excluded boundary
 
     def test_non_vulnerable_cpe_match_ignored(self):
         cve = {
@@ -351,11 +402,15 @@ class TestCveLookup(unittest.TestCase):
     def test_version_start_excluding(self):
         cve = self._cve_with_single_match({"versionStartExcluding": "1.0.0"})
         self.assertTrue(_cve_affects_version(cve, Version("1.0.1"), "someproduct"))
-        self.assertFalse(_cve_affects_version(cve, Version("1.0.0"), "someproduct"))  # excluded boundary
+        self.assertFalse(
+            _cve_affects_version(cve, Version("1.0.0"), "someproduct")
+        )  # excluded boundary
 
     def test_version_end_including(self):
         cve = self._cve_with_single_match({"versionEndIncluding": "2.0.0"})
-        self.assertTrue(_cve_affects_version(cve, Version("2.0.0"), "someproduct"))  # included boundary
+        self.assertTrue(
+            _cve_affects_version(cve, Version("2.0.0"), "someproduct")
+        )  # included boundary
         self.assertFalse(_cve_affects_version(cve, Version("2.0.1"), "someproduct"))
 
     def test_cpe_match_with_no_constraints_does_not_match(self):
@@ -369,10 +424,12 @@ class TestCveLookup(unittest.TestCase):
     def test_invalid_constraint_version_skips_match(self):
         # An unparseable constraint version (e.g. "*") causes the cpeMatch
         # to be skipped, so the CVE is reported as not affecting the target.
-        cve = self._cve_with_single_match({
-            "versionStartIncluding": "*",
-            "versionEndIncluding": "2.0.0",
-        })
+        cve = self._cve_with_single_match(
+            {
+                "versionStartIncluding": "*",
+                "versionEndIncluding": "2.0.0",
+            }
+        )
         self.assertFalse(_cve_affects_version(cve, Version("1.5.0"), "someproduct"))
 
     # ------------------------------------------------------------------
@@ -385,12 +442,14 @@ class TestCveLookup(unittest.TestCase):
                 {
                     "nodes": [
                         {
-                            "cpeMatch": [{
-                                "vulnerable": True,
-                                "criteria": "cpe:2.3:a:nginx:nginx:1.20.0:*:*:*:*:*:*:*",
-                                "versionStartIncluding": "1.0.0",
-                                "versionEndIncluding": "2.0.0",
-                            }]
+                            "cpeMatch": [
+                                {
+                                    "vulnerable": True,
+                                    "criteria": "cpe:2.3:a:nginx:nginx:1.20.0:*:*:*:*:*:*:*",
+                                    "versionStartIncluding": "1.0.0",
+                                    "versionEndIncluding": "2.0.0",
+                                }
+                            ]
                         }
                     ]
                 }
@@ -405,12 +464,14 @@ class TestCveLookup(unittest.TestCase):
                 {
                     "nodes": [
                         {
-                            "cpeMatch": [{
-                                "vulnerable": True,
-                                "criteria": "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
-                                "versionStartIncluding": "2.4.49",
-                                "versionEndIncluding": "2.4.50",
-                            }]
+                            "cpeMatch": [
+                                {
+                                    "vulnerable": True,
+                                    "criteria": "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
+                                    "versionStartIncluding": "2.4.49",
+                                    "versionEndIncluding": "2.4.50",
+                                }
+                            ]
                         }
                     ]
                 }
@@ -426,12 +487,14 @@ class TestCveLookup(unittest.TestCase):
                 {
                     "nodes": [
                         {
-                            "cpeMatch": [{
-                                "vulnerable": True,
-                                "criteria": "cpe:2.3:o:debian:debian_linux:*:*:*:*:*:*:*:*",
-                                "versionStartIncluding": "1.0.0",
-                                "versionEndIncluding": "2.0.0",
-                            }]
+                            "cpeMatch": [
+                                {
+                                    "vulnerable": True,
+                                    "criteria": "cpe:2.3:o:debian:debian_linux:*:*:*:*:*:*:*:*",
+                                    "versionStartIncluding": "1.0.0",
+                                    "versionEndIncluding": "2.0.0",
+                                }
+                            ]
                         }
                     ]
                 }
@@ -445,12 +508,14 @@ class TestCveLookup(unittest.TestCase):
                 {
                     "nodes": [
                         {
-                            "cpeMatch": [{
-                                "vulnerable": True,
-                                "criteria": "cpe:2.3:a:*:someproduct:1.0.0:*:*:*:*:*:*:*",
-                                "versionStartIncluding": "1.0.0",
-                                "versionEndIncluding": "2.0.0",
-                            }]
+                            "cpeMatch": [
+                                {
+                                    "vulnerable": True,
+                                    "criteria": "cpe:2.3:a:*:someproduct:1.0.0:*:*:*:*:*:*:*",
+                                    "versionStartIncluding": "1.0.0",
+                                    "versionEndIncluding": "2.0.0",
+                                }
+                            ]
                         }
                     ]
                 }
@@ -474,12 +539,14 @@ class TestCveLookup(unittest.TestCase):
                             "children": [
                                 {
                                     "operator": "OR",
-                                    "cpeMatch": [{
-                                        "vulnerable": True,
-                                        "criteria": "cpe:2.3:a:nginx:nginx:1.20.0:*:*:*:*:*:*:*",
-                                        "versionStartIncluding": "1.0.0",
-                                        "versionEndIncluding": "2.0.0",
-                                    }],
+                                    "cpeMatch": [
+                                        {
+                                            "vulnerable": True,
+                                            "criteria": "cpe:2.3:a:nginx:nginx:1.20.0:*:*:*:*:*:*:*",
+                                            "versionStartIncluding": "1.0.0",
+                                            "versionEndIncluding": "2.0.0",
+                                        }
+                                    ],
                                 }
                             ],
                         }
@@ -499,12 +566,14 @@ class TestCveLookup(unittest.TestCase):
                             "children": [
                                 {
                                     "operator": "OR",
-                                    "cpeMatch": [{
-                                        "vulnerable": True,
-                                        "criteria": "cpe:2.3:o:debian:debian_linux:*:*:*:*:*:*:*:*",
-                                        "versionStartIncluding": "1.0.0",
-                                        "versionEndIncluding": "2.0.0",
-                                    }],
+                                    "cpeMatch": [
+                                        {
+                                            "vulnerable": True,
+                                            "criteria": "cpe:2.3:o:debian:debian_linux:*:*:*:*:*:*:*:*",
+                                            "versionStartIncluding": "1.0.0",
+                                            "versionEndIncluding": "2.0.0",
+                                        }
+                                    ],
                                 }
                             ],
                         }

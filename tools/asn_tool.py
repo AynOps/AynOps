@@ -1,6 +1,7 @@
-from urllib.parse import urlparse
 import ipaddress
 import socket
+from urllib.parse import urlparse
+
 
 def asn_lookup(target: str) -> dict:
     """
@@ -90,7 +91,7 @@ def asn_lookup(target: str) -> dict:
 
     except socket.gaierror:
         return {"success": False, "error": "Failed to resolve domain"}
-    except socket.timeout:
+    except TimeoutError:
         return {"success": False, "error": "Team Cymru WHOIS request timed out"}
     except (ConnectionError, OSError) as e:
         return {
