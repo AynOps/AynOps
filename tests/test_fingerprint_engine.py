@@ -24,10 +24,10 @@ from tools.fingerprint.signatures import (
     WEB_SERVER_SIGNATURES,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _names(result: dict, category: str) -> list[str]:
     return [d["name"] for d in result.get(category, [])]
@@ -44,8 +44,8 @@ def _get(result: dict, category: str, name: str) -> dict:
 # Layer 1: headers_layer
 # ---------------------------------------------------------------------------
 
-class TestHeadersLayer(unittest.TestCase):
 
+class TestHeadersLayer(unittest.TestCase):
     def test_nginx_from_server_header_value(self):
         result = headers_layer({"Server": "nginx/1.18"})
         self.assertIn("nginx", _names(result, "web_servers"))
@@ -76,7 +76,7 @@ class TestHeadersLayer(unittest.TestCase):
     def test_header_names_are_compared_case_insensitively(self):
         upper = headers_layer({"CF-RAY": "abc", "SERVER": "nginx"})
         self.assertIn("Cloudflare", _names(upper, "hosting_providers"))
-        self.assertIn("nginx",      _names(upper, "web_servers"))
+        self.assertIn("nginx", _names(upper, "web_servers"))
 
     def test_empty_headers_returns_empty_dict(self):
         self.assertEqual(headers_layer({}), {})
@@ -85,7 +85,7 @@ class TestHeadersLayer(unittest.TestCase):
         result = headers_layer({"Server": "nginx/1.18"})
         det = _get(result, "web_servers", "nginx")
         self.assertIn("confidence", det)
-        self.assertIn("evidence",   det)
+        self.assertIn("evidence", det)
         self.assertIsInstance(det["evidence"], list)
         self.assertGreater(len(det["evidence"]), 0)
 
@@ -101,47 +101,60 @@ class TestHeadersLayer(unittest.TestCase):
         """Server: gws (Google Web Server) must not produce Apache or nginx detections."""
         result = headers_layer({"Server": "gws"})
         web_servers = _names(result, "web_servers")
-        self.assertNotIn("Apache", web_servers,
-                         "Apache falsely detected from 'Server: gws'")
-        self.assertNotIn("nginx", web_servers,
-                         "nginx falsely detected from 'Server: gws'")
+        self.assertNotIn(
+            "Apache", web_servers, "Apache falsely detected from 'Server: gws'"
+        )
+        self.assertNotIn(
+            "nginx", web_servers, "nginx falsely detected from 'Server: gws'"
+        )
 
     def test_server_caddy_reports_caddy_only_not_apache_or_nginx(self):
         """Server: Caddy/2.7 must detect Caddy and must not detect Apache or nginx."""
         result = headers_layer({"Server": "Caddy/2.7.6"})
         web_servers = _names(result, "web_servers")
-        self.assertIn("Caddy", web_servers,
-                      "Caddy not detected from 'Server: Caddy/2.7.6'")
-        self.assertNotIn("Apache", web_servers,
-                         "Apache falsely detected from 'Server: Caddy/2.7.6'")
-        self.assertNotIn("nginx", web_servers,
-                         "nginx falsely detected from 'Server: Caddy/2.7.6'")
+        self.assertIn(
+            "Caddy", web_servers, "Caddy not detected from 'Server: Caddy/2.7.6'"
+        )
+        self.assertNotIn(
+            "Apache", web_servers, "Apache falsely detected from 'Server: Caddy/2.7.6'"
+        )
+        self.assertNotIn(
+            "nginx", web_servers, "nginx falsely detected from 'Server: Caddy/2.7.6'"
+        )
 
     def test_server_nginx_reports_nginx_and_not_apache(self):
         """Server: nginx/1.25.3 must detect nginx and must not detect Apache."""
         result = headers_layer({"Server": "nginx/1.25.3"})
         web_servers = _names(result, "web_servers")
-        self.assertIn("nginx", web_servers,
-                      "nginx not detected from 'Server: nginx/1.25.3'")
-        self.assertNotIn("Apache", web_servers,
-                         "Apache falsely detected from 'Server: nginx/1.25.3'")\
+        self.assertIn(
+            "nginx", web_servers, "nginx not detected from 'Server: nginx/1.25.3'"
+        )
+        self.assertNotIn(
+            "Apache", web_servers, "Apache falsely detected from 'Server: nginx/1.25.3'"
+        )
 
     def test_server_apache_reports_apache_and_not_nginx(self):
         """Server: Apache/2.4.58 must detect Apache and must not detect nginx."""
         result = headers_layer({"Server": "Apache/2.4.58 (Ubuntu)"})
         web_servers = _names(result, "web_servers")
-        self.assertIn("Apache", web_servers,
-                      "Apache not detected from 'Server: Apache/2.4.58 (Ubuntu)'")
-        self.assertNotIn("nginx", web_servers,
-                         "nginx falsely detected from 'Server: Apache/2.4.58 (Ubuntu)'")
+        self.assertIn(
+            "Apache",
+            web_servers,
+            "Apache not detected from 'Server: Apache/2.4.58 (Ubuntu)'",
+        )
+        self.assertNotIn(
+            "nginx",
+            web_servers,
+            "nginx falsely detected from 'Server: Apache/2.4.58 (Ubuntu)'",
+        )
 
 
 # ---------------------------------------------------------------------------
 # Layer 2: cookies_layer
 # ---------------------------------------------------------------------------
 
-class TestCookiesLayer(unittest.TestCase):
 
+class TestCookiesLayer(unittest.TestCase):
     def test_php_from_phpsessid(self):
         result = cookies_layer(["PHPSESSID=abc123"])
         self.assertIn("PHP", _names(result, "programming_languages"))
@@ -171,8 +184,8 @@ class TestCookiesLayer(unittest.TestCase):
 # Layer 3: meta_layer
 # ---------------------------------------------------------------------------
 
-class TestMetaLayer(unittest.TestCase):
 
+class TestMetaLayer(unittest.TestCase):
     def test_wordpress_from_meta_generator(self):
         html = '<meta name="generator" content="WordPress 6.4.2">'
         result = meta_layer(html)
@@ -209,8 +222,8 @@ class TestMetaLayer(unittest.TestCase):
 # Layer 4: html_layer
 # ---------------------------------------------------------------------------
 
-class TestHtmlLayer(unittest.TestCase):
 
+class TestHtmlLayer(unittest.TestCase):
     def test_wordpress_from_wp_content(self):
         result = html_layer('<link href="/wp-content/themes/x.css">')
         self.assertIn("WordPress", _names(result, "cms"))
@@ -243,10 +256,10 @@ class TestHtmlLayer(unittest.TestCase):
 # fingerprint() — cross-layer merging
 # ---------------------------------------------------------------------------
 
-class TestFingerprintMerging(unittest.TestCase):
 
+class TestFingerprintMerging(unittest.TestCase):
     def test_empty_inputs_return_empty_technologies(self):
-        technologies, artefacts = fingerprint({}, "")
+        technologies, _ = fingerprint({}, "")
         self.assertEqual(technologies, {})
 
     def test_headers_and_html_results_are_merged(self):
@@ -256,11 +269,11 @@ class TestFingerprintMerging(unittest.TestCase):
             '<script src="/_next/static/a.js"></script>'
             '<script src="https://www.google-analytics.com/analytics.js"></script>',
         )
-        self.assertIn("web_servers",       technologies)
+        self.assertIn("web_servers", technologies)
         self.assertIn("hosting_providers", technologies)
-        self.assertIn("cms",               technologies)
-        self.assertIn("frameworks",        technologies)
-        self.assertIn("analytics",         technologies)
+        self.assertIn("cms", technologies)
+        self.assertIn("frameworks", technologies)
+        self.assertIn("analytics", technologies)
 
     def test_same_tech_from_multiple_layers_is_not_duplicated(self):
         """WordPress detected from both html_substring and meta_generator
@@ -271,8 +284,7 @@ class TestFingerprintMerging(unittest.TestCase):
             '<link href="/wp-content/x.css">',
         )
         wordpress_entries = [
-            d for d in technologies.get("cms", [])
-            if d["name"] == "WordPress"
+            d for d in technologies.get("cms", []) if d["name"] == "WordPress"
         ]
         self.assertEqual(len(wordpress_entries), 1)
 
@@ -309,8 +321,8 @@ class TestFingerprintMerging(unittest.TestCase):
 
     def test_fingerprints_artefact_always_has_three_keys(self):
         _, artefacts = fingerprint({}, "")
-        self.assertIn("headers",   artefacts)
-        self.assertIn("cookies",   artefacts)
+        self.assertIn("headers", artefacts)
+        self.assertIn("cookies", artefacts)
         self.assertIn("meta_tags", artefacts)
 
     def test_fingerprints_headers_are_normalised(self):
@@ -348,8 +360,8 @@ class TestFingerprintMerging(unittest.TestCase):
 # Signature table shapes (contract pinning)
 # ---------------------------------------------------------------------------
 
-class TestSignatureTableShapes(unittest.TestCase):
 
+class TestSignatureTableShapes(unittest.TestCase):
     def test_web_server_signatures_count(self):
         self.assertGreaterEqual(len(WEB_SERVER_SIGNATURES), 5)
 
@@ -386,11 +398,16 @@ class TestSignatureTableShapes(unittest.TestCase):
                         mtype, mval, conf = triple
                         self.assertIn(
                             mtype,
-                            {"header_name", "header_value", "cookie_name",
-                             "meta_generator", "html_substring"},
+                            {
+                                "header_name",
+                                "header_value",
+                                "cookie_name",
+                                "meta_generator",
+                                "html_substring",
+                            },
                         )
-                        self.assertIsInstance(mval,  str)
-                        self.assertIsInstance(conf,  int)
+                        self.assertIsInstance(mval, str)
+                        self.assertIsInstance(conf, int)
                         self.assertGreater(conf, 0)
                         self.assertLessEqual(conf, 100)
 

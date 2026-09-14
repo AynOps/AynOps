@@ -1,18 +1,33 @@
 from __future__ import annotations
+
 import base64
 import concurrent.futures
 import datetime
 import re
-import dns.resolver
+from typing import Any
+
 import dns.exception
-from typing import Any, Dict, List, Tuple
+import dns.resolver
+
 from utils.helpers import is_valid_domain, normalize_domain
 
 # Base generic defaults
 BASE_DKIM_SELECTORS = [
-    "default", "google", "selector1", "selector2", "k1", "k2",
-    "dkim", "mail", "smtp", "s1", "s2", "mandrill", "mxvault",
-    "zoho", "amazonses",
+    "default",
+    "google",
+    "selector1",
+    "selector2",
+    "k1",
+    "k2",
+    "dkim",
+    "mail",
+    "smtp",
+    "s1",
+    "s2",
+    "mandrill",
+    "mxvault",
+    "zoho",
+    "amazonses",
 ]
 
 # RFC 6376 §3.2: a DKIM tag name starts with a letter followed by
@@ -32,23 +47,27 @@ _SPF_ALL_POLICIES = {
 }
 
 
-def _query_txt(name: str) -> Tuple[List[str], bool]:
+def _query_txt(name: str) -> tuple[list[str], bool]:
     """Return (txt_record_strings, resolution_failed) for a DNS name."""
     resolver = dns.resolver.Resolver()
     resolver.lifetime = 4.0
     resolver.timeout = 2.0
-    
+
     try:
         answers = resolver.resolve(name, "TXT")
-        records = [b"".join(r.strings).decode("utf-8", errors="replace") for r in answers]
+        records = [
+            b"".join(r.strings).decode("utf-8", errors="replace") for r in answers
+        ]
         return records, False
     except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
         return [], False
     except (dns.resolver.Timeout, dns.exception.DNSException):
         try:
-            resolver.nameservers = ['1.1.1.1', '8.8.8.8']
+            resolver.nameservers = ["1.1.1.1", "8.8.8.8"]
             answers = resolver.resolve(name, "TXT")
-            records = [b"".join(r.strings).decode("utf-8", errors="replace") for r in answers]
+            records = [
+                b"".join(r.strings).decode("utf-8", errors="replace") for r in answers
+            ]
             return records, False
         except Exception:
             return [], True
@@ -56,16 +75,16 @@ def _query_txt(name: str) -> Tuple[List[str], bool]:
         return [], True
 
 
-def _discover_dynamic_selectors(domain: str) -> List[str]:
+def _discover_dynamic_selectors(domain: str) -> list[str]:
     """
     Inspects MX records to append smart infrastructure-specific selectors.
-    For example, if a domain uses Google Workspace, it adds specific internal 
+    For example, if a domain uses Google Workspace, it adds specific internal
     Google infrastructure selectors.
     """
     dynamic_selectors = set()
-    
+
     # 1. Inject temporal/historical pattern-matching common in enterprise setups (e.g., 2023, 2024, 2025, 2026)
-    current_year = datetime.datetime.now().year
+    current_year = datetime.datetime.now(datetime.UTC).year
     for year in range(current_year - 3, current_year + 1):
         dynamic_selectors.add(f"google{year}")
         dynamic_selectors.add(str(year))
@@ -79,7 +98,7 @@ def _discover_dynamic_selectors(domain: str) -> List[str]:
         resolver.lifetime = 3.0
         mx_answers = resolver.resolve(domain, "MX")
         mx_hosts = [str(mx.exchange).lower() for mx in mx_answers]
-        
+
         for host in mx_hosts:
             if "google" in host or "aspmx" in host:
                 # Add known custom variants Google uses internally for corporate components
@@ -88,7 +107,7 @@ def _discover_dynamic_selectors(domain: str) -> List[str]:
                 dynamic_selectors.update(["pp", "proofpoint", "selector"])
             if "protection.outlook" in host:
                 dynamic_selectors.update(["selector1", "msft", "microsoft"])
-    except Exception:
+    except Exception:  # noqa: S110 - MX-based selector hints are optional; failure is non-fatal
         pass  # Fail gracefully if MX discovery hits a hitch
 
     return list(dynamic_selectors)
@@ -111,7 +130,7 @@ def _is_valid_base64_key(value: str) -> bool:
     return len(decoded) > 0
 
 
-def _parse_dkim_record(record: str) -> Tuple[str, Dict[str, str]]:
+def _parse_dkim_record(record: str) -> tuple[str, dict[str, str]]:
     """
     Classify a TXT record fetched from <selector>._domainkey.<domain>.
 
@@ -147,7 +166,7 @@ def _parse_dkim_record(record: str) -> Tuple[str, Dict[str, str]]:
     if not has_dkim_indicator:
         return "not_dkim", {}
 
-    tags: Dict[str, str] = {}
+    tags: dict[str, str] = {}
     first_tag: str | None = None
     for part in parts:
         if "=" not in part:
@@ -213,18 +232,32 @@ def _spf_policy(record: str) -> str:
     return "redirect" if has_redirect else "missing"
 
 
-def _check_spf(domain: str, recommendations: List[str]) -> Dict[str, Any]:
+def _check_spf(domain: str, recommendations: list[str]) -> dict[str, Any]:
     txt_records, failed = _query_txt(domain)
 
     if failed:
         recommendations.append("Could not verify SPF — DNS lookup timed out.")
-        return {"found": False, "valid": False, "record": None, "records": [], "policy": None, "score": 0}
+        return {
+            "found": False,
+            "valid": False,
+            "record": None,
+            "records": [],
+            "policy": None,
+            "score": 0,
+        }
 
     spf_records = [r for r in txt_records if _is_spf_record(r)]
 
     if not spf_records:
         recommendations.append("SPF not found — add an SPF record.")
-        return {"found": False, "valid": False, "record": None, "records": [], "policy": None, "score": 0}
+        return {
+            "found": False,
+            "valid": False,
+            "record": None,
+            "records": [],
+            "policy": None,
+            "score": 0,
+        }
 
     # RFC 7208 §4.5: a domain MUST NOT publish more than one SPF record.
     # Report all candidates instead of silently using the first one.
@@ -233,7 +266,14 @@ def _check_spf(domain: str, recommendations: List[str]) -> Dict[str, Any]:
             "Multiple SPF records found — SPF configuration is invalid. "
             "Consolidate the SPF mechanisms into a single SPF record."
         )
-        return {"found": True, "valid": False, "record": None, "records": spf_records, "policy": None, "score": 0}
+        return {
+            "found": True,
+            "valid": False,
+            "record": None,
+            "records": spf_records,
+            "policy": None,
+            "score": 0,
+        }
 
     record = spf_records[0]
     policy = _spf_policy(record)
@@ -241,22 +281,34 @@ def _check_spf(domain: str, recommendations: List[str]) -> Dict[str, Any]:
     spf_score = 30
     if policy == "softfail":
         spf_score = 20
-        recommendations.append("SPF uses softfail (~all) — consider a hard fail (-all) for stronger protection")
+        recommendations.append(
+            "SPF uses softfail (~all) — consider a hard fail (-all) for stronger protection"
+        )
     elif policy in ("neutral", "pass"):
         spf_score = 10
         if policy == "pass":
-            recommendations.append("SPF policy is 'pass' (+all) — any server can send mail for this domain.")
+            recommendations.append(
+                "SPF policy is 'pass' (+all) — any server can send mail for this domain."
+            )
         else:
-            recommendations.append("SPF policy is 'neutral' (?all) — provides little protection.")
+            recommendations.append(
+                "SPF policy is 'neutral' (?all) — provides little protection."
+            )
     elif policy == "redirect":
         spf_score = 25
-        recommendations.append("SPF uses a redirect modifier — policy enforcement is delegated to the target domain.")
+        recommendations.append(
+            "SPF uses a redirect modifier — policy enforcement is delegated to the target domain."
+        )
     elif policy == "missing":
         spf_score = 5
-        recommendations.append("SPF record has no 'all' mechanism — the default policy for unmatched senders is undefined.")
+        recommendations.append(
+            "SPF record has no 'all' mechanism — the default policy for unmatched senders is undefined."
+        )
     elif policy == "unknown":
         spf_score = 0
-        recommendations.append("SPF record could not be parsed — verify the record syntax.")
+        recommendations.append(
+            "SPF record could not be parsed — verify the record syntax."
+        )
 
     return {
         "found": True,
@@ -280,18 +332,32 @@ def _is_dmarc_record(record: str) -> bool:
     return name == "v" and value.strip() == "DMARC1"
 
 
-def _check_dmarc(domain: str, recommendations: List[str]) -> Dict[str, Any]:
+def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
     txt_records, failed = _query_txt(f"_dmarc.{domain}")
 
     if failed:
         recommendations.append("Could not verify DMARC — DNS lookup timed out.")
-        return {"found": False, "valid": False, "record": None, "records": [], "policy": None, "score": 0}
+        return {
+            "found": False,
+            "valid": False,
+            "record": None,
+            "records": [],
+            "policy": None,
+            "score": 0,
+        }
 
     dmarc_records = [r for r in txt_records if _is_dmarc_record(r)]
 
     if not dmarc_records:
         recommendations.append("DMARC not found — add a DMARC record.")
-        return {"found": False, "valid": False, "record": None, "records": [], "policy": None, "score": 0}
+        return {
+            "found": False,
+            "valid": False,
+            "record": None,
+            "records": [],
+            "policy": None,
+            "score": 0,
+        }
 
     # Only one DMARC policy record may exist per domain — preserve all of
     # them rather than arbitrarily evaluating the first.
@@ -300,7 +366,14 @@ def _check_dmarc(domain: str, recommendations: List[str]) -> Dict[str, Any]:
             "Multiple DMARC records found — DMARC configuration is ambiguous. "
             "Publish a single DMARC policy record."
         )
-        return {"found": True, "valid": False, "record": None, "records": dmarc_records, "policy": None, "score": 0}
+        return {
+            "found": True,
+            "valid": False,
+            "record": None,
+            "records": dmarc_records,
+            "policy": None,
+            "score": 0,
+        }
 
     record = dmarc_records[0]
     tags = {}
@@ -333,7 +406,9 @@ def _check_dmarc(domain: str, recommendations: List[str]) -> Dict[str, Any]:
         dmarc_score = 35
     elif policy == "quarantine":
         dmarc_score = 25
-        recommendations.append("DMARC policy is 'quarantine' — failing mail goes to spam.")
+        recommendations.append(
+            "DMARC policy is 'quarantine' — failing mail goes to spam."
+        )
 
     if "rua" not in tags:
         dmarc_score = max(0, dmarc_score - 5)
@@ -352,12 +427,12 @@ def _check_dmarc(domain: str, recommendations: List[str]) -> Dict[str, Any]:
     }
 
 
-def _check_dkim(domain: str, recommendations: List[str]) -> Dict[str, Any]:
+def _check_dkim(domain: str, recommendations: list[str]) -> dict[str, Any]:
     # Combine baseline guesses with dynamically generated infrastructure keys
     dynamic_keys = _discover_dynamic_selectors(domain)
     selectors_to_check = sorted(set(BASE_DKIM_SELECTORS + dynamic_keys))
 
-    def check_selector(selector: str) -> Tuple[str, str | None]:
+    def check_selector(selector: str) -> tuple[str, str | None]:
         records, _failed = _query_txt(f"{selector}._domainkey.{domain}")
         status_seen = None
         for r in records:
@@ -371,7 +446,9 @@ def _check_dkim(domain: str, recommendations: List[str]) -> Dict[str, Any]:
         return selector, status_seen
 
     # Threading prevents the added dynamic keys from slowing down execution time
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(selectors_to_check)) as executor:
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=len(selectors_to_check)
+    ) as executor:
         results = list(executor.map(check_selector, selectors_to_check))
 
     found_selectors = [s for s, status in results if status == "active"]
@@ -422,7 +499,7 @@ def email_security_check(domain: str) -> dict:
         return {"success": False, "error": "Invalid domain format"}
 
     try:
-        recommendations: List[str] = []
+        recommendations: list[str] = []
 
         spf = _check_spf(domain, recommendations)
         dmarc = _check_dmarc(domain, recommendations)

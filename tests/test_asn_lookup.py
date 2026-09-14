@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 from tools.asn_tool import asn_lookup
 
-
 # Sample Team Cymru WHOIS response for 8.8.8.8
 CYMRU_RESPONSE_8_8_8_8 = (
     "AS      | IP               | BGP Prefix          | CC | Registry | Allocated  | AS Name\n"
@@ -32,7 +31,6 @@ def _make_fake_socket(response_text: str) -> MagicMock:
 
 
 class TestAsnLookup(unittest.TestCase):
-
     @patch("tools.asn_tool.socket.create_connection")
     def test_valid_ipv4_returns_asn_data(self, mock_create_connection):
         mock_create_connection.return_value = _make_fake_socket(CYMRU_RESPONSE_8_8_8_8)
@@ -51,7 +49,9 @@ class TestAsnLookup(unittest.TestCase):
 
     @patch("tools.asn_tool.socket.create_connection")
     @patch("tools.asn_tool.socket.getaddrinfo")
-    def test_valid_domain_returns_asn_data(self, mock_getaddrinfo, mock_create_connection):
+    def test_valid_domain_returns_asn_data(
+        self, mock_getaddrinfo, mock_create_connection
+    ):
         mock_getaddrinfo.return_value = [(None, None, None, None, ("8.8.8.8", 0))]
         mock_create_connection.return_value = _make_fake_socket(CYMRU_RESPONSE_8_8_8_8)
 
@@ -80,7 +80,9 @@ class TestAsnLookup(unittest.TestCase):
 
     @patch("tools.asn_tool.socket.create_connection")
     def test_valid_ipv6_returns_asn_data(self, mock_create_connection):
-        mock_create_connection.return_value = _make_fake_socket(CYMRU_RESPONSE_CLOUDFLARE_V6)
+        mock_create_connection.return_value = _make_fake_socket(
+            CYMRU_RESPONSE_CLOUDFLARE_V6
+        )
 
         result = asn_lookup("2606:4700:4700::1111")
 
@@ -101,7 +103,7 @@ class TestAsnLookup(unittest.TestCase):
 
     @patch("tools.asn_tool.socket.create_connection")
     def test_whois_timeout_returns_error(self, mock_create_connection):
-        mock_create_connection.side_effect = socket.timeout("timed out")
+        mock_create_connection.side_effect = TimeoutError("timed out")
 
         result = asn_lookup("8.8.8.8")
 

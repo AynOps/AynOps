@@ -1,12 +1,14 @@
 import ipaddress
-import requests
 import os
+
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def classify_reputation(is_whitelisted: bool, abuse_score: int, is_tor: bool) -> str:
-    """Classification model to classify the reputation of the 
+    """Classification model to classify the reputation of the
     ip on the basis on is_whitelisted, abuse_score and is_tor"""
     if is_whitelisted:
         return "trusted"
@@ -24,6 +26,7 @@ def classify_reputation(is_whitelisted: bool, abuse_score: int, is_tor: bool) ->
         return "low-risk"
 
     return "clean"
+
 
 def ip_reputation(ip_address: str) -> dict:
     """
@@ -53,17 +56,17 @@ def ip_reputation(ip_address: str) -> dict:
         data = response.json().get("data", {})
 
         abuse_score = data.get("abuseConfidenceScore", 0)
-        is_whitelisted = bool(data.get("isWhitelisted" , False))
-        is_tor = bool(data.get("isTor" , False))
+        is_whitelisted = bool(data.get("isWhitelisted", False))
+        is_tor = bool(data.get("isTor", False))
         reputation = classify_reputation(is_whitelisted, abuse_score, is_tor)
 
         return {
             "success": True,
             "ip": ip,
             "ip_version": data.get("ipVersion"),
-            "is_malicious": reputation in {"high-risk" , "suspicious"},
+            "is_malicious": reputation in {"high-risk", "suspicious"},
             "is_whitelisted": is_whitelisted,
-            "is_public": bool(data.get("isPublic" , False)),
+            "is_public": bool(data.get("isPublic", False)),
             "is_tor": is_tor,
             "reputation": reputation,
             "num_distinct_users": data.get("numDistinctUsers") or 0,
@@ -78,10 +81,10 @@ def ip_reputation(ip_address: str) -> dict:
         }
 
     except requests.exceptions.HTTPError as e:
-        return {"success": False, "error": f"AbuseIPDB API request failed: {str(e)}"}
+        return {"success": False, "error": f"AbuseIPDB API request failed: {e!s}"}
     except requests.exceptions.Timeout:
         return {"success": False, "error": "AbuseIPDB API request timed out"}
     except requests.exceptions.RequestException as e:
-        return {"success": False, "error": f"Could not connect to AbuseIPDB API: {str(e)}"}
+        return {"success": False, "error": f"Could not connect to AbuseIPDB API: {e!s}"}
     except Exception as e:
         return {"success": False, "error": str(e)}

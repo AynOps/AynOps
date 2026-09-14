@@ -1,8 +1,11 @@
 import os
 import unittest
 from unittest.mock import Mock, patch
+
 from requests.exceptions import HTTPError, RequestException, Timeout
+
 from tools.iprep_tool import classify_reputation, ip_reputation
+
 
 class TestClassifyReputation(unittest.TestCase):
     """Direct unit tests for the classification rules logic."""
@@ -145,7 +148,9 @@ class TestIpReputation(unittest.TestCase):
     @patch("tools.iprep_tool.requests.get")
     def test_http_error_handling(self, mock_get):
         mock_response = Mock()
-        mock_response.raise_for_status.side_effect = HTTPError("401 Client Error: Unauthorized")
+        mock_response.raise_for_status.side_effect = HTTPError(
+            "401 Client Error: Unauthorized"
+        )
         mock_get.return_value = mock_response
 
         result = ip_reputation("1.1.1.1")

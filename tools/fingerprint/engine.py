@@ -61,6 +61,7 @@ from tools.fingerprint.signatures import (
 # Internal types
 # ------------------------------------------------------------------
 
+
 class _Detection(TypedDict):
     name: str
     confidence: int
@@ -69,12 +70,12 @@ class _Detection(TypedDict):
 
 # Map from signature-dict → category key in the output schema
 _SIGNATURE_CATEGORIES: list[tuple[dict, str]] = [
-    (WEB_SERVER_SIGNATURES,   "web_servers"),
-    (LANGUAGE_SIGNATURES,     "programming_languages"),
-    (CMS_SIGNATURES,          "cms"),
+    (WEB_SERVER_SIGNATURES, "web_servers"),
+    (LANGUAGE_SIGNATURES, "programming_languages"),
+    (CMS_SIGNATURES, "cms"),
     (JS_FRAMEWORK_SIGNATURES, "frameworks"),
-    (CDN_SIGNATURES,          "hosting_providers"),
-    (ANALYTICS_SIGNATURES,    "analytics"),
+    (CDN_SIGNATURES, "hosting_providers"),
+    (ANALYTICS_SIGNATURES, "analytics"),
 ]
 
 _META_GENERATOR_RE = re.compile(
@@ -90,6 +91,7 @@ _META_GENERATOR_ALT_RE = re.compile(
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
+
 
 def _extract_meta_tags(raw_html: str) -> dict[str, str]:
     """Return a dict of notable meta tag values found in the HTML."""
@@ -150,10 +152,9 @@ def _match_signatures(
                     best_confidence = max(best_confidence, confidence)
                     evidence.append(f"<meta generator>: {meta_tags['generator']}")
 
-            elif marker_type == "html_substring":
-                if mv_lower in html:
-                    best_confidence = max(best_confidence, confidence)
-                    evidence.append(marker_value)
+            elif marker_type == "html_substring" and mv_lower in html:
+                best_confidence = max(best_confidence, confidence)
+                evidence.append(marker_value)
 
         if best_confidence > 0:
             # deduplicate evidence strings while preserving order
@@ -177,6 +178,7 @@ def _match_signatures(
 # ------------------------------------------------------------------
 # Layer functions (each is independently testable)
 # ------------------------------------------------------------------
+
 
 def headers_layer(
     raw_headers: dict[str, str],
@@ -261,6 +263,7 @@ def html_layer(raw_html: str) -> dict[str, list[_Detection]]:
 # Main entry point
 # ------------------------------------------------------------------
 
+
 def fingerprint(
     raw_headers: dict[str, str],
     raw_text: str,
@@ -298,8 +301,8 @@ def fingerprint(
 
     # ── artefacts ────────────────────────────────────────────────────────────
     fp_artefacts: dict = {
-        "headers":   headers_lower,
-        "cookies":   cookie_names,
+        "headers": headers_lower,
+        "cookies": cookie_names,
         "meta_tags": meta_tags,
     }
 
