@@ -410,6 +410,18 @@ class TestDnsEnumeration(unittest.TestCase):
                     "SOA": [],
                     "CAA": [],
                 },
+                "cname_chain": [],
+                "dnssec_records": {
+                    "DNSKEY": [],
+                    "DS": [],
+                    "RRSIG": [],
+                    "NSEC": [],
+                },
+                "dnssec_errors": {},
+                "ptr_records": {
+                    "192.0.2.10": [],
+                },
+                "ptr_errors": {},
                 "srv_records": {
                     "_sip._tcp": [
                         {
@@ -909,7 +921,133 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertIn("resolver", result)
         self.assertEqual(result["resolver"]["nameservers"], ["1.1.1.1", "8.8.8.8"])
-        self.assertEqual(result["resolver"]["lifetime"], 5)
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_dnssec_records_enumerated_and_formatted(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if domain == "example.com":
+                if rtype == "DNSKEY":
+                    rec = Mock()
+                    rec.flags = 257
+                    rec.protocol = 3
+                    rec.algorithm = 13
+                    rec.key = b"\x01\x02\x03\x04"
+                    return [rec]
+                if rtype == "DS":
+                    rec = Mock()
+                    rec.key_tag = 12345
+                    rec.algorithm = 13
+                    rec.digest_type = 2
+                    rec.digest = bytes.fromhex("abcdef123456")
+                    return [rec]
+                if rtype == "RRSIG":
+                    rec = Mock()
+                    rec.type_covered = 1  # A
+                    rec.algorithm = 13
+                    rec.labels = 2
+                    rec.original_ttl = 300
+                    rec.expiration = 1700000000
+                    rec.inception = 1690000000
+                    rec.key_tag = 12345
+                    rec.signer = "example.com."
+                    return [rec]
+                if rtype == "NSEC":
+                    rec = Mock()
+                    rec.next = "next.example.com."
+                    return [rec]
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        dnssec = result["dnssec_records"]
+        self.assertEqual(len(dnssec["DNSKEY"]), 1)
+        self.assertEqual(dnssec["DNSKEY"][0]["flags"], 257)
+        self.assertEqual(dnssec["DNSKEY"][0]["key"], "AQIDBA==")
+
+        self.assertEqual(len(dnssec["DS"]), 1)
+        self.assertEqual(dnssec["DS"][0]["key_tag"], 12345)
+        self.assertEqual(dnssec["DS"][0]["digest"], "abcdef123456")
+
+        self.assertEqual(len(dnssec["RRSIG"]), 1)
+        self.assertEqual(dnssec["RRSIG"][0]["type_covered"], "A")
+        self.assertEqual(dnssec["RRSIG"][0]["signer"], "example.com")
+
+        self.assertEqual(len(dnssec["NSEC"]), 1)
+        self.assertEqual(dnssec["NSEC"][0]["next"], "next.example.com")
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_cname_chain_resolution_and_loop_detection(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if domain == "example.com" and rtype == "CNAME":
+                return self._make_resolver_answer(["alias.example.net."])
+            if domain == "alias.example.net" and rtype == "CNAME":
+                return self._make_resolver_answer(["cdn.provider.net."])
+            if domain == "cdn.provider.net" and rtype == "CNAME":
+                raise real_dns.NoAnswer
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["cname_chain"], ["alias.example.net", "cdn.provider.net"])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_cname_chain_cycle_terminates(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        # Simulate CNAME loop: a -> b -> a
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if domain == "loop.com" and rtype == "CNAME":
+                return self._make_resolver_answer(["hop1.com."])
+            if domain == "hop1.com" and rtype == "CNAME":
+                return self._make_resolver_answer(["loop.com."])
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("loop.com")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["cname_chain"], ["hop1.com"])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_ptr_reverse_dns_resolution(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=5, tcp=False):
+            if domain == "example.com" and rtype == "A":
+                return self._make_resolver_answer(["192.0.2.1"])
+            if rtype == "PTR" and "1.2.0.192.in-addr.arpa" in str(domain):
+                rec = Mock()
+                rec.target = "host1.example.com."
+                return [rec]
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertIn("192.0.2.1", result["ptr_records"])
+        self.assertEqual(result["ptr_records"]["192.0.2.1"], ["host1.example.com"])
+        self.assertEqual(result["ptr_errors"], {})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

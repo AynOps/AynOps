@@ -101,6 +101,18 @@ completed.
   "ttl": {
     "A": 60
   },
+  "dnssec_records": {
+    "DNSKEY": [],
+    "DS": [],
+    "RRSIG": [],
+    "NSEC": []
+  },
+  "dnssec_errors": {},
+  "cname_chain": [],
+  "ptr_records": {
+    "192.0.2.10": ["host1.example.com"]
+  },
+  "ptr_errors": {},
   "resolver": {
     "nameservers": ["1.1.1.1", "8.8.8.8"],
     "timeout": 2.0,
@@ -119,6 +131,11 @@ On success, the response contains `success: true` and the following fields:
 | `domain` | string | The normalized input domain: surrounding whitespace removed, lowercased, and any trailing dot removed. |
 | `errors` | object | Maps a target record type such as `A` or `TXT` to an error name. Anticipated lookup failures use the exception name; unexpected lookup failures are prefixed with `unexpected: `. |
 | `records` | object | Contains `A`, `AAAA`, `MX`, `NS`, `TXT`, `CNAME`, `SOA`, and `CAA` results. Missing record answers are represented by empty lists, while each successful record type uses the shape described below. |
+| `dnssec_records` | object | Maps DNSSEC record types (`DNSKEY`, `DS`, `RRSIG`, `NSEC`) to lists of formatted record dictionaries or raw fallback strings. |
+| `dnssec_errors` | object | Maps DNSSEC record types to lookup errors encountered during enumeration. |
+| `cname_chain` | array of strings | The ordered sequence of CNAME aliases encountered when resolving canonical names, bounded to a maximum depth with cycle/loop detection. |
+| `ptr_records` | object | Maps resolved IP addresses (from `A` and `AAAA` records) to lists of discovered reverse DNS PTR hostnames. |
+| `ptr_errors` | object | Maps resolved IP addresses to error names when reverse DNS PTR lookups fail. |
 | `srv_records` | object | Maps `_sip._tcp`, `_ldap._tcp`, `_xmpp-client._tcp`, `_kerberos._tcp`, and `_autodiscover._tcp` to SRV record lists. Each record has integer `priority`, `weight`, and `port` fields plus a cleaned `target`; an unpublished service has an empty list. |
 | `srv_errors` | object | Maps a service name to its lookup error when an SRV lookup fails with an anticipated or unexpected error. `NoAnswer` and `NXDOMAIN` are treated as an unpublished service and are not added here. |
 | `subdomains_found` | array of strings | Common `label.domain` names for which an `A`, `AAAA`, or `CNAME` lookup resolved. Each candidate is added at most once. |
@@ -136,6 +153,15 @@ The `records` object uses these per-type shapes:
 | `TXT` | Array of strings formed by concatenating each record's text chunks. UTF-8 decoding failures leave the list empty and record `UnicodeDecodeError` in `errors`. |
 | `SOA` | An object with cleaned `mname` and `rname` strings plus integer `serial`, `refresh`, `retry`, `expire`, and `minimum` fields. |
 | `CAA` | Array of objects with `flags`, `tag`, and `value` fields. When a CAA object does not expose `tag` or `value`, the formatter returns a `raw` string instead. |
+
+The `dnssec_records` object uses these per-type shapes:
+
+| Record type | Value shape and description |
+|---|---|
+| `DNSKEY` | Array of objects with integer `flags`, `protocol`, and `algorithm` fields plus base64-encoded `key`. |
+| `DS` | Array of objects with integer `key_tag`, `algorithm`, and `digest_type` fields plus hex-encoded `digest`. |
+| `RRSIG` | Array of objects with `type_covered`, integer `algorithm`, `labels`, `original_ttl`, `expiration`, `inception`, `key_tag`, cleaned string `signer`, and base64-encoded `signature`. |
+| `NSEC` | Array of objects with cleaned string `next` domain and array of string `windows` (record types). |
 
 ## Errors and timeouts
 
