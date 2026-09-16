@@ -159,6 +159,9 @@ class _ProbeResult:
     request_url: str | None = None
     redirect_chain: tuple[str, ...] = ()
     errors: tuple[dict[str, str], ...] = ()
+    # Absolute URL of a redirect target the scope guard refused to follow.
+    # Recorded for evidence only — it is never requested.
+    rejected_redirect_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -273,8 +276,9 @@ def _probe(subdomain: str, resolver=None) -> _ProbeResult:
     """Fetch the subdomain over HTTPS first, falling back to HTTP.
 
     Inspects redirect chains up to 3 hops without crossing into unsafe IP space
-    or diverging to unrelated target hostnames.
-    Returns the response and any errors if neither scheme connects.
+    or diverging to unrelated target hostnames. A redirect target rejected by
+    the scope guard is preserved in ``rejected_redirect_url`` without being
+    requested. Returns the response and any errors if neither scheme connects.
     """
     errors = []
     subdomain_clean = subdomain.strip().rstrip(".")
@@ -293,6 +297,7 @@ def _probe(subdomain: str, resolver=None) -> _ProbeResult:
         hops = 0
         last_response = None
         scheme_failed = False
+        rejected_redirect_url = None
 
         while hops <= _MAX_REDIRECT_HOPS:
             visited_urls.add(current_url)
@@ -348,6 +353,9 @@ def _probe(subdomain: str, resolver=None) -> _ProbeResult:
                 # Stop redirect following if target leaves the original target subdomain scope
                 target_scope = subdomain_clean.lower()
                 if next_host and next_host != target_scope and not next_host.endswith("." + target_scope):
+                    # Preserve the rejected Location as evidence without
+                    # requesting it — fetching it would defeat the scope guard.
+                    rejected_redirect_url = next_url
                     break
 
                 if next_url in visited_urls:
@@ -364,6 +372,7 @@ def _probe(subdomain: str, resolver=None) -> _ProbeResult:
                 response=last_response,
                 request_url=request_url,
                 redirect_chain=tuple(redirect_chain),
+                rejected_redirect_url=rejected_redirect_url,
             )
 
     return _ProbeResult(response=None, errors=tuple(errors))
@@ -439,8 +448,17 @@ def _confirms_takeover(subdomain: str, fingerprint: dict, resolver=None) -> _Tak
             matched_indicator = {"type": "headers", "value": indicator["headers"]}
 
     request_url = probe.request_url if isinstance(probe.request_url, str) else None
-    chain = probe.redirect_chain if isinstance(probe.redirect_chain, (list, tuple)) else ()
-    final_url = _response_url(response) or (chain[-1] if chain else request_url)
+    chain = list(probe.redirect_chain) if isinstance(probe.redirect_chain, (list, tuple)) else []
+    rejected_redirect_url = getattr(probe, "rejected_redirect_url", None)
+    if not isinstance(rejected_redirect_url, str):
+        rejected_redirect_url = None
+    # A redirect target rejected by the scope guard is reported as the
+    # chain's terminal hop so the evidence exposes where the redirect
+    # pointed; it was never requested (see rejected_redirect_url).
+    if rejected_redirect_url is not None:
+        chain.append(rejected_redirect_url)
+
+    final_url = rejected_redirect_url or _response_url(response) or (chain[-1] if chain else request_url)
     final_host = (urlparse(final_url).hostname or "").lower() if final_url else ""
     target_host = subdomain.strip().rstrip(".").lower()
     cross_host_redirect = bool(final_host) and final_host != target_host
@@ -449,7 +467,8 @@ def _confirms_takeover(subdomain: str, fingerprint: dict, resolver=None) -> _Tak
         "url": request_url,
         "final_url": final_url,
         "status_code": getattr(response, "status_code", None),
-        "redirect_chain": list(chain),
+        "redirect_chain": chain,
+        "rejected_redirect_url": rejected_redirect_url,
         "cross_host_redirect": cross_host_redirect,
         "matched_indicator": matched_indicator,
     }

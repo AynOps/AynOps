@@ -788,6 +788,61 @@ def test_explicit_redirect_handling_cross_domain_halt(mock_get):
     assert all("external-parking.com" not in call.args[0] for call in mock_get.call_args_list)
 
 
+@patch("tools.subdomain_takeover_tool.requests.get")
+def test_probe_preserves_rejected_out_of_scope_redirect(mock_get):
+    """The rejected out-of-scope Location is recorded in probe metadata without being requested."""
+    from tools.subdomain_takeover_tool import _probe
+
+    redirect_resp = Mock(
+        status_code=302,
+        headers={"Location": "https://external-parking.com/landing"},
+    )
+    redirect_resp.url = "https://sub.example.com"
+    mock_get.return_value = redirect_resp
+
+    result = _probe("sub.example.com")
+
+    assert result.response is redirect_resp
+    # redirect_chain only lists URLs that were actually requested; the rejected
+    # target is preserved separately so it cannot be mistaken for a fetched hop.
+    assert result.redirect_chain == ("https://sub.example.com",)
+    assert result.rejected_redirect_url == "https://external-parking.com/landing"
+    assert mock_get.call_count == 1
+    assert all("external-parking.com" not in call.args[0] for call in mock_get.call_args_list)
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+def test_probe_preserves_rejected_redirect_after_in_scope_hops(mock_get):
+    """In-scope hops are followed; only the out-of-scope terminal Location is preserved unfetched."""
+    from tools.subdomain_takeover_tool import _probe
+
+    first = Mock(
+        status_code=302,
+        headers={"Location": "https://www.sub.example.com/next"},
+    )
+    first.url = "https://sub.example.com"
+    second = Mock(
+        status_code=302,
+        headers={"Location": "https://external-parking.com/landing"},
+    )
+    second.url = "https://www.sub.example.com/next"
+    mock_get.side_effect = [first, second]
+
+    result = _probe("sub.example.com")
+
+    assert result.redirect_chain == (
+        "https://sub.example.com",
+        "https://www.sub.example.com/next",
+    )
+    assert result.rejected_redirect_url == "https://external-parking.com/landing"
+    # Both in-scope URLs were fetched; the external target was not.
+    assert mock_get.call_count == 2
+    assert [call.args[0] for call in mock_get.call_args_list] == [
+        "https://sub.example.com",
+        "https://www.sub.example.com/next",
+    ]
+
+
 def test_ssrf_protection_blocks_private_and_loopback_ips():
     """Item 9: Subdomains resolving to loopback or RFC 1918 private IPs are blocked for SSRF protection."""
     from tools.subdomain_takeover_tool import _check_host_ssrf, _probe
@@ -1008,6 +1063,7 @@ def test_vulnerable_finding_includes_structured_evidence(
         "value": "404 Domain Not Found",
     }
     assert evidence["redirect_chain"] == ["https://blog.example.com"]
+    assert evidence["rejected_redirect_url"] is None
     assert evidence["cross_host_redirect"] is False
 
 
@@ -1146,6 +1202,66 @@ def test_probe_failure_evidence_records_attempted_urls(
         "https://app.example.com",
         "http://app.example.com",
     ]
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+def test_rejected_redirect_becomes_terminal_hop_in_evidence(mock_get):
+    """A rejected out-of-scope Location ends the evidence chain, becomes final_url, and drops confidence."""
+    from tools.subdomain_takeover_tool import _ProbeStatus, _confirms_takeover
+
+    redirect_resp = Mock(
+        status_code=302,
+        headers={"Location": "https://external-parking.com/landing"},
+    )
+    redirect_resp.url = "https://app.example.com"
+    mock_get.return_value = redirect_resp
+
+    result = _confirms_takeover(
+        "app.example.com",
+        {"service": "Custom", "indicator": {"status": 302}},
+    )
+
+    assert result.status is _ProbeStatus.CONFIRMED
+    assert result.confidence == "low"
+    evidence = result.evidence
+    # The rejected target is reported as the terminal hop so the evidence
+    # exposes the redirect, and is flagged separately as never requested.
+    assert evidence["redirect_chain"] == [
+        "https://app.example.com",
+        "https://external-parking.com/landing",
+    ]
+    assert evidence["rejected_redirect_url"] == "https://external-parking.com/landing"
+    assert evidence["final_url"] == "https://external-parking.com/landing"
+    assert evidence["cross_host_redirect"] is True
+    # The external target is evidence only — it was never requested.
+    assert mock_get.call_count == 1
+    assert all("external-parking.com" not in call.args[0] for call in mock_get.call_args_list)
+
+
+@patch("tools.subdomain_takeover_tool.requests.get")
+def test_body_match_with_rejected_redirect_is_medium_confidence(mock_get):
+    """A body marker on a response whose redirect was rejected still downgrades confidence."""
+    from tools.subdomain_takeover_tool import _ProbeStatus, _confirms_takeover
+
+    redirect_resp = Mock(
+        status_code=302,
+        headers={"Location": "https://external-parking.com/landing"},
+        text="Redirecting to the new site",
+    )
+    redirect_resp.url = "https://app.example.com"
+    mock_get.return_value = redirect_resp
+
+    result = _confirms_takeover(
+        "app.example.com",
+        {"service": "Custom", "indicator": {"body": "Redirecting"}},
+    )
+
+    assert result.status is _ProbeStatus.CONFIRMED
+    assert result.confidence == "medium"
+    assert result.evidence["matched_indicator"] == {"type": "body", "value": "Redirecting"}
+    assert result.evidence["rejected_redirect_url"] == "https://external-parking.com/landing"
+    assert result.evidence["cross_host_redirect"] is True
+    assert all("external-parking.com" not in call.args[0] for call in mock_get.call_args_list)
 
 
 if __name__ == "__main__":
