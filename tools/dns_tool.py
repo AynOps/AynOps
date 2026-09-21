@@ -5,7 +5,7 @@ import dns.exception
 import dns.name
 import dns.resolver
 
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 
 class _DnsExecutor(ThreadPoolExecutor):

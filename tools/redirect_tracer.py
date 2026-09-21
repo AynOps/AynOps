@@ -14,7 +14,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 _REDIRECT_STATUSES = (301, 302, 303, 307, 308)
 _MAX_HOPS = 15

@@ -20,7 +20,7 @@ import re
 import requests
 
 from tools.fingerprint import fingerprint
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 # Maximum bytes of response body fed to the fingerprint engine.
 # Avoids wasting time on huge pages; most fingerprint signals appear

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from utils.helpers import safe_parse_datetime
+from utils import safe_parse_datetime
 
 
 def whois_extractor(result, signals):

@@ -1,6 +1,6 @@
 import whois
 
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 WHOIS_TIMEOUT_SECONDS = 10
 

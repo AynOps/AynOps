@@ -1,7 +1,7 @@
 import requests
 from packaging.version import InvalidVersion, Version
 
-from utils.helpers import get_cvss_details, get_english_description
+from utils import get_cvss_details, get_english_description
 
 
 def _query_nvd(keyword: str) -> list:

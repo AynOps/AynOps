@@ -12,7 +12,7 @@ from urllib.parse import urljoin
 from curl_cffi import requests
 from curl_cffi.requests.errors import RequestsError
 
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 _REDIRECT_STATUSES = (301, 302, 303, 307, 308)
 _MAX_REDIRECT_HOPS = 8

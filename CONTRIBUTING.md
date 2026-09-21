@@ -242,7 +242,7 @@ tools/my_tool.py
 Module implementation for my_tool.
 """
 
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 
 def my_tool(domain: str) -> dict:

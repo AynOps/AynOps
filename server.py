@@ -12,7 +12,7 @@ from tools.headers_tool import headers_analyzer
 from tools.hibp_tool import hibp_check
 from tools.iprep_tool import ip_reputation
 from tools.portscan_tool import port_scan
-from tools.prompts.threat_analysis import THREAT_ANALYSIS_PROMPT
+from tools.prompts import THREAT_ANALYSIS_PROMPT
 from tools.redirect_tracer import trace_redirects
 from tools.robots_txt_tool import robots_txt_inspect
 from tools.ssl_tool import ssl_inspect

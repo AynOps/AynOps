@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from tools.signals.extractor import extract_signals
 from tools.signals.registry import TOOL_REGISTRY
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 
 def _format_signals_block(signals: dict) -> str:

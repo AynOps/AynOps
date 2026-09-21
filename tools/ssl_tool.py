@@ -2,7 +2,7 @@ import socket
 import ssl
 from datetime import UTC, datetime
 
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 try:
     # cryptography is present via the MCP stack (fastmcp -> authlib ->

@@ -3,7 +3,7 @@ import re
 
 import requests
 
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 HIBP_API_BASE = "https://haveibeenpwned.com/api/v3"
 HIBP_USER_AGENT = "AynOps-MCP-Server"
