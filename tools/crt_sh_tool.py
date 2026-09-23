@@ -3,7 +3,7 @@ from typing import Any
 from curl_cffi import requests
 from curl_cffi.requests.errors import RequestsError
 
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 
 def cert_transparency(domain: str) -> dict[str, Any]:

@@ -2,9 +2,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Import the functions to test. Adjust 'tools.fullrecon_tool' to match your actual module layout.
-from tools.fullrecon_tool import _format_signals_block, full_recon
-from tools.signals.registry import TOOL_REGISTRY
+from tools import full_recon
+from tools.fullrecon_tool import _format_signals_block
+from tools.signals import TOOL_REGISTRY
 
 # ==========================================
 # FIXTURES & MOCK DATA

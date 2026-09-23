@@ -22,7 +22,8 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from tools.techstack_tool import MAX_BODY_BYTES, tech_stack_detect
+from tools import tech_stack_detect
+from tools.techstack_tool import MAX_BODY_BYTES
 
 # ---------------------------------------------------------------------------
 # Helpers

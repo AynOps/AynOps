@@ -4,7 +4,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-from tools.ssl_tool import ssl_inspect
+from tools import ssl_inspect
 
 try:
     from cryptography import x509 as cx509

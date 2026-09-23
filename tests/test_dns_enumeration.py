@@ -7,8 +7,8 @@ import dns.rdata
 import dns.rdataclass
 import dns.rdatatype
 
-from tools import dns_tool
-from tools.dns_tool import MAX_CNAME_DEPTH, RESOLVER_LIFETIME, dns_enumeration
+from tools import dns_enumeration, dns_tool
+from tools.dns_tool import MAX_CNAME_DEPTH, RESOLVER_LIFETIME
 
 
 class _ResolverAnswer(list):
@@ -887,7 +887,7 @@ class TestDnsEnumeration(unittest.TestCase):
         import dns.name as real_name
         import dns.resolver as real_dns
 
-        from utils.helpers import is_valid_domain
+        from utils import is_valid_domain
 
         # A 251-octet domain passes is_valid_domain (<=253 octets, labels <=63),
         # but prefixing an SRV service owner name pushes the queried name past

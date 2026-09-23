@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from tools.portscan_tool import port_scan
+from tools import port_scan
 
 
 class TestPortScan(unittest.TestCase):

@@ -3,11 +3,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
+from tools import cloud_exposure_check
 from tools.cloud_exposure_tool import (
     COMMON_SUFFIXES,
     SUBDOMAIN_PREFIXES,
     check_provider,
-    cloud_exposure_check,
     generate_bucket_names,
     url_response,
 )

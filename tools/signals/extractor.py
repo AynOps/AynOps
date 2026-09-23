@@ -1,4 +1,4 @@
-from tools.signals.registry import TOOL_REGISTRY
+from tools.signals import TOOL_REGISTRY
 
 
 def extract_signals(results):

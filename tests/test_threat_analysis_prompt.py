@@ -6,7 +6,7 @@ drifts from the code changes how findings are reported with nothing else in
 the tree noticing.
 """
 
-from tools.prompts.threat_analysis import THREAT_ANALYSIS_PROMPT
+from tools.prompts import THREAT_ANALYSIS_PROMPT
 
 
 def _headers_evidence_rule():

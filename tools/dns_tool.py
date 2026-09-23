@@ -8,7 +8,7 @@ import dns.rdatatype
 import dns.resolver
 import dns.reversename
 
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 
 class _DnsExecutor(ThreadPoolExecutor):

@@ -9,7 +9,7 @@ from typing import Any
 import dns.exception
 import dns.resolver
 
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 # Base generic defaults
 BASE_DKIM_SELECTORS = [

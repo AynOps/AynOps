@@ -1,7 +1,6 @@
 """Regression tests for ASN signal extraction (issue #117)."""
 
-from tools.signals.asn import asn_extractor
-from tools.signals.extractor import extract_signals
+from tools.signals import asn_extractor, extract_signals
 
 
 def _signals():

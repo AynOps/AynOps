@@ -4,7 +4,8 @@ from unittest.mock import Mock, patch
 from curl_cffi.requests.errors import RequestsError
 from curl_cffi.requests.headers import Headers
 
-from tools.headers_tool import _analyze_raw_headers, headers_analyzer
+from tools import headers_analyzer
+from tools.headers_tool import _analyze_raw_headers
 
 
 def _resp(status_code: int, headers: dict, body: str = ""):

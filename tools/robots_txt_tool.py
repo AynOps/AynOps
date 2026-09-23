@@ -1,6 +1,6 @@
 import requests
 
-from utils.helpers import is_valid_domain, normalize_domain
+from utils import is_valid_domain, normalize_domain
 
 
 def save_rule(rule: dict, rules: list) -> None:
