@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from tools.robots_txt_tool import robots_txt_inspect
+from tools import robots_txt_inspect
 
 
 def test_robots_txt_inspect_invalid_domain():

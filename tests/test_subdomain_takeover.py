@@ -10,7 +10,7 @@ import dns.rdatatype
 import dns.resolver
 import pytest
 
-from tools.subdomain_takeover_tool import subdomain_takeover
+from tools import subdomain_takeover
 
 
 class _ResolverAnswer(list):

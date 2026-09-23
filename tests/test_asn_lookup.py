@@ -2,7 +2,7 @@ import socket
 import unittest
 from unittest.mock import MagicMock, patch
 
-from tools.asn_tool import asn_lookup
+from tools import asn_lookup
 
 # Sample Team Cymru WHOIS response for 8.8.8.8
 CYMRU_RESPONSE_8_8_8_8 = (

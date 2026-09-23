@@ -2,7 +2,8 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
-from tools.hibp_tool import _risk_level, hibp_check
+from tools import hibp_check
+from tools.hibp_tool import _risk_level
 
 
 class TestHibpCheck(unittest.TestCase):

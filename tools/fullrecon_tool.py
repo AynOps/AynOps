@@ -2,8 +2,7 @@ import concurrent.futures
 from collections import defaultdict
 from datetime import UTC, datetime
 
-from tools.signals.extractor import extract_signals
-from tools.signals.registry import TOOL_REGISTRY
+from tools.signals import TOOL_REGISTRY, extract_signals
 from utils import is_valid_domain, normalize_domain
 
 

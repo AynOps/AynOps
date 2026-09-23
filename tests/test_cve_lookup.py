@@ -4,7 +4,8 @@ from unittest.mock import Mock, patch
 import requests
 from packaging.version import Version
 
-from tools.cve_tool import _cve_affects_version, cve_lookup
+from tools import cve_lookup
+from tools.cve_tool import _cve_affects_version
 
 
 def _make_raw_cve(cve_id, cpe_matches, configurations=None, software="someproduct"):

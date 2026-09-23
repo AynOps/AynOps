@@ -4,7 +4,8 @@ from unittest.mock import Mock, patch
 
 from requests.exceptions import HTTPError, RequestException, Timeout
 
-from tools.iprep_tool import classify_reputation, ip_reputation
+from tools import ip_reputation
+from tools.iprep_tool import classify_reputation
 
 
 class TestClassifyReputation(unittest.TestCase):

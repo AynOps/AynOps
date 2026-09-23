@@ -1,7 +1,7 @@
 import unittest
 from datetime import UTC, datetime
 
-from utils.helpers import (
+from utils import (
     get_cvss_details,
     get_english_description,
     is_valid_domain,

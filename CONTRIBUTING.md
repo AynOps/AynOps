@@ -215,7 +215,7 @@ git checkout -b docs/contributing-guide
 When modifying or adding Python code in AynOps:
 
 1. **Input Normalization & Validation**:
-   - Always sanitize domain inputs using `utils.helpers.normalize_domain()` and `utils.helpers.is_valid_domain()`.
+   - Always sanitize domain inputs using `utils.normalize_domain()` and `utils.is_valid_domain()`.
    - Validate IP addresses using Python's standard `ipaddress` library (`ipaddress.ip_address()`).
 2. **Explicit Network Timeouts**:
    - Never initiate unbounded network sockets, HTTP requests, or subprocess calls. Always configure sensible, operation-appropriate timeouts. For example, HTTP requests may use `timeout=10`, while DNS/WHOIS sockets may use `timeout=5`.
@@ -296,7 +296,7 @@ def my_ip_tool(ip_address: str) -> dict:
 Register the function in `server.py`:
 
 ```python
-from tools.my_tool import my_tool
+from tools import my_tool
 
 # Register tool on FastMCP instance
 mcp.tool()(my_tool)
@@ -309,7 +309,7 @@ mcp.tool()(my_tool)
 Create a corresponding test suite in `tests/test_my_tool.py`:
 
 ```python
-from tools.my_tool import my_tool
+from tools import my_tool
 
 
 def test_my_tool_success():
@@ -378,8 +378,8 @@ When adding a tool that contributes core telemetry to the automated `full_recon`
 Bind the tool function, execution wave, argument resolver, and signal extractor in `TOOL_REGISTRY`:
 
 ```python
-from tools.my_tool import my_tool
-from tools.signals.my_tool import my_tool_extractor
+from tools import my_tool
+from tools.signals import my_tool_extractor
 
 TOOL_REGISTRY = [
     # ... existing wave tools ...
@@ -582,7 +582,7 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 Before requesting review, ensure your PR passes all items:
 
 - [ ] Tool adheres to the standard pattern in `tools/`
-- [ ] Inputs are validated via `utils.helpers` or standard `ipaddress`
+- [ ] Inputs are validated via `utils` or standard `ipaddress`
 - [ ] Returns structured `{"success": True/False, ...}` on all code execution paths
 - [ ] Exceptions are caught cleanly — the MCP server process never crashes
 - [ ] Comprehensive unit tests added in `tests/` with all tests passing (`uv run pytest`)

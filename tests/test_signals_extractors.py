@@ -9,12 +9,14 @@ ip_reputation_extractor (the AbuseIPDB-backed canonical source).
 
 from unittest.mock import patch
 
-from tools.headers_tool import headers_analyzer
-from tools.signals.asn import asn_extractor
-from tools.signals.extractor import extract_signals
-from tools.signals.ip_reputation import ip_reputation_extractor
-from tools.signals.registry import TOOL_REGISTRY
-from tools.signals.tech_stack import techstack_extractor
+from tools import headers_analyzer
+from tools.signals import (
+    TOOL_REGISTRY,
+    asn_extractor,
+    extract_signals,
+    ip_reputation_extractor,
+    techstack_extractor,
+)
 
 
 def _base_signals():

@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 from curl_cffi.requests.errors import RequestsError
 
-from tools.crt_sh_tool import cert_transparency
+from tools import cert_transparency
 
 
 @patch("tools.crt_sh_tool.requests.get")

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import dns.exception
 import dns.resolver
 
+from tools import email_security_check
 from tools.email_security_tool import (
     _discover_dynamic_selectors,
     _is_dmarc_record,
@@ -11,7 +12,6 @@ from tools.email_security_tool import (
     _parse_dkim_record,
     _query_txt,
     _spf_policy,
-    email_security_check,
 )
 
 

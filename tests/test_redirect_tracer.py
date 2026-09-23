@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from tools.redirect_tracer import trace_redirects
+from tools import trace_redirects
 
 
 def _resp(status_code: int, headers: dict | None = None):

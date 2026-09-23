@@ -21,7 +21,7 @@ import dns.exception
 import dns.resolver
 import requests
 
-from tools.dns_tool import PUBLIC_RESOLVERS, dns_enumeration
+from tools import PUBLIC_RESOLVERS, dns_enumeration
 from utils import is_valid_domain, normalize_domain
 
 # Match region labels by shape rather than a fixed list so newly added AWS

@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from tools.whois_tool import whois_lookup
+from tools import whois_lookup
 
 
 class TestWhoisLookup(unittest.TestCase):
