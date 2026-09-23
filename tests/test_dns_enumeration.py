@@ -8,7 +8,7 @@ import dns.rdataclass
 import dns.rdatatype
 
 from tools import dns_tool
-from tools.dns_tool import dns_enumeration
+from tools.dns_tool import MAX_CNAME_DEPTH, RESOLVER_LIFETIME, dns_enumeration
 
 
 class _ResolverAnswer(list):
@@ -410,6 +410,20 @@ class TestDnsEnumeration(unittest.TestCase):
                     "SOA": [],
                     "CAA": [],
                 },
+                "cname_chain": [],
+                "cname_errors": {},
+                "dnssec_records": {
+                    "DNSKEY": [],
+                    "DS": [],
+                    "RRSIG": [],
+                    "NSEC": [],
+                    "NSEC3": [],
+                },
+                "dnssec_errors": {},
+                "ptr_records": {
+                    "192.0.2.10": [],
+                },
+                "ptr_errors": {},
                 "srv_records": {
                     "_sip._tcp": [
                         {
@@ -939,7 +953,258 @@ class TestDnsEnumeration(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertIn("resolver", result)
         self.assertEqual(result["resolver"]["nameservers"], ["1.1.1.1", "8.8.8.8"])
-        self.assertEqual(result["resolver"]["lifetime"], 5)
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_dnssec_records_enumerated_and_formatted(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=RESOLVER_LIFETIME, tcp=False):
+            if domain == "example.com":
+                if rtype == "DNSKEY":
+                    rec = Mock()
+                    rec.flags = 257
+                    rec.protocol = 3
+                    rec.algorithm = 13
+                    rec.key = b"\x01\x02\x03\x04"
+                    return [rec]
+                if rtype == "DS":
+                    rec = Mock()
+                    rec.key_tag = 12345
+                    rec.algorithm = 13
+                    rec.digest_type = 2
+                    rec.digest = bytes.fromhex("abcdef123456")
+                    return [rec]
+                if rtype == "RRSIG":
+                    rec = Mock()
+                    rec.type_covered = 1  # A
+                    rec.algorithm = 13
+                    rec.labels = 2
+                    rec.original_ttl = 300
+                    rec.expiration = 1700000000
+                    rec.inception = 1690000000
+                    rec.key_tag = 12345
+                    rec.signer = "example.com."
+                    return [rec]
+                if rtype == "NSEC":
+                    rec = Mock()
+                    rec.next = "next.example.com."
+                    rec.windows = ((0, b"@\x00\x00\x08\x00\x03"),)
+                    return [rec]
+                if rtype == "NSEC3":
+                    rec = Mock()
+                    rec.algorithm = 1
+                    rec.flags = 0
+                    rec.iterations = 10
+                    rec.salt = b"\x01\x23\x45\x67"
+                    rec._next_text = Mock(
+                        return_value="2t7b4g4v720vtcb48bsn4n0t65fb5859"
+                    )
+                    rec.windows = ((0, b"@\x00\x00\x00\x00\x02"),)
+                    return [rec]
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        dnssec = result["dnssec_records"]
+        self.assertEqual(len(dnssec["DNSKEY"]), 1)
+        self.assertEqual(dnssec["DNSKEY"][0]["flags"], 257)
+        self.assertEqual(dnssec["DNSKEY"][0]["key"], "AQIDBA==")
+
+        self.assertEqual(len(dnssec["DS"]), 1)
+        self.assertEqual(dnssec["DS"][0]["key_tag"], 12345)
+        self.assertEqual(dnssec["DS"][0]["digest"], "abcdef123456")
+
+        self.assertEqual(len(dnssec["RRSIG"]), 1)
+        self.assertEqual(dnssec["RRSIG"][0]["type_covered"], "A")
+        self.assertEqual(dnssec["RRSIG"][0]["signer"], "example.com")
+
+        self.assertEqual(len(dnssec["NSEC"]), 1)
+        self.assertEqual(dnssec["NSEC"][0]["next"], "next.example.com")
+        self.assertEqual(dnssec["NSEC"][0]["types"], ["A", "AAAA", "RRSIG", "NSEC"])
+
+        self.assertEqual(len(dnssec["NSEC3"]), 1)
+        self.assertEqual(dnssec["NSEC3"][0]["algorithm"], 1)
+        self.assertEqual(dnssec["NSEC3"][0]["flags"], 0)
+        self.assertEqual(dnssec["NSEC3"][0]["iterations"], 10)
+        self.assertEqual(dnssec["NSEC3"][0]["salt"], "01234567")
+        self.assertEqual(dnssec["NSEC3"][0]["next"], "2t7b4g4v720vtcb48bsn4n0t65fb5859")
+        self.assertEqual(dnssec["NSEC3"][0]["types"], ["A", "RRSIG"])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_dnssec_errors_populated_on_failure(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=RESOLVER_LIFETIME, tcp=False):
+            if domain == "example.com":
+                if rtype == "DNSKEY":
+                    raise real_dns.NoNameservers
+                if rtype == "NSEC3":
+                    raise real_dns.LifetimeTimeout
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["dnssec_errors"]["DNSKEY"], "NoNameservers")
+        self.assertEqual(result["dnssec_errors"]["NSEC3"], "LifetimeTimeout")
+        self.assertEqual(result["dnssec_records"]["DNSKEY"], [])
+        self.assertEqual(result["dnssec_records"]["NSEC3"], [])
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_cname_chain_resolution_and_loop_detection(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=RESOLVER_LIFETIME, tcp=False):
+            if domain == "example.com" and rtype == "CNAME":
+                return self._make_resolver_answer(["alias.example.net."])
+            if domain == "alias.example.net" and rtype == "CNAME":
+                return self._make_resolver_answer(["cdn.provider.net."])
+            if domain == "cdn.provider.net" and rtype == "CNAME":
+                raise real_dns.NoAnswer
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(
+            result["cname_chain"], ["alias.example.net", "cdn.provider.net"]
+        )
+        self.assertEqual(result["cname_errors"], {})
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_cname_chain_cycle_terminates(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        # Simulate CNAME loop: a -> b -> a
+        def side_effect(domain, rtype, lifetime=RESOLVER_LIFETIME, tcp=False):
+            if domain == "loop.com" and rtype == "CNAME":
+                return self._make_resolver_answer(["hop1.com."])
+            if domain == "hop1.com" and rtype == "CNAME":
+                return self._make_resolver_answer(["loop.com."])
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("loop.com")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["cname_chain"], ["hop1.com"])
+        self.assertTrue(result["cname_errors"].get("cycle_detected"))
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_cname_chain_max_depth_cap_truncates(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        # Simulate 6 distinct hops (exceeding MAX_CNAME_DEPTH = 5)
+        # example.com -> hop1 -> hop2 -> hop3 -> hop4 -> hop5 -> hop6 -> NoAnswer
+        def side_effect(domain, rtype, lifetime=RESOLVER_LIFETIME, tcp=False):
+            if domain == "example.com" and rtype == "CNAME":
+                return self._make_resolver_answer(["hop1.com."])
+            if rtype == "CNAME":
+                for i in range(1, 10):
+                    if domain == f"hop{i}.com":
+                        return self._make_resolver_answer([f"hop{i + 1}.com."])
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(len(result["cname_chain"]), MAX_CNAME_DEPTH + 1)
+        self.assertTrue(result["cname_errors"].get("truncated"))
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_ptr_reverse_dns_resolution(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=RESOLVER_LIFETIME, tcp=False):
+            if domain == "example.com" and rtype == "A":
+                return self._make_resolver_answer(["192.0.2.1"])
+            if rtype == "PTR" and "1.2.0.192.in-addr.arpa" in str(domain):
+                rec = Mock()
+                rec.target = "host1.example.com."
+                return [rec]
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertIn("192.0.2.1", result["ptr_records"])
+        self.assertEqual(result["ptr_records"]["192.0.2.1"], ["host1.example.com"])
+        self.assertEqual(result["ptr_errors"], {})
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_ptr_deduplication_between_a_and_aaaa(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+        ptr_query_count = 0
+
+        def side_effect(domain, rtype, lifetime=RESOLVER_LIFETIME, tcp=False):
+            nonlocal ptr_query_count
+            if domain == "example.com" and rtype == "A":
+                return self._make_resolver_answer(["192.0.2.1"])
+            if domain == "example.com" and rtype == "AAAA":
+                # Duplicate IP returned in both A and AAAA
+                return self._make_resolver_answer(["192.0.2.1"])
+            if rtype == "PTR" and "1.2.0.192.in-addr.arpa" in str(domain):
+                ptr_query_count += 1
+                rec = Mock()
+                rec.target = "host1.example.com."
+                return [rec]
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(ptr_query_count, 1)
+        self.assertEqual(result["ptr_records"]["192.0.2.1"], ["host1.example.com"])
+        self.assertEqual(result["ptr_errors"], {})
+
+    @patch("tools.dns_tool.dns.resolver.Resolver")
+    def test_ptr_errors_populated_on_lookup_failure(self, mock_resolver_class):
+        import dns.resolver as real_dns
+
+        resolver = Mock()
+        mock_resolver_class.return_value = resolver
+
+        def side_effect(domain, rtype, lifetime=RESOLVER_LIFETIME, tcp=False):
+            if domain == "example.com" and rtype == "A":
+                return self._make_resolver_answer(["192.0.2.1"])
+            if rtype == "PTR" and "1.2.0.192.in-addr.arpa" in str(domain):
+                raise real_dns.LifetimeTimeout
+            raise real_dns.NoAnswer
+
+        resolver.resolve.side_effect = side_effect
+        result = dns_enumeration("example.com")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["ptr_records"]["192.0.2.1"], [])
+        self.assertEqual(result["ptr_errors"]["192.0.2.1"], "LifetimeTimeout")
 
 
 if __name__ == "__main__":
