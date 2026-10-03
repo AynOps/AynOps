@@ -50,6 +50,7 @@ class TestEmailSecurityScanner(unittest.TestCase):
         self.assertEqual(_spf_policy("v=spf1foo -all"), "unknown")
         self.assertEqual(_spf_policy("not an spf record"), "unknown")
         self.assertEqual(_spf_policy("v = spf1 -all"), "unknown")
+        self.assertEqual(_spf_policy(" v=spf1 -all"), "unknown")
 
     def test_is_spf_record(self):
         """RFC 7208 §4.5: only an exact 'v=spf1' version token qualifies."""
