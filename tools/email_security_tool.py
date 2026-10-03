@@ -200,8 +200,7 @@ def _is_spf_record(record: str) -> bool:
     "v=spf1", terminated by whitespace or the end of the record. Records
     like "V=SPF1 ..." or "v=spf1foo" are not SPF records and are discarded.
     """
-    tokens = record.strip().split()
-    return bool(tokens) and tokens[0] == "v=spf1"
+    return record == "v=spf1" or record.startswith("v=spf1 ")
 
 
 def _spf_policy(record: str) -> str:
@@ -217,9 +216,10 @@ def _spf_policy(record: str) -> str:
     delegates the policy (RFC 7208 §6.1), "missing" when neither is
     present, and "unknown" when the record is not a valid SPF record.
     """
-    tokens = record.strip().split()
-    if not tokens or tokens[0] != "v=spf1":
+    if not _is_spf_record(record):
         return "unknown"
+
+    tokens = record.split()
 
     has_redirect = False
     for token in tokens[1:]:
