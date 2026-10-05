@@ -49,6 +49,8 @@ class TestEmailSecurityScanner(unittest.TestCase):
         self.assertEqual(_spf_policy("V=SPF1 -all"), "unknown")
         self.assertEqual(_spf_policy("v=spf1foo -all"), "unknown")
         self.assertEqual(_spf_policy("not an spf record"), "unknown")
+        self.assertEqual(_spf_policy("v = spf1 -all"), "unknown")
+        self.assertEqual(_spf_policy(" v=spf1 -all"), "unknown")
 
     def test_is_spf_record(self):
         """RFC 7208 §4.5: only an exact 'v=spf1' version token qualifies."""
@@ -59,6 +61,11 @@ class TestEmailSecurityScanner(unittest.TestCase):
         self.assertFalse(_is_spf_record("v=spf1;-all"))
         self.assertFalse(_is_spf_record("some other txt record"))
         self.assertFalse(_is_spf_record(""))
+        # RFC 7208 section 4.5: no leading whitespace tolerance before the version tag
+        self.assertFalse(_is_spf_record(" v=spf1 -all"))
+        self.assertFalse(_is_spf_record("\tv=spf1 -all"))
+        self.assertFalse(_is_spf_record("\nv=spf1 -all"))
+        self.assertTrue(_is_spf_record("v=spf1 -all "))  # trailing whitespace is fine
 
     def test_parse_dkim_record(self):
         """RFC 6376: distinguish active, revoked, malformed and unrelated records."""

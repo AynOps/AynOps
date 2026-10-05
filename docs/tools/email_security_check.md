@@ -114,7 +114,7 @@ top-level fields:
 
 | Field | Type | Description |
 |---|---|---|
-| `found` | boolean | Whether at least one TXT record starting with an exact `v=spf1` version token was found. |
+| `found` | boolean | Whether at least one TXT record starting with an exact `v=spf1` version token (followed by a space or the end of the record, with no leading whitespace) was found. |
 | `valid` | boolean | `false` when multiple SPF records exist or the record could not be parsed. |
 | `record` | string or null | The evaluated SPF record, or `null` when none was found or multiple records made the configuration ambiguous. |
 | `records` | array of strings | Every SPF candidate record discovered. |
