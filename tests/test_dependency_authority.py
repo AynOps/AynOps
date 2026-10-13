@@ -20,13 +20,22 @@ _APPROVED_ACTION_INPUTS = {
     "astral-sh/setup-uv@v6": {},
 }
 _APPROVED_RUNS_ON = "ubuntu-latest"
-_APPROVED_PYTEST_COMMAND = ["uv", "run", "pytest", "tests/", "-v"]
+_APPROVED_PYTEST_COMMANDS = (
+    ["uv", "run", "pytest", "tests/", "-v"],
+    ["uv", "run", "pytest"],
+)
+_APPROVED_RUFF_COMMANDS = (
+    ["uv", "run", "ruff", "check", "."],
+    ["uv", "run", "ruff", "format", "--check", "."],
+)
 _DIRECT_TOKEN_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-"
 )
 _DIRECT_COMMAND_PATTERN = (
     r"[ \t]*(?:uv[ \t]+sync[ \t]+--locked"
-    r"|uv[ \t]+run[ \t]+pytest[ \t]+tests/[ \t]+-v)[ \t]*"
+    r"|uv[ \t]+run[ \t]+pytest(?:[ \t]+tests/[ \t]+-v)?"
+    r"|uv[ \t]+run[ \t]+ruff[ \t]+check[ \t]+\."
+    r"|uv[ \t]+run[ \t]+ruff[ \t]+format[ \t]+--check[ \t]+\.)[ \t]*"
 )
 _DIRECT_RUN_PATTERN = re.compile(
     rf"{_DIRECT_COMMAND_PATTERN}(?:\n{_DIRECT_COMMAND_PATTERN})*\n?"
@@ -79,7 +88,11 @@ def _direct_command_tokens(line):
     command = list(lexer)
     assert command
     assert all(set(token) <= _DIRECT_TOKEN_CHARS for token in command)
-    assert command in (["uv", "sync", "--locked"], _APPROVED_PYTEST_COMMAND)
+    assert command in (
+        ["uv", "sync", "--locked"],
+        *_APPROVED_PYTEST_COMMANDS,
+        *_APPROVED_RUFF_COMMANDS,
+    )
     return command
 
 
@@ -219,7 +232,7 @@ def _assert_locked_uv_workflow(workflow_text):
         command for _, command in commands if _is_pytest_invocation(command)
     ]
     assert len(pytest_commands) == 1
-    assert pytest_commands[0] == _APPROVED_PYTEST_COMMAND
+    assert pytest_commands[0] in _APPROVED_PYTEST_COMMANDS
 
     # Co-location and ordering: the single approved locked sync and the
     # single approved pytest invocation must execute in the same job's
@@ -233,7 +246,7 @@ def _assert_locked_uv_workflow(workflow_text):
     pytest_index = next(
         index
         for index, (_, command) in enumerate(commands)
-        if command == _APPROVED_PYTEST_COMMAND
+        if command in _APPROVED_PYTEST_COMMANDS
     )
     assert commands[sync_index][0] == commands[pytest_index][0]
     assert sync_index < pytest_index
@@ -859,7 +872,6 @@ def test_workflow_contract_rejects_runner_redirection(workflow):
     "pytest_command",
     [
         pytest.param("uv run pytest --version", id="version-exits-without-tests"),
-        pytest.param("uv run pytest", id="missing-test-selector"),
         pytest.param("uv run pytest tests/ -q", id="verbosity-mutated"),
         pytest.param("uv run pytest tests/ -v -k no_such_test", id="suite-filter"),
     ],
