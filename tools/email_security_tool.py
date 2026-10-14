@@ -116,16 +116,20 @@ def _discover_dynamic_selectors(domain: str) -> list[str]:
 def _is_valid_base64_key(value: str) -> bool:
     """
     Return whether a DKIM p= value is plausible base64-encoded public-key
-    data (RFC 4648). Whitespace is ignored; missing padding is restored.
+    data (RFC 4648).
+
+    Per RFC 6376 §3.6.1, Folding White Space (FWS: SP, HTAB, CR, LF) is permitted
+    inside the key data and is stripped before validation; missing padding is
+    leniently restored. Non-FWS whitespace (e.g. NBSP, VT) is not permitted.
     A full cryptographic key parse is intentionally out of scope.
     """
-    compact = "".join(value.split())
+    compact = re.sub(r"[ \t\r\n]+", "", value)
     if not compact:
         return False
     compact += "=" * (-len(compact) % 4)
     try:
         decoded = base64.b64decode(compact, validate=True)
-    except ValueError:
+    except Exception:
         return False
     return len(decoded) > 0
 

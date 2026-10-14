@@ -9,6 +9,7 @@ from tools.email_security_tool import (
     _discover_dynamic_selectors,
     _is_dmarc_record,
     _is_spf_record,
+    _is_valid_base64_key,
     _parse_dkim_record,
     _query_txt,
     _spf_policy,
@@ -105,6 +106,35 @@ class TestEmailSecurityScanner(unittest.TestCase):
         )
         self.assertEqual(_parse_dkim_record("v=spf1 -all")[0], "not_dkim")
         self.assertEqual(_parse_dkim_record("")[0], "not_dkim")
+
+    def test_dkim_fws_handling(self):
+        """RFC 6376 §3.6.1: FWS (SP, HTAB, CR, LF) is permitted within p= key data; non-FWS whitespace is malformed."""
+        valid_key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A"
+        # Clean key -> active
+        self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={valid_key}")[0], "active")
+        self.assertTrue(_is_valid_base64_key(valid_key))
+
+        # FWS-wrapped key (leading/trailing SP, HTAB, CRLF) -> active
+        fws_wrapped = f" \t\r\n{valid_key}\r\n\t "
+        self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={fws_wrapped}")[0], "active")
+        self.assertTrue(_is_valid_base64_key(fws_wrapped))
+
+        # Key with internal space/FWS -> active
+        internal_fws = valid_key[:10] + " \r\n\t " + valid_key[10:]
+        self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={internal_fws}")[0], "active")
+        self.assertTrue(_is_valid_base64_key(internal_fws))
+
+        # Key containing non-FWS whitespace (e.g. \xa0 non-breaking space, \x0b vertical tab, \x0c form feed) -> malformed
+        for bad_ws in ["\xa0", "\x0b", "\x0c"]:
+            bad_key = valid_key[:10] + bad_ws + valid_key[10:]
+            self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={bad_key}")[0], "malformed")
+            self.assertFalse(_is_valid_base64_key(bad_key))
+
+        # Non-base64 garbage -> malformed
+        self.assertEqual(
+            _parse_dkim_record("v=DKIM1; p=not-a-valid-base64-key!!!")[0], "malformed"
+        )
+        self.assertFalse(_is_valid_base64_key("not-a-valid-base64-key!!!"))
 
     def test_is_dmarc_record(self):
         """A DMARC record must begin with a v=DMARC1 tag."""
