@@ -152,7 +152,10 @@ but empty.
 
 Records are classified per RFC 6376: the optional `v=` tag must be the first
 tag and exactly `DKIM1`, tag names are case-sensitive, duplicate tags are
-rejected, and `p=` must contain base64 key data.
+rejected, and `p=` must contain base64 key data. Per RFC 6376 §3.6.1, Folding
+White Space (FWS: SP, HTAB, CRLF) within the public key is permitted and stripped
+before base64 validation; missing padding is restored leniently, while non-FWS
+whitespace causes the record to be classified as malformed.
 
 A successful DKIM probe contributes 35 points; no active selector contributes
 zero.
