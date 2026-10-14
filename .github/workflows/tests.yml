@@ -22,4 +22,10 @@ jobs:
 
       - run: uv sync --locked
 
-      - run: uv run pytest tests/ -v
+      - run: uv run pytest
+
+      - name: Run Ruff lint checks
+        run: uv run ruff check .
+
+      - name: Check Ruff formatting
+        run: uv run ruff format --check .
