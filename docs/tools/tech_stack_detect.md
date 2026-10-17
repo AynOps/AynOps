@@ -121,9 +121,9 @@ payload's other fields.
 | Situation | Error / behavior |
 |---|---|
 | Invalid domain | `Invalid domain format`; no request. |
-| SSL or connection error while fetching HTTPS | Retries using HTTP. |
+| SSL or connection error while fetching HTTPS (including `ConnectTimeout`) | Retries using HTTP. `ConnectTimeout` also inherits from `Timeout`, but the earlier `ConnectionError` handler takes precedence. |
 | Both schemes fail | Last error: `SSL error: <details>` or `Could not connect to the domain`. |
-| Fetch raises a timeout | `Request timed out`; no HTTP retry for this exception handler. |
+| Fetch raises `ReadTimeout` or another `Timeout` that is not a `ConnectionError` | `Request timed out`; no HTTP retry for this exception handler. |
 | Excessive redirects | `Too many redirects`; no HTTP retry. |
 | Other fetch exception or failure while reading the body/cookie names | Exception message in `error`; no HTTP fallback for body-reading failures. |
 | Fingerprint engine raises | `Fingerprinting error: <details>`. |
