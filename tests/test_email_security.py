@@ -87,6 +87,14 @@ class TestEmailSecurityScanner(unittest.TestCase):
         nbsp = "MIIBIjANBGkq\xa0hkiG9w0BAQEFAAOCAQ8A"
         self.assertFalse(_is_valid_base64_key(nbsp))
         self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={nbsp}")[0], "malformed")
+        # A bare CR or LF is not FWS, and a CRLF must be followed by SP or HTAB
+        for bad in ("\r", "\n", "\r\n"):
+            broken = f"MIIBIjANBgkq{bad}hkiG9w0BAQEFAAOCAQ8A"
+            self.assertFalse(_is_valid_base64_key(broken))
+            self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={broken}")[0], "malformed")
+        # A CRLF followed by a tab is valid folding
+        folded = "MIIBIjANBgkq\r\n\thkiG9w0BAQEFAAOCAQ8A"
+        self.assertTrue(_is_valid_base64_key(folded))
 
     def test_parse_dkim_record(self):
         """RFC 6376: distinguish active, revoked, malformed and unrelated records."""

@@ -119,13 +119,14 @@ def _is_valid_base64_key(value: str) -> bool:
     data (RFC 4648).
 
     RFC 6376 §3.6.1 permits folding whitespace (FWS) at arbitrary places
-    inside the base64 string, so space, tab and line breaks are removed
-    before decoding. Other whitespace characters (for example a
-    non-breaking space) are not FWS, so they make the value invalid.
+    inside the base64 string, so spaces, tabs and a CRLF followed by at
+    least one space or tab are removed before decoding. A bare CR or LF
+    is not FWS, and neither is any other whitespace character (for
+    example a non-breaking space), so they make the value invalid.
     Missing "=" padding is restored on purpose, so unpadded keys are
     accepted. A full cryptographic key parse is intentionally out of scope.
     """
-    compact = re.sub(r"[ \t\r\n]+", "", value)
+    compact = re.sub(r"(?:\r\n)?[ \t]+", "", value)
     if not compact:
         return False
     compact += "=" * (-len(compact) % 4)
