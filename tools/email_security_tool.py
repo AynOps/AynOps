@@ -118,12 +118,17 @@ def _is_valid_base64_key(value: str) -> bool:
     Return whether a DKIM p= value is plausible base64-encoded public-key
     data (RFC 4648).
 
-    Per RFC 6376 §3.6.1, Folding White Space (FWS: SP, HTAB, CR, LF) is permitted
-    inside the key data and is stripped before validation; missing padding is
-    leniently restored. Non-FWS whitespace (e.g. NBSP, VT) is not permitted.
+    Per RFC 6376 §3.6.1, only legal Folding White Space is permitted inside
+    the key data: SP and HTAB anywhere, and CRLF only when folding, i.e.
+    followed by at least one SP or HTAB. A bare CR, a bare LF, or a CRLF
+    that is not followed by whitespace is not FWS and makes the record
+    malformed instead of being stripped; missing padding is leniently
+    restored. Non-FWS whitespace (e.g. NBSP, VT) is not permitted.
     A full cryptographic key parse is intentionally out of scope.
     """
-    compact = re.sub(r"[ \t\r\n]+", "", value)
+    if re.search(r"\r(?!\n)|(?<!\r)\n|\r\n(?![ \t])", value):
+        return False
+    compact = re.sub(r"[ \t]|\r\n", "", value)
     if not compact:
         return False
     compact += "=" * (-len(compact) % 4)
