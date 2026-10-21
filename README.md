@@ -122,7 +122,7 @@ Signal Aggregator (tools/signals/) ──► Unified Heuristic Security Telemetr
 
 ### 2. Core Reconnaissance Tool Inventory (Included in `full_recon`)
 
-> **Documentation status:** Detailed reference pages are currently available for tools marked **Available**. Tools marked **Pending** are implemented and included in the inventory, but their dedicated documentation pages are not yet available.
+> **Documentation status:** Browse the [tools documentation index](docs/tools/README.md) for all tools and their documentation availability. Detailed reference pages are currently available for tools marked **Available**. Tools marked **Pending** are implemented and included in the inventory, but their dedicated documentation pages are not yet available.
 
 | Tool | Parameters | Underlying Mechanics / Standards | Telemetry Output | Docs |
 |---|---|---|---|:---:|
