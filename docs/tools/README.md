@@ -13,7 +13,7 @@ completed pages.
 | [`port_scan`](port_scan.md) | Nmap-powered port scanner with service and version detection | Available |
 | [`ssl_inspect`](ssl_inspect.md) | Inspects SSL/TLS certificates, cipher strength, SANs, and TLS version | Available |
 | [`email_security_check`](email_security_check.md) | Checks SPF, DKIM, and DMARC configuration | Available |
-| `tech_stack_detect` | Detects web servers, CMSs, JavaScript frameworks, CDNs, and analytics | Pending |
+| [`tech_stack_detect`](tech_stack_detect.md) | Detects web servers, CMSs, JavaScript frameworks, CDNs, and analytics | Available |
 | `cert_transparency` | Queries Certificate Transparency logs and extracts certificate and subdomain information | Pending |
 | `asn_lookup` | Looks up ASN and network ownership information through Team Cymru WHOIS | Pending |
 | `ip_reputation` | Checks whether an IP is flagged as malicious through AbuseIPDB | Pending |
