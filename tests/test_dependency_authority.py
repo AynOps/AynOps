@@ -675,8 +675,8 @@ def test_workflow_contract_rejects_quoted_command_tokens(
     [
         ("uv sync --lock\\ed", "uv run pytest"),
         ("uv s\\ync --locked", "uv run pytest"),
-        ("uv sync --locked", "uv r\\un pytest tests/ -v"),
-        ("uv sync --locked", "uv run py\\test tests/ -v"),
+        ("uv sync --locked", "uv r\\un pytest"),
+        ("uv sync --locked", "uv run py\\test"),
     ],
 )
 def test_workflow_contract_rejects_backslash_escaped_command_letters(
