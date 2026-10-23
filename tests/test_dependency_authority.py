@@ -656,8 +656,8 @@ def test_workflow_contract_rejects_midword_hash_suffixes():
     [
         ('uv sync "--locked"', "uv run pytest"),
         ('uv "sync" --locked', "uv run pytest"),
-        ("uv sync --locked", 'uv "run" pytest tests/ -v'),
-        ("uv sync --locked", 'uv run "pytest" tests/ -v'),
+        ("uv sync --locked", 'uv "run" pytest'),
+        ("uv sync --locked", 'uv run "pytest"'),
     ],
 )
 def test_workflow_contract_rejects_quoted_command_tokens(
