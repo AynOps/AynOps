@@ -149,6 +149,9 @@ def _parse_dkim_record(record: str) -> tuple[str, dict[str, str]]:
       - v= is optional but, when present, MUST be the first tag and MUST be
         exactly "DKIM1"
       - p= (the public key) is required
+      - p= key data is validated as published, so an illegal line break at
+        either edge of the value makes the record malformed instead of being
+        silently stripped into a working key
 
     Returns (status, tags) where status is one of:
       - "active":    well-formed record with a non-empty base64 p= key
@@ -157,7 +160,8 @@ def _parse_dkim_record(record: str) -> tuple[str, dict[str, str]]:
       - "not_dkim":  a TXT record that does not attempt DKIM (no p= tag and
         no v= tag advertising a DKIM version)
     """
-    parts = [part.strip() for part in record.split(";") if part.strip()]
+    raw_parts = [part for part in record.split(";") if part.strip()]
+    parts = [part.strip() for part in raw_parts]
     if not parts:
         return "not_dkim", {}
 
@@ -176,8 +180,9 @@ def _parse_dkim_record(record: str) -> tuple[str, dict[str, str]]:
         return "not_dkim", {}
 
     tags: dict[str, str] = {}
+    raw_values: dict[str, str] = {}
     first_tag: str | None = None
-    for part in parts:
+    for part, raw_part in zip(parts, raw_parts, strict=True):
         if "=" not in part:
             return "malformed", tags
         name, value = part.split("=", 1)
@@ -190,6 +195,7 @@ def _parse_dkim_record(record: str) -> tuple[str, dict[str, str]]:
         if first_tag is None:
             first_tag = name
         tags[name] = value.strip()
+        raw_values[name] = raw_part.partition("=")[2]
 
     if "v" in tags and (first_tag != "v" or tags["v"] != "DKIM1"):
         return "malformed", tags
@@ -198,7 +204,9 @@ def _parse_dkim_record(record: str) -> tuple[str, dict[str, str]]:
         return "malformed", tags
     if not tags["p"]:
         return "revoked", tags
-    if not _is_valid_base64_key(tags["p"]):
+    # The published value, not the entry in `tags`: stripping first would erase
+    # a bare CR or LF that RFC 6376 §3.6.1 rejects.
+    if not _is_valid_base64_key(raw_values["p"]):
         return "malformed", tags
     return "active", tags
 

@@ -140,13 +140,28 @@ class TestEmailSecurityScanner(unittest.TestCase):
             self.assertEqual(
                 _parse_dkim_record(f"v=DKIM1; p={bad_key}")[0], "malformed", repr(bad_key))
             self.assertFalse(_is_valid_base64_key(bad_key))
-        # A CRLF at the very edge of the raw value is not legal FWS
-        # either, but the record parser strips tag-level whitespace
-        # first, so the parser still reports active for those.
-        for edge in ["\r\n" + valid_key, valid_key + "\r\n"]:
+        # A bare CR or LF at either edge of the value is not legal FWS either:
+        # the parser validates the p= value as published, so these records are
+        # malformed rather than stripped into working keys.
+        for edge in [
+            "\r\n" + valid_key,
+            valid_key + "\r\n",
+            "\r" + valid_key,
+            valid_key + "\r",
+            "\n" + valid_key,
+            valid_key + "\n",
+        ]:
             self.assertFalse(_is_valid_base64_key(edge), repr(edge))
             self.assertEqual(
-                _parse_dkim_record(f"v=DKIM1; p={edge}")[0], "active", repr(edge))
+                _parse_dkim_record(f"v=DKIM1; p={edge}")[0], "malformed", repr(edge)
+            )
+        # Legal FWS padding at the edges still parses: SP/HTAB anywhere, and a
+        # CRLF only where it folds, i.e. followed by SP or HTAB.
+        for legal in [f" \t{valid_key}\t ", f"\r\n\t{valid_key}\r\n "]:
+            self.assertTrue(_is_valid_base64_key(legal), repr(legal))
+            self.assertEqual(
+                _parse_dkim_record(f"v=DKIM1; p={legal}")[0], "active", repr(legal)
+            )
         # Key containing non-FWS whitespace (e.g. \xa0 non-breaking space, \x0b vertical tab, \x0c form feed) -> malformed
         for bad_ws in ["\xa0", "\x0b", "\x0c"]:
             bad_key = valid_key[:10] + bad_ws + valid_key[10:]
