@@ -39,7 +39,7 @@ None.
   "params": {
     "name": "ip_reputation",
     "arguments": {
-      "ip_address": "1.2.3.4"
+      "ip_address": "192.0.2.1"
     }
   }
 }
@@ -53,7 +53,7 @@ network metadata, and some fields may be unavailable.
 ```json
 {
   "success": true,
-  "ip": "1.2.3.4",
+  "ip": "192.0.2.1",
   "ip_version": 4,
   "is_malicious": true,
   "is_whitelisted": false,
