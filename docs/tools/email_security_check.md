@@ -73,8 +73,8 @@ provider.
     "records": [
       "v=DMARC1; p=reject; rua=mailto:dmarc@example.com"
     ],
-    "policy": "reject"
-    "inherited_from": null,
+    "policy": "reject",
+    "inherited_from": null
   },
   "dkim": {
     "found": true,
@@ -134,7 +134,7 @@ multi-record configuration receives 0.
 | `valid` | boolean | `false` when multiple DMARC records exist or the `p=` value is not `none`, `quarantine`, or `reject`. |
 | `record` | string or null | The evaluated DMARC record, or `null` when none was found or multiple records made the configuration ambiguous. |
 | `records` | array of strings | Every DMARC candidate record discovered. |
-| `policy` | string or null | The lowercased `p=` value (or `sp=` when the record is inherited from the Organizational Domain and `sp=` is present), `none` when the tag is absent (per RFC 9989), `invalid` for any other value, or `null` when DMARC is missing or ambiguous. | 
+| `policy` | string or null | The lowercased `p=` value (or `sp=` when the record is inherited from the Organizational Domain and `sp=` is present), `none` when the tag is absent (per RFC 9989), `invalid` for any other value, or `null` when DMARC is missing or ambiguous. |
 | `inherited_from` | string or null | The Organizational Domain whose DMARC record was used when the exact name has no record of its own (RFC 7489 §6.6.3), otherwise `null`. |
 
 DMARC contributes up to 35 points: `reject` gets 35, `quarantine` gets 25,
