@@ -6,9 +6,11 @@ import dns.resolver
 
 from tools import email_security_check
 from tools.email_security_tool import (
+    _check_dmarc,
     _discover_dynamic_selectors,
     _is_dmarc_record,
     _is_spf_record,
+    _organizational_domain,
     _parse_dkim_record,
     _query_txt,
     _spf_policy,
@@ -66,6 +68,59 @@ class TestEmailSecurityScanner(unittest.TestCase):
         self.assertFalse(_is_spf_record("\tv=spf1 -all"))
         self.assertFalse(_is_spf_record("\nv=spf1 -all"))
         self.assertTrue(_is_spf_record("v=spf1 -all "))  # trailing whitespace is fine
+
+    def test_organizational_domain(self):
+        """The Organizational Domain comes from the Public Suffix List."""
+        self.assertEqual(_organizational_domain("mail.example.co.uk"), "example.co.uk")
+        self.assertEqual(_organizational_domain("a.b.example.com"), "example.com")
+        self.assertEqual(_organizational_domain("example.com"), "example.com")
+        self.assertIsNone(_organizational_domain("co.uk"))
+        self.assertIsNone(_organizational_domain("localhost"))
+
+    @staticmethod
+    def _dns(records):
+        """Build a fake _query_txt that answers from a name -> records map."""
+        return lambda name: (records.get(name, []), False)
+
+    def test_dmarc_inherited_from_organizational_domain(self):
+        """RFC 7489 §6.6.3: a subdomain with no record uses its parent's."""
+        dns_map = {"_dmarc.example.com": ["v=DMARC1; p=reject; rua=mailto:a@b.co"]}
+        with patch(
+            "tools.email_security_tool._query_txt", side_effect=self._dns(dns_map)
+        ):
+            result = _check_dmarc("mail.example.com", [])
+        self.assertTrue(result["found"])
+        self.assertEqual(result["policy"], "reject")
+        self.assertEqual(result["inherited_from"], "example.com")
+
+    def test_dmarc_inherited_sp_overrides_p(self):
+        """An inherited record applies sp= to the subdomain when present."""
+        dns_map = {
+            "_dmarc.example.com": ["v=DMARC1; p=reject; sp=none; rua=mailto:a@b.co"]
+        }
+        with patch(
+            "tools.email_security_tool._query_txt", side_effect=self._dns(dns_map)
+        ):
+            sub = _check_dmarc("mail.example.com", [])
+            org = _check_dmarc("example.com", [])
+        self.assertEqual(sub["policy"], "none")
+        self.assertEqual(org["policy"], "reject")
+        self.assertIsNone(org["inherited_from"])
+
+    def test_dmarc_own_record_wins_and_missing_stays_missing(self):
+        """A subdomain's own record is used, and no record anywhere is not found."""
+        own = {
+            "_dmarc.mail.example.com": ["v=DMARC1; p=quarantine; rua=mailto:a@b.co"],
+            "_dmarc.example.com": ["v=DMARC1; p=reject; rua=mailto:a@b.co"],
+        }
+        with patch("tools.email_security_tool._query_txt", side_effect=self._dns(own)):
+            result = _check_dmarc("mail.example.com", [])
+        self.assertEqual(result["policy"], "quarantine")
+        self.assertIsNone(result["inherited_from"])
+        with patch("tools.email_security_tool._query_txt", side_effect=self._dns({})):
+            missing = _check_dmarc("mail.example.com", [])
+        self.assertFalse(missing["found"])
+        self.assertIsNone(missing["inherited_from"])
 
     def test_parse_dkim_record(self):
         """RFC 6376: distinguish active, revoked, malformed and unrelated records."""

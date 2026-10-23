@@ -8,6 +8,7 @@ from typing import Any
 
 import dns.exception
 import dns.resolver
+import tldextract
 
 from utils import is_valid_domain, normalize_domain
 
@@ -332,6 +333,23 @@ def _is_dmarc_record(record: str) -> bool:
     return name == "v" and value.strip() == "DMARC1"
 
 
+# Offline-only extractor: suffix_list_urls=() makes tldextract use the Public
+# Suffix List snapshot bundled with the package instead of fetching it
+_TLD_EXTRACT = tldextract.TLDExtract(suffix_list_urls=())
+
+
+def _organizational_domain(domain: str) -> str | None:
+    """
+    Return the Organizational Domain (registrable domain) for ``domain`` using
+    the Public Suffix List, or None when it cannot be determined (for example
+    a bare public suffix such as "co.uk" or a name without a known suffix).
+    """
+    parts = _TLD_EXTRACT(domain)
+    if not parts.domain or not parts.suffix:
+        return None
+    return f"{parts.domain}.{parts.suffix}"
+
+
 def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
     txt_records, failed = _query_txt(f"_dmarc.{domain}")
 
@@ -343,10 +361,32 @@ def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
             "record": None,
             "records": [],
             "policy": None,
+            "inherited_from": None,
             "score": 0,
         }
 
     dmarc_records = [r for r in txt_records if _is_dmarc_record(r)]
+
+    # RFC 7489 §6.6.3: with no policy record at the exact name, look up the
+    # Organizational Domain and use its policy (honoring sp= for subdomains).
+    inherited_from = None
+    org_domain = _organizational_domain(domain)
+    if not dmarc_records and org_domain and org_domain != domain:
+        org_records, org_failed = _query_txt(f"_dmarc.{org_domain}")
+        if org_failed:
+            recommendations.append("Could not verify DMARC — DNS lookup timed out.")
+            return {
+                "found": False,
+                "valid": False,
+                "record": None,
+                "records": [],
+                "policy": None,
+                "inherited_from": None,
+                "score": 0,
+            }
+        dmarc_records = [r for r in org_records if _is_dmarc_record(r)]
+        if dmarc_records:
+            inherited_from = org_domain
 
     if not dmarc_records:
         recommendations.append("DMARC not found — add a DMARC record.")
@@ -356,6 +396,7 @@ def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
             "record": None,
             "records": [],
             "policy": None,
+            "inherited_from": None,
             "score": 0,
         }
 
@@ -372,6 +413,7 @@ def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
             "record": None,
             "records": dmarc_records,
             "policy": None,
+            "inherited_from": inherited_from,
             "score": 0,
         }
 
@@ -384,7 +426,10 @@ def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
             tags[k.strip().lower()] = v.strip()
 
     valid = True
-    raw_policy = tags.get("p")
+    # RFC 7489 §6.3: sp= is the subdomain policy, so an inherited record uses
+    # sp= when present and otherwise falls back to p=.
+    policy_tag = "sp" if inherited_from and "sp" in tags else "p"
+    raw_policy = tags.get(policy_tag)
     if raw_policy is None:
         # RFC 9989 §4.7: a record without p= is treated as p=none.
         policy = "none"
@@ -398,7 +443,7 @@ def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
             policy = "invalid"
             valid = False
             recommendations.append(
-                f"DMARC policy 'p={raw_policy}' is invalid — must be 'none', 'quarantine', or 'reject'."
+                f"DMARC policy '{policy_tag}={raw_policy}' is invalid — must be 'none', 'quarantine', or 'reject'."
             )
 
     dmarc_score = 10
@@ -422,6 +467,7 @@ def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
         "valid": valid,
         "record": record,
         "records": dmarc_records,
+        "inherited_from": inherited_from,
         "policy": policy,
         "score": dmarc_score,
     }
