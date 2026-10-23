@@ -143,8 +143,10 @@ key. The exception responses include the normalized `domain`.
 
 The HTTP request uses a fixed timeout of 50 seconds. A timeout follows the
 `Network error: ...` path; there is no separate timeout-specific response.
-Non-2xx HTTP responses raise through `raise_for_status()` and follow the
+HTTP 4xx and 5xx responses raise through `raise_for_status()` and follow the
 `RequestsError` or unexpected-exception path according to the exception type.
+A final 3xx response is not rejected by `raise_for_status()` and proceeds to
+JSON parsing.
 
 ## Notes and limitations
 
