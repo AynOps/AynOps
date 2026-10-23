@@ -240,13 +240,10 @@ def _assert_locked_uv_workflow(workflow_text):
     # pyproject.toml before --locked ever runs; a cross-job split runs the
     # gate in a different runner VM than the signal.
     sync_index = locked_sync[0]
-    pytest_index = next(
-        index
-        for index, (_, command) in enumerate(commands)
-        if command == _APPROVED_PYTEST_COMMAND
-    )
-    assert commands[sync_index][0] == commands[pytest_index][0]
-    assert sync_index < pytest_index
+    for index, (job, command) in enumerate(commands):
+        if command[:2] == ["uv", "run"]:
+            assert job == commands[sync_index][0]
+            assert sync_index < index
 
 
 def _assert_dependency_authority(root, workflow_text):
@@ -260,6 +257,14 @@ def test_uv_lock_is_the_single_dependency_authority():
     """The repository and CI use the locked uv project, not a legacy manifest."""
     workflow = (ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
     _assert_dependency_authority(ROOT, workflow)
+
+
+def test_workflow_runs_ruff_validation():
+    """CI executes the Ruff checks documented for contributors."""
+    workflow = (ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
+    commands = [command for _, command in _live_run_commands(workflow)]
+    assert commands.count(["uv", "run", "ruff", "check", "."]) == 1
+    assert commands.count(["uv", "run", "ruff", "format", "--check", "."]) == 1
 
 
 def test_workflow_contract_rejects_commands_after_and():
@@ -646,7 +651,7 @@ def test_workflow_contract_rejects_midword_hash_suffixes():
             _assert_locked_uv_workflow(
                 _workflow_with_commands(
                     "uv sync --locked",
-                    f"uv run pytest#{suffix} tests/ -v",
+                    f"uv run pytest#{suffix}",
                 )
             )
 

@@ -144,11 +144,7 @@ Copy-Item .env.example .env
 Execute the test suite to confirm your local environment is pristine:
 
 ```bash
-# Using uv
 uv run pytest
-
-# Using active virtualenv
-pytest -v
 ```
 
 All tests should pass cleanly without errors.
@@ -607,8 +603,8 @@ Before requesting review, ensure your PR passes all items:
 - [ ] `mcp.json` updated with tool schema and parameter definitions
 - [ ] `server.json` updated if environment variables were introduced
 - [ ] `.env.example` updated with placeholder credentials (if applicable)
+- [ ] Ruff lint and format checks pass (`uv run ruff check .`, `uv run ruff format --check .`)
 - [ ] No secrets, live API keys, or temporary debugging logs committed
-
 ---
 
 ## 🐛 Reporting Bugs
