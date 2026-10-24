@@ -6,9 +6,11 @@ import dns.resolver
 
 from tools import email_security_check
 from tools.email_security_tool import (
+    _check_dmarc,
     _discover_dynamic_selectors,
     _is_dmarc_record,
     _is_spf_record,
+    _organizational_domain,
     _parse_dkim_record,
     _query_txt,
     _spf_policy,
@@ -66,6 +68,59 @@ class TestEmailSecurityScanner(unittest.TestCase):
         self.assertFalse(_is_spf_record("\tv=spf1 -all"))
         self.assertFalse(_is_spf_record("\nv=spf1 -all"))
         self.assertTrue(_is_spf_record("v=spf1 -all "))  # trailing whitespace is fine
+
+    def test_organizational_domain(self):
+        """The Organizational Domain comes from the Public Suffix List."""
+        self.assertEqual(_organizational_domain("mail.example.co.uk"), "example.co.uk")
+        self.assertEqual(_organizational_domain("a.b.example.com"), "example.com")
+        self.assertEqual(_organizational_domain("example.com"), "example.com")
+        self.assertIsNone(_organizational_domain("co.uk"))
+        self.assertIsNone(_organizational_domain("localhost"))
+
+    @staticmethod
+    def _dns(records):
+        """Build a fake _query_txt that answers from a name -> records map."""
+        return lambda name: (records.get(name, []), False)
+
+    def test_dmarc_inherited_from_organizational_domain(self):
+        """RFC 7489 §6.6.3: a subdomain with no record uses its parent's."""
+        dns_map = {"_dmarc.example.com": ["v=DMARC1; p=reject; rua=mailto:a@b.co"]}
+        with patch(
+            "tools.email_security_tool._query_txt", side_effect=self._dns(dns_map)
+        ):
+            result = _check_dmarc("mail.example.com", [])
+        self.assertTrue(result["found"])
+        self.assertEqual(result["policy"], "reject")
+        self.assertEqual(result["inherited_from"], "example.com")
+
+    def test_dmarc_inherited_sp_overrides_p(self):
+        """An inherited record applies sp= to the subdomain when present."""
+        dns_map = {
+            "_dmarc.example.com": ["v=DMARC1; p=reject; sp=none; rua=mailto:a@b.co"]
+        }
+        with patch(
+            "tools.email_security_tool._query_txt", side_effect=self._dns(dns_map)
+        ):
+            sub = _check_dmarc("mail.example.com", [])
+            org = _check_dmarc("example.com", [])
+        self.assertEqual(sub["policy"], "none")
+        self.assertEqual(org["policy"], "reject")
+        self.assertIsNone(org["inherited_from"])
+
+    def test_dmarc_own_record_wins_and_missing_stays_missing(self):
+        """A subdomain's own record is used, and no record anywhere is not found."""
+        own = {
+            "_dmarc.mail.example.com": ["v=DMARC1; p=quarantine; rua=mailto:a@b.co"],
+            "_dmarc.example.com": ["v=DMARC1; p=reject; rua=mailto:a@b.co"],
+        }
+        with patch("tools.email_security_tool._query_txt", side_effect=self._dns(own)):
+            result = _check_dmarc("mail.example.com", [])
+        self.assertEqual(result["policy"], "quarantine")
+        self.assertIsNone(result["inherited_from"])
+        with patch("tools.email_security_tool._query_txt", side_effect=self._dns({})):
+            missing = _check_dmarc("mail.example.com", [])
+        self.assertFalse(missing["found"])
+        self.assertIsNone(missing["inherited_from"])
 
     def test_parse_dkim_record(self):
         """RFC 6376: distinguish active, revoked, malformed and unrelated records."""
@@ -473,6 +528,60 @@ class TestEmailSecurityScanner(unittest.TestCase):
         self.assertTrue(
             any("no 'all' mechanism" in r for r in result["recommendations"])
         )
+
+    def test_organizational_domain_private_psl(self):
+        """Private PSL suffixes such as github.io count as suffixes."""
+        self.assertEqual(
+            _organizational_domain("mail.customer.github.io"), "customer.github.io"
+        )
+        self.assertIsNone(_organizational_domain("github.io"))
+        self.assertEqual(_organizational_domain("mail.example.co.uk"), "example.co.uk")
+
+    def test_dmarc_exact_lookup_failure_is_not_absence(self):
+        """A DNS failure on the exact name must not look like a missing record."""
+        recommendations = []
+        with patch(
+            "tools.email_security_tool._query_txt", return_value=([], True)
+        ) as mock_query:
+            result = _check_dmarc("sub.example.com", recommendations)
+        self.assertEqual(mock_query.call_count, 1)
+        self.assertFalse(result["found"])
+        self.assertFalse(result["valid"])
+        self.assertIsNone(result["inherited_from"])
+        self.assertTrue(any("DNS lookup timed out" in r for r in recommendations))
+        self.assertFalse(any("DMARC not found" in r for r in recommendations))
+
+    def test_dmarc_org_lookup_failure_is_not_absence(self):
+        """A DNS failure during the org-domain fallback must not look like absence."""
+
+        def fake(name):
+            if name == "_dmarc.example.com":
+                return [], True
+            return [], False
+
+        recommendations = []
+        with patch("tools.email_security_tool._query_txt", side_effect=fake):
+            result = _check_dmarc("sub.example.com", recommendations)
+        self.assertFalse(result["found"])
+        self.assertFalse(result["valid"])
+        self.assertIsNone(result["inherited_from"])
+        self.assertTrue(any("DNS lookup timed out" in r for r in recommendations))
+        self.assertFalse(any("DMARC not found" in r for r in recommendations))
+
+    def test_dmarc_ambiguous_inherited_records(self):
+        """Two policy records at the org domain stay invalid and are all kept."""
+        two = ["v=DMARC1; p=reject", "v=DMARC1; p=none"]
+        with patch(
+            "tools.email_security_tool._query_txt",
+            side_effect=self._dns({"_dmarc.example.com": two}),
+        ):
+            result = _check_dmarc("sub.example.com", [])
+        self.assertTrue(result["found"])
+        self.assertFalse(result["valid"])
+        self.assertIsNone(result["policy"])
+        self.assertEqual(result["score"], 0)
+        self.assertEqual(result["inherited_from"], "example.com")
+        self.assertEqual(result["records"], two)
 
 
 if __name__ == "__main__":
