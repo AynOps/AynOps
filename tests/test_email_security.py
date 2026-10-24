@@ -529,6 +529,60 @@ class TestEmailSecurityScanner(unittest.TestCase):
             any("no 'all' mechanism" in r for r in result["recommendations"])
         )
 
+    def test_organizational_domain_private_psl(self):
+        """Private PSL suffixes such as github.io count as suffixes."""
+        self.assertEqual(
+            _organizational_domain("mail.customer.github.io"), "customer.github.io"
+        )
+        self.assertIsNone(_organizational_domain("github.io"))
+        self.assertEqual(_organizational_domain("mail.example.co.uk"), "example.co.uk")
+
+    def test_dmarc_exact_lookup_failure_is_not_absence(self):
+        """A DNS failure on the exact name must not look like a missing record."""
+        recommendations = []
+        with patch(
+            "tools.email_security_tool._query_txt", return_value=([], True)
+        ) as mock_query:
+            result = _check_dmarc("sub.example.com", recommendations)
+        self.assertEqual(mock_query.call_count, 1)
+        self.assertFalse(result["found"])
+        self.assertFalse(result["valid"])
+        self.assertIsNone(result["inherited_from"])
+        self.assertTrue(any("DNS lookup timed out" in r for r in recommendations))
+        self.assertFalse(any("DMARC not found" in r for r in recommendations))
+
+    def test_dmarc_org_lookup_failure_is_not_absence(self):
+        """A DNS failure during the org-domain fallback must not look like absence."""
+
+        def fake(name):
+            if name == "_dmarc.example.com":
+                return [], True
+            return [], False
+
+        recommendations = []
+        with patch("tools.email_security_tool._query_txt", side_effect=fake):
+            result = _check_dmarc("sub.example.com", recommendations)
+        self.assertFalse(result["found"])
+        self.assertFalse(result["valid"])
+        self.assertIsNone(result["inherited_from"])
+        self.assertTrue(any("DNS lookup timed out" in r for r in recommendations))
+        self.assertFalse(any("DMARC not found" in r for r in recommendations))
+
+    def test_dmarc_ambiguous_inherited_records(self):
+        """Two policy records at the org domain stay invalid and are all kept."""
+        two = ["v=DMARC1; p=reject", "v=DMARC1; p=none"]
+        with patch(
+            "tools.email_security_tool._query_txt",
+            side_effect=self._dns({"_dmarc.example.com": two}),
+        ):
+            result = _check_dmarc("sub.example.com", [])
+        self.assertTrue(result["found"])
+        self.assertFalse(result["valid"])
+        self.assertIsNone(result["policy"])
+        self.assertEqual(result["score"], 0)
+        self.assertEqual(result["inherited_from"], "example.com")
+        self.assertEqual(result["records"], two)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

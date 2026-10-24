@@ -335,7 +335,9 @@ def _is_dmarc_record(record: str) -> bool:
 
 # Offline-only extractor: suffix_list_urls=() makes tldextract use the Public
 # Suffix List snapshot bundled with the package instead of fetching it
-_TLD_EXTRACT = tldextract.TLDExtract(suffix_list_urls=())
+_TLD_EXTRACT = tldextract.TLDExtract(
+    suffix_list_urls=(), include_psl_private_domains=True
+)
 
 
 def _organizational_domain(domain: str) -> str | None:
