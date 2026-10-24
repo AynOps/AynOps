@@ -20,13 +20,19 @@ _APPROVED_ACTION_INPUTS = {
     "astral-sh/setup-uv@v6": {},
 }
 _APPROVED_RUNS_ON = "ubuntu-latest"
-_APPROVED_PYTEST_COMMAND = ["uv", "run", "pytest", "tests/", "-v"]
+_APPROVED_PYTEST_COMMAND = ["uv", "run", "pytest"]
+_APPROVED_RUFF_COMMANDS = (
+    ["uv", "run", "ruff", "check", "."],
+    ["uv", "run", "ruff", "format", "--check", "."],
+)
 _DIRECT_TOKEN_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-"
 )
 _DIRECT_COMMAND_PATTERN = (
     r"[ \t]*(?:uv[ \t]+sync[ \t]+--locked"
-    r"|uv[ \t]+run[ \t]+pytest[ \t]+tests/[ \t]+-v)[ \t]*"
+    r"|uv[ \t]+run[ \t]+pytest"
+    r"|uv[ \t]+run[ \t]+ruff[ \t]+check[ \t]+\."
+    r"|uv[ \t]+run[ \t]+ruff[ \t]+format[ \t]+--check[ \t]+\.)[ \t]*"
 )
 _DIRECT_RUN_PATTERN = re.compile(
     rf"{_DIRECT_COMMAND_PATTERN}(?:\n{_DIRECT_COMMAND_PATTERN})*\n?"
@@ -79,7 +85,11 @@ def _direct_command_tokens(line):
     command = list(lexer)
     assert command
     assert all(set(token) <= _DIRECT_TOKEN_CHARS for token in command)
-    assert command in (["uv", "sync", "--locked"], _APPROVED_PYTEST_COMMAND)
+    assert command in (
+        ["uv", "sync", "--locked"],
+        _APPROVED_PYTEST_COMMAND,
+        *_APPROVED_RUFF_COMMANDS,
+    )
     return command
 
 
@@ -230,13 +240,10 @@ def _assert_locked_uv_workflow(workflow_text):
     # pyproject.toml before --locked ever runs; a cross-job split runs the
     # gate in a different runner VM than the signal.
     sync_index = locked_sync[0]
-    pytest_index = next(
-        index
-        for index, (_, command) in enumerate(commands)
-        if command == _APPROVED_PYTEST_COMMAND
-    )
-    assert commands[sync_index][0] == commands[pytest_index][0]
-    assert sync_index < pytest_index
+    for index, (job, command) in enumerate(commands):
+        if command[:2] == ["uv", "run"]:
+            assert job == commands[sync_index][0]
+            assert sync_index < index
 
 
 def _assert_dependency_authority(root, workflow_text):
@@ -252,6 +259,14 @@ def test_uv_lock_is_the_single_dependency_authority():
     _assert_dependency_authority(ROOT, workflow)
 
 
+def test_workflow_runs_ruff_validation():
+    """CI executes the Ruff checks documented for contributors."""
+    workflow = (ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
+    commands = [command for _, command in _live_run_commands(workflow)]
+    assert commands.count(["uv", "run", "ruff", "check", "."]) == 1
+    assert commands.count(["uv", "run", "ruff", "format", "--check", "."]) == 1
+
+
 def test_workflow_contract_rejects_commands_after_and():
     """A benign prefix cannot hide later dependency or test commands."""
     with pytest.raises(AssertionError):
@@ -261,7 +276,7 @@ def test_workflow_contract_rejects_commands_after_and():
               test:
                 steps:
                   - run: uv sync --locked
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
                   - run: printf done && pip install anyio && pytest tests/ -q
             """,
         )
@@ -276,7 +291,7 @@ def test_workflow_contract_rejects_commands_after_and():
               test:
                 steps:
                   - run: uv sync --locked
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
                   - run: printf done; pip install anyio; pytest tests/ -q
             """,
             id="semicolon-separated-install-and-pytest",
@@ -287,7 +302,7 @@ def test_workflow_contract_rejects_commands_after_and():
               test:
                 steps:
                   - run: uv sync --locked
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
                   - run: false || pip install anyio
             """,
             id="or-separated-install",
@@ -299,7 +314,7 @@ def test_workflow_contract_rejects_commands_after_and():
                 steps:
                   - run: uv sync --locked
                   - run: |
-                      uv run pytest tests/ -v
+                      uv run pytest
                       pip install anyio
             """,
             id="newline-separated-install",
@@ -310,7 +325,7 @@ def test_workflow_contract_rejects_commands_after_and():
               test:
                 steps:
                   - run: uv sync --locked
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
                   - run: uv run echo "$(pip install anyio)"
             """,
             id="command-substitution-install",
@@ -331,7 +346,7 @@ def test_workflow_contract_accepts_direct_canonical_commands():
           test:
             steps:
               - run: uv sync --locked
-              - run: uv run pytest tests/ -v
+              - run: uv run pytest
         """
     )
 
@@ -347,7 +362,7 @@ def test_workflow_contract_accepts_direct_canonical_commands():
                   UV_PROJECT: alternate/pyproject.toml
                 steps:
                   - run: uv sync --locked
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
             """,
             id="job-environment",
         ),
@@ -359,7 +374,7 @@ def test_workflow_contract_accepts_direct_canonical_commands():
                   - run: uv sync --locked
                     env:
                       UV_PROJECT: alternate/pyproject.toml
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
             """,
             id="step-environment",
         ),
@@ -383,7 +398,7 @@ def test_workflow_contract_rejects_uv_project_redirection(workflow):
               test:
                 steps:
                   - run: uv sync --locked
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
             """,
             id="workflow-default",
         ),
@@ -396,7 +411,7 @@ def test_workflow_contract_rejects_uv_project_redirection(workflow):
                     working-directory: alternate
                 steps:
                   - run: uv sync --locked
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
             """,
             id="job-default",
         ),
@@ -407,7 +422,7 @@ def test_workflow_contract_rejects_uv_project_redirection(workflow):
                 steps:
                   - run: uv sync --locked
                     working-directory: alternate
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
             """,
             id="step-setting",
         ),
@@ -429,7 +444,7 @@ def test_workflow_contract_rejects_executable_local_actions():
                 steps:
                   - uses: ./.github/actions/dependency-installer
                   - run: uv sync --locked
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
             """
         )
 
@@ -458,7 +473,7 @@ def test_workflow_contract_rejects_unapproved_action_sources(uses):
                             "steps": [
                                 {"uses": uses},
                                 {"run": "uv sync --locked"},
-                                {"run": "uv run pytest tests/ -v"},
+                                {"run": "uv run pytest"},
                             ]
                         }
                     }
@@ -479,7 +494,7 @@ def test_workflow_contract_rejects_job_level_reusable_workflows():
               test:
                 steps:
                   - run: uv sync --locked
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
             """
         )
 
@@ -516,7 +531,7 @@ def test_workflow_contract_rejects_custom_execution_environment(runs_on, environ
                             "env": environment,
                             "steps": [
                                 {"run": "uv sync --locked"},
-                                {"run": "uv run pytest tests/ -v"},
+                                {"run": "uv run pytest"},
                             ],
                         }
                     }
@@ -538,7 +553,7 @@ def test_workflow_contract_rejects_custom_execution_environment(runs_on, environ
               test:
                 steps:
                   - run: uv sync --locked
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
             """,
             id="workflow-default",
         ),
@@ -551,7 +566,7 @@ def test_workflow_contract_rejects_custom_execution_environment(runs_on, environ
                     shell: python
                 steps:
                   - run: uv sync --locked
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
             """,
             id="job-default",
         ),
@@ -562,7 +577,7 @@ def test_workflow_contract_rejects_custom_execution_environment(runs_on, environ
                 steps:
                   - run: uv sync --locked
                     shell: python
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
             """,
             id="step-setting",
         ),
@@ -587,7 +602,7 @@ def test_workflow_contract_rejects_python_trim_characters_preserved_by_bash(
         _assert_locked_uv_workflow(
             _workflow_from_run_scalars(
                 f"uv sync --locked{suffix}",
-                "uv run pytest tests/ -v",
+                "uv run pytest",
             )
         )
 
@@ -603,9 +618,7 @@ def test_workflow_contract_rejects_python_line_boundaries_preserved_by_bash(
     """Python-only line boundaries cannot invent separate Bash commands."""
     with pytest.raises(AssertionError):
         _assert_locked_uv_workflow(
-            _workflow_from_run_scalars(
-                f"uv sync --locked{boundary}uv run pytest tests/ -v"
-            )
+            _workflow_from_run_scalars(f"uv sync --locked{boundary}uv run pytest")
         )
 
 
@@ -614,7 +627,7 @@ def test_workflow_contract_rejects_nbsp_prefixed_hash_line():
     with pytest.raises(AssertionError):
         _assert_locked_uv_workflow(
             _workflow_from_run_scalars(
-                "\u00a0#alternate\nuv sync --locked\nuv run pytest tests/ -v"
+                "\u00a0#alternate\nuv sync --locked\nuv run pytest"
             )
         )
 
@@ -631,14 +644,14 @@ def test_workflow_contract_rejects_midword_hash_suffixes():
             _assert_locked_uv_workflow(
                 _workflow_with_commands(
                     f"uv sync --locked#{suffix}",
-                    "uv run pytest tests/ -v",
+                    "uv run pytest",
                 )
             )
         with pytest.raises(AssertionError):
             _assert_locked_uv_workflow(
                 _workflow_with_commands(
                     "uv sync --locked",
-                    f"uv run pytest#{suffix} tests/ -v",
+                    f"uv run pytest#{suffix}",
                 )
             )
 
@@ -646,10 +659,10 @@ def test_workflow_contract_rejects_midword_hash_suffixes():
 @pytest.mark.parametrize(
     ("install_command", "pytest_command"),
     [
-        ('uv sync "--locked"', "uv run pytest tests/ -v"),
-        ('uv "sync" --locked', "uv run pytest tests/ -v"),
-        ("uv sync --locked", 'uv "run" pytest tests/ -v'),
-        ("uv sync --locked", 'uv run "pytest" tests/ -v'),
+        ('uv sync "--locked"', "uv run pytest"),
+        ('uv "sync" --locked', "uv run pytest"),
+        ("uv sync --locked", 'uv "run" pytest'),
+        ("uv sync --locked", 'uv run "pytest"'),
     ],
 )
 def test_workflow_contract_rejects_quoted_command_tokens(
@@ -665,10 +678,10 @@ def test_workflow_contract_rejects_quoted_command_tokens(
 @pytest.mark.parametrize(
     ("install_command", "pytest_command"),
     [
-        ("uv sync --lock\\ed", "uv run pytest tests/ -v"),
-        ("uv s\\ync --locked", "uv run pytest tests/ -v"),
-        ("uv sync --locked", "uv r\\un pytest tests/ -v"),
-        ("uv sync --locked", "uv run py\\test tests/ -v"),
+        ("uv sync --lock\\ed", "uv run pytest"),
+        ("uv s\\ync --locked", "uv run pytest"),
+        ("uv sync --locked", "uv r\\un pytest"),
+        ("uv sync --locked", "uv run py\\test"),
     ],
 )
 def test_workflow_contract_rejects_backslash_escaped_command_letters(
@@ -689,7 +702,7 @@ def test_workflow_contract_rejects_backslash_escaped_command_letters(
           test:
             steps:
               - run: uv sync --locked
-              - run: uv run pytest tests/ -v
+              - run: uv run pytest
               - run: pytest tests/ -v
         """,
         """
@@ -698,14 +711,14 @@ def test_workflow_contract_rejects_backslash_escaped_command_letters(
             steps:
               - run: echo "uv sync --locked"
               - run: uv sync
-              - run: uv run pytest tests/ -v
+              - run: uv run pytest
         """,
         """
         jobs:
           test:
             steps:
               - run: uv sync --locked
-              - run: uv run pytest tests/ -v
+              - run: uv run pytest
               - run: pip install -r requirements-dev.txt
         """,
         """
@@ -713,7 +726,7 @@ def test_workflow_contract_rejects_backslash_escaped_command_letters(
           test:
             expected_install: uv sync --locked
             steps:
-              - run: echo "uv run pytest tests/ -v"
+              - run: echo "uv run pytest"
         """,
     ],
 )
@@ -735,7 +748,7 @@ def test_manifest_contract_rejects_requirements_variants(tmp_path):
               test:
                 steps:
                   - run: uv sync --locked
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
             """,
         )
 
@@ -746,7 +759,7 @@ def _canonical_job(job_lines="", step_lines=""):
         + job_lines
         + "    steps:\n"
         + "      - run: uv sync --locked\n"
-        + "      - run: uv run pytest tests/ -v\n"
+        + "      - run: uv run pytest\n"
         + step_lines
     )
 
@@ -757,7 +770,7 @@ def _canonical_action_job(uses, with_line=""):
         + f"      - uses: {uses}\n"
         + with_line
         + "      - run: uv sync --locked\n"
-        + "      - run: uv run pytest tests/ -v\n"
+        + "      - run: uv run pytest\n"
     )
 
 
@@ -791,7 +804,7 @@ def _canonical_action_job(uses, with_line=""):
             "    runs-on: ubuntu-latest\n"
             "    steps:\n"
             "      - run: uv sync --locked\n"
-            "      - run: uv run pytest tests/ -v\n",
+            "      - run: uv run pytest\n",
             id="extra-containerized-job",
         ),
     ],
@@ -859,9 +872,8 @@ def test_workflow_contract_rejects_runner_redirection(workflow):
     "pytest_command",
     [
         pytest.param("uv run pytest --version", id="version-exits-without-tests"),
-        pytest.param("uv run pytest", id="missing-test-selector"),
         pytest.param("uv run pytest tests/ -q", id="verbosity-mutated"),
-        pytest.param("uv run pytest tests/ -v -k no_such_test", id="suite-filter"),
+        pytest.param("uv run pytest -k no_such_test", id="suite-filter"),
     ],
 )
 def test_workflow_contract_rejects_pytest_argument_gutting(pytest_command):
@@ -952,7 +964,7 @@ def test_workflow_contract_rejects_action_input_redirection(workflow):
             jobs:
               test:
                 steps:
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
                   - run: uv sync --locked
             """,
             id="separate-steps",
@@ -963,7 +975,7 @@ def test_workflow_contract_rejects_action_input_redirection(workflow):
               test:
                 steps:
                   - run: |
-                      uv run pytest tests/ -v
+                      uv run pytest
                       uv sync --locked
             """,
             id="single-multi-line-scalar",
@@ -973,7 +985,7 @@ def test_workflow_contract_rejects_action_input_redirection(workflow):
             jobs:
               test:
                 steps:
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
                   - uses: actions/checkout@v4
                   - run: uv sync --locked
             """,
@@ -998,7 +1010,7 @@ def test_workflow_contract_rejects_pytest_preceding_locked_sync(workflow):
                   - run: uv sync --locked
               test:
                 steps:
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
             """,
             id="ordered-sync-and-pytest-jobs",
         ),
@@ -1007,7 +1019,7 @@ def test_workflow_contract_rejects_pytest_preceding_locked_sync(workflow):
             jobs:
               test:
                 steps:
-                  - run: uv run pytest tests/ -v
+                  - run: uv run pytest
               install:
                 steps:
                   - run: uv sync --locked
