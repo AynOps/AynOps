@@ -152,7 +152,7 @@ but empty.
 
 Records are classified per RFC 6376: the optional `v=` tag must be the first
 tag and exactly `DKIM1`, tag names are case-sensitive, duplicate tags are
-rejected, and `p=` must contain base64 key data.
+rejected, and `p=` must contain base64 key data. Whitespace inside the `p=` value (a space, a tab, or a CRLF followed by a space or tab) is ignored before decoding, as permitted by the folding-whitespace rule in RFC 6376 §3.6.1; any other whitespace character, such as a bare CR or LF or a non-breaking space, makes the key `malformed`. Missing `=` padding is restored, so unpadded keys are accepted.
 
 A successful DKIM probe contributes 35 points; no active selector contributes
 zero.

@@ -9,6 +9,7 @@ from tools.email_security_tool import (
     _discover_dynamic_selectors,
     _is_dmarc_record,
     _is_spf_record,
+    _is_valid_base64_key,
     _parse_dkim_record,
     _query_txt,
     _spf_policy,
@@ -66,6 +67,34 @@ class TestEmailSecurityScanner(unittest.TestCase):
         self.assertFalse(_is_spf_record("\tv=spf1 -all"))
         self.assertFalse(_is_spf_record("\nv=spf1 -all"))
         self.assertTrue(_is_spf_record("v=spf1 -all "))  # trailing whitespace is fine
+
+    def test_dkim_key_whitespace_tolerance(self):
+        """RFC 6376 §3.6.1: only FWS is allowed inside the p= key."""
+        key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A"
+        # Clean key
+        self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={key}")[0], "active")
+        # FWS-wrapped key: space, tab and CRLF followed by a space
+        wrapped = "MIIBIjAN BgkqhkiG\t9w0BAQEF\r\n AAOCAQ8A"
+        self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={wrapped}")[0], "active")
+        # Key with an internal space
+        spaced = "MIIBIjANBgkq hkiG9w0BAQEFAAOCAQ8A"
+        self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={spaced}")[0], "active")
+        # Non-base64 garbage
+        self.assertEqual(
+            _parse_dkim_record("v=DKIM1; p=!!!not-base64!!!")[0], "malformed"
+        )
+        # Non-breaking space is not FWS, so the key is invalid
+        nbsp = "MIIBIjANBGkq\xa0hkiG9w0BAQEFAAOCAQ8A"
+        self.assertFalse(_is_valid_base64_key(nbsp))
+        self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={nbsp}")[0], "malformed")
+        # A bare CR or LF is not FWS, and a CRLF must be followed by SP or HTAB
+        for bad in ("\r", "\n", "\r\n"):
+            broken = f"MIIBIjANBgkq{bad}hkiG9w0BAQEFAAOCAQ8A"
+            self.assertFalse(_is_valid_base64_key(broken))
+            self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={broken}")[0], "malformed")
+        # A CRLF followed by a tab is valid folding
+        folded = "MIIBIjANBgkq\r\n\thkiG9w0BAQEFAAOCAQ8A"
+        self.assertTrue(_is_valid_base64_key(folded))
 
     def test_parse_dkim_record(self):
         """RFC 6376: distinguish active, revoked, malformed and unrelated records."""
