@@ -135,7 +135,7 @@ multi-record configuration receives 0.
 | `record` | string or null | The evaluated DMARC record, or `null` when none was found or multiple records made the configuration ambiguous. |
 | `records` | array of strings | Every DMARC candidate record discovered. |
 | `policy` | string or null | The lowercased `p=` value (or `sp=` when the record is inherited from the Organizational Domain and `sp=` is present), `none` when the tag is absent (per RFC 9989), `invalid` for any other value, or `null` when DMARC is missing or ambiguous. |
-| `inherited_from` | string or null | The Organizational Domain whose DMARC record was used when the exact name has no record of its own (RFC 7489 §6.6.3), otherwise `null`. |
+| `inherited_from` | string or null | The Organizational Domain whose DMARC record was used when the exact name has no record of its own (RFC 7489 §6.6.3), otherwise `null`. The Organizational Domain is found with the Public Suffix List snapshot bundled with `tldextract`, so no network request is made, and private suffixes such as `github.io` count as suffixes: `mail.customer.github.io` falls back to `customer.github.io`, not `github.io`. A DNS failure during either lookup is reported as unverified and is never treated as a missing record. |
 
 DMARC contributes up to 35 points: `reject` gets 35, `quarantine` gets 25,
 and `none` or `invalid` policies start at 10. Five points are deducted when
