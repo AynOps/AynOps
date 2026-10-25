@@ -583,6 +583,63 @@ class TestEmailSecurityScanner(unittest.TestCase):
         self.assertEqual(result["inherited_from"], "example.com")
         self.assertEqual(result["records"], two)
 
+    def test_dmarc_inherited_invalid_p_ignores_sp(self):
+        """RFC 9989 §4.10.1: invalid p= must not let sp=reject set the policy."""
+        rec = "v=DMARC1; p=invalid; sp=reject; rua=mailto:dmarc@example.com"
+        with patch(
+            "tools.email_security_tool._query_txt",
+            side_effect=self._dns({"_dmarc.example.com": [rec]}),
+        ):
+            result = _check_dmarc("mail.example.com", [])
+        self.assertTrue(result["found"])
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["policy"], "invalid")
+        self.assertNotEqual(result["policy"], "reject")
+        self.assertEqual(result["score"], 10)
+        self.assertEqual(result["inherited_from"], "example.com")
+
+    def test_dmarc_inherited_invalid_p_without_valid_rua_scores_zero(self):
+        """No valid rua means receivers apply no DMARC processing."""
+        for rec in (
+            "v=DMARC1; p=invalid; sp=reject",
+            "v=DMARC1; p=invalid; sp=reject; rua=not-a-uri",
+        ):
+            with self.subTest(record=rec):
+                with patch(
+                    "tools.email_security_tool._query_txt",
+                    side_effect=self._dns({"_dmarc.example.com": [rec]}),
+                ):
+                    result = _check_dmarc("mail.example.com", [])
+                self.assertFalse(result["valid"])
+                self.assertEqual(result["policy"], "invalid")
+                self.assertEqual(result["score"], 0)
+                self.assertEqual(result["inherited_from"], "example.com")
+
+    def test_dmarc_inherited_invalid_sp_is_reported_invalid(self):
+        """An invalid sp= on an inherited record is not silently accepted."""
+        rec = "v=DMARC1; p=reject; sp=bogus; rua=mailto:dmarc@example.com"
+        with patch(
+            "tools.email_security_tool._query_txt",
+            side_effect=self._dns({"_dmarc.example.com": [rec]}),
+        ):
+            result = _check_dmarc("mail.example.com", [])
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["policy"], "invalid")
+        self.assertEqual(result["score"], 10)
+
+    def test_dmarc_inherited_valid_p_and_sp_none_still_passes(self):
+        """Companion case: valid p=reject with sp=none stays valid."""
+        rec = "v=DMARC1; p=reject; sp=none; rua=mailto:dmarc@example.com"
+        with patch(
+            "tools.email_security_tool._query_txt",
+            side_effect=self._dns({"_dmarc.example.com": [rec]}),
+        ):
+            result = _check_dmarc("mail.example.com", [])
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["policy"], "none")
+        self.assertEqual(result["score"], 10)
+        self.assertEqual(result["inherited_from"], "example.com")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
