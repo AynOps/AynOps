@@ -142,6 +142,11 @@ and `none` or `invalid` policies start at 10. Five points are deducted when
 the record lacks an `rua=` aggregate-reporting address or the tag is present
 but empty.
 
+A policy record whose `p=` or `sp=` is invalid is reported with `policy`
+set to `invalid` and `valid` set to `false`, even if a valid `sp=` is
+present. Per RFC 9989 §4.10.1 such a record is scored as `p=none` when it
+has a syntactically valid `rua=` URI, and scores 0 when it has none.
+
 ### DKIM object
 
 | Field | Type | Description |
