@@ -512,6 +512,8 @@ Agent: [Invokes trace_redirects for "http://legacy.portal.org"]
 
 ## 📦 Registries & Ecosystem
 
+mcp-name: io.github.AynOps/AynOps
+
 AynOps is indexed and distributed across the following official registries:
 
 | Registry | Identifier / Link |
