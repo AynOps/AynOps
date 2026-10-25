@@ -138,7 +138,10 @@ class TestEmailSecurityScanner(unittest.TestCase):
         ]
         for bad_key in bad_keys:
             self.assertEqual(
-                _parse_dkim_record(f"v=DKIM1; p={bad_key}")[0], "malformed", repr(bad_key))
+                _parse_dkim_record(f"v=DKIM1; p={bad_key}")[0],
+                "malformed",
+                repr(bad_key),
+            )
             self.assertFalse(_is_valid_base64_key(bad_key))
         # A bare CR or LF at either edge of the value is not legal FWS either:
         # the parser validates the p= value as published, so these records are
@@ -165,7 +168,9 @@ class TestEmailSecurityScanner(unittest.TestCase):
         # Key containing non-FWS whitespace (e.g. \xa0 non-breaking space, \x0b vertical tab, \x0c form feed) -> malformed
         for bad_ws in ["\xa0", "\x0b", "\x0c"]:
             bad_key = valid_key[:10] + bad_ws + valid_key[10:]
-            self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={bad_key}")[0], "malformed")
+            self.assertEqual(
+                _parse_dkim_record(f"v=DKIM1; p={bad_key}")[0], "malformed"
+            )
             self.assertFalse(_is_valid_base64_key(bad_key))
 
         # Non-base64 garbage -> malformed
