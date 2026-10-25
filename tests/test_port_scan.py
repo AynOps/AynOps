@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from tools import port_scan
+from tools.portscan_tool import _validate_target
 
 
 class TestPortScan(unittest.TestCase):
@@ -331,6 +332,62 @@ class TestPortScan(unittest.TestCase):
             ["basic", "service", "os", "full", "vuln"],
         )
         mock_cls.assert_not_called()
+
+    @patch("tools.portscan_tool.nmap.PortScanner")
+    def test_port_scan_rejects_option_injection_and_malformed_targets(self, mock_cls):
+        rejected_targets = [
+            "127.0.0.1 --script=vuln -oN /tmp/x",
+            "-oN /tmp/x 127.0.0.1",
+            "--script=http-shellshock example.com",
+            "--script=vuln",
+            "-iL",
+            "example.com; id",
+            "example.com\n-oX /tmp/x",
+            "example.com\t-oG x",
+            "example.com\r\n-oN x",
+            "'example.com",
+            "example.com\\",
+            "192.168.1.*",
+            "10.0.0.1-20",
+            "999.999.999.999",
+            "",
+            "   ",
+            "$(id)",
+            None,
+            123,
+        ]
+
+        for bad in rejected_targets:
+            with self.subTest(target=bad):
+                result = port_scan(bad, scan_type="basic")
+                self.assertFalse(result["success"])
+                self.assertIn("Invalid target", result["error"])
+                mock_cls.assert_not_called()
+
+    @patch("tools.portscan_tool.nmap.PortScanner")
+    def test_port_scan_normalizes_whitespace(self, mock_cls):
+        mock_scanner = self._make_scanner_mock()
+        mock_cls.return_value = mock_scanner
+
+        result = port_scan("  example.com  ", scan_type="basic")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["target"], "example.com")
+        mock_scanner.scan.assert_called_once()
+        self.assertEqual(mock_scanner.scan.call_args[1]["hosts"], "example.com")
+
+    def test_validate_target_accepts_plain_targets(self):
+        accepted_targets = [
+            "localhost",
+            "example.com",
+            "sub.example.com.",
+            "192.0.2.1",
+            "2001:db8::1",
+            "192.0.2.0/24",
+        ]
+        for ok in accepted_targets:
+            with self.subTest(target=ok):
+                self.assertEqual(_validate_target(ok), ok)
 
 
 if __name__ == "__main__":

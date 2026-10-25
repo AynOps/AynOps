@@ -10,6 +10,7 @@ from tools.email_security_tool import (
     _discover_dynamic_selectors,
     _is_dmarc_record,
     _is_spf_record,
+    _is_valid_base64_key,
     _organizational_domain,
     _parse_dkim_record,
     _query_txt,
@@ -160,6 +161,78 @@ class TestEmailSecurityScanner(unittest.TestCase):
         )
         self.assertEqual(_parse_dkim_record("v=spf1 -all")[0], "not_dkim")
         self.assertEqual(_parse_dkim_record("")[0], "not_dkim")
+
+    def test_dkim_fws_handling(self):
+        """RFC 6376 §3.6.1: FWS (SP, HTAB, CR, LF) is permitted within p= key data; non-FWS whitespace is malformed."""
+        valid_key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A"
+        # Clean key -> active
+        self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={valid_key}")[0], "active")
+        self.assertTrue(_is_valid_base64_key(valid_key))
+
+        # SP/HTAB-wrapped key -> active
+        ws_wrapped = f" \t{valid_key}\t "
+        self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={ws_wrapped}")[0], "active")
+        self.assertTrue(_is_valid_base64_key(ws_wrapped))
+
+        # Folding CRLF followed by WSP (leading, trailing) -> active
+        folded = " \r\n\t" + valid_key + "\r\n\t "
+        self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={folded}")[0], "active")
+        self.assertTrue(_is_valid_base64_key(folded))
+
+        # Key with internal space/folding FWS -> active
+        internal_fws = valid_key[:10] + " \r\n\t " + valid_key[10:]
+        self.assertEqual(_parse_dkim_record(f"v=DKIM1; p={internal_fws}")[0], "active")
+        self.assertTrue(_is_valid_base64_key(internal_fws))
+
+        # Bare CR, bare LF, and CRLF not followed by WSP *inside* the key
+        # data are not FWS -> malformed.
+        bad_keys = [
+            valid_key[:10] + "\r" + valid_key[10:],
+            valid_key[:10] + "\n" + valid_key[10:],
+            valid_key[:10] + "\r\n" + valid_key[10:],
+        ]
+        for bad_key in bad_keys:
+            self.assertEqual(
+                _parse_dkim_record(f"v=DKIM1; p={bad_key}")[0],
+                "malformed",
+                repr(bad_key),
+            )
+            self.assertFalse(_is_valid_base64_key(bad_key))
+        # A bare CR or LF at either edge of the value is not legal FWS either:
+        # the parser validates the p= value as published, so these records are
+        # malformed rather than stripped into working keys.
+        for edge in [
+            "\r\n" + valid_key,
+            valid_key + "\r\n",
+            "\r" + valid_key,
+            valid_key + "\r",
+            "\n" + valid_key,
+            valid_key + "\n",
+        ]:
+            self.assertFalse(_is_valid_base64_key(edge), repr(edge))
+            self.assertEqual(
+                _parse_dkim_record(f"v=DKIM1; p={edge}")[0], "malformed", repr(edge)
+            )
+        # Legal FWS padding at the edges still parses: SP/HTAB anywhere, and a
+        # CRLF only where it folds, i.e. followed by SP or HTAB.
+        for legal in [f" \t{valid_key}\t ", f"\r\n\t{valid_key}\r\n "]:
+            self.assertTrue(_is_valid_base64_key(legal), repr(legal))
+            self.assertEqual(
+                _parse_dkim_record(f"v=DKIM1; p={legal}")[0], "active", repr(legal)
+            )
+        # Key containing non-FWS whitespace (e.g. \xa0 non-breaking space, \x0b vertical tab, \x0c form feed) -> malformed
+        for bad_ws in ["\xa0", "\x0b", "\x0c"]:
+            bad_key = valid_key[:10] + bad_ws + valid_key[10:]
+            self.assertEqual(
+                _parse_dkim_record(f"v=DKIM1; p={bad_key}")[0], "malformed"
+            )
+            self.assertFalse(_is_valid_base64_key(bad_key))
+
+        # Non-base64 garbage -> malformed
+        self.assertEqual(
+            _parse_dkim_record("v=DKIM1; p=not-a-valid-base64-key!!!")[0], "malformed"
+        )
+        self.assertFalse(_is_valid_base64_key("not-a-valid-base64-key!!!"))
 
     def test_is_dmarc_record(self):
         """A DMARC record must begin with a v=DMARC1 tag."""

@@ -1,3 +1,4 @@
+import ipaddress
 import re
 import xml.etree.ElementTree as ET
 
@@ -19,6 +20,40 @@ PORT_SCAN_TIMEOUT_ERRORS = (
 )
 
 _DURATION_UNITS = {"s": 1, "m": 60, "h": 3600}
+
+
+_HOSTNAME_RE = re.compile(
+    r"^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*"
+    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.?$"
+)
+
+
+def _validate_target(target: object) -> str | None:
+    """Return the whitespace-stripped target, or None if it is not a plain host/IP/CIDR.
+
+    python-nmap splits `hosts` with shlex and appends it to the nmap command line, so any
+    whitespace or leading '-' would let a caller inject nmap options (e.g. --script,
+    -oN <file>). Only a bare hostname, IP address or CIDR network is accepted.
+    The returned target is stripped of leading and trailing whitespace.
+    """
+    if not isinstance(target, str):
+        return None
+    value = target.strip()
+    if not value or value.startswith("-") or any(c.isspace() for c in value):
+        return None
+    try:
+        ipaddress.ip_address(value)
+        return value
+    except ValueError:
+        pass
+    try:
+        ipaddress.ip_network(value, strict=False)
+        return value
+    except ValueError:
+        pass
+    if re.fullmatch(r"[0-9.\-]+", value):
+        return None
+    return value if _HOSTNAME_RE.fullmatch(value) else None
 
 
 def _host_timeout_seconds(args: str) -> int:
@@ -66,7 +101,7 @@ def port_scan(
     target: str, scan_type: str = "basic", timeout: int | None = None
 ) -> dict:
     """
-    Perform Nmap port scan on a target IP or domain.
+    Perform Nmap port scan on a target hostname, IP address, or CIDR network.
 
     scan_type options:
     - "basic"   : Top 100 ports, fast (-F)
@@ -87,6 +122,14 @@ def port_scan(
             ),
             "valid_scan_types": list(SCAN_CONFIG.keys()),
         }
+
+    clean_target = _validate_target(target)
+    if clean_target is None:
+        return {
+            "success": False,
+            "error": "Invalid target. Provide a hostname, IP address or CIDR network without spaces or options.",
+        }
+    target = clean_target
 
     if timeout is not None and timeout < 1:
         return {

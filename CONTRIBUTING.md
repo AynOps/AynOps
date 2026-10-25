@@ -144,11 +144,7 @@ Copy-Item .env.example .env
 Execute the test suite to confirm your local environment is pristine:
 
 ```bash
-# Using uv
 uv run pytest
-
-# Using active virtualenv
-pytest -v
 ```
 
 All tests should pass cleanly without errors.
@@ -329,7 +325,7 @@ def test_my_tool_invalid_domain():
 Run your new test suite:
 
 ```bash
-uv run pytest tests/test_my_tool.py -v
+uv run pytest tests/test_my_tool.py
 ```
 
 ---
@@ -356,6 +352,20 @@ For tools that require an external system dependency, set `"requires_system_depe
 3. **`server.json`**: If your tool requires environment variables, define them under the `"environmentVariables"` array in `"packages"`. Each variable should specify its `"name"`, `"description"` `"isRequired"`, `"isSecret"`, and `"format"` fields.
 4. **`.env.example`**: Add placeholder entries for new API keys (if applicable).
 5. **`pyproject.toml` / `uv.lock`**: Add new third-party packages only if strictly necessary (`uv add <package>`).
+
+### Step 5: Validate Ruff Linting and Formatting
+
+Before submitting or pushing changes, run the following commands from the project root to ensure all files comply with the project's Ruff linting rules and formatting conventions.
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+```
+
+- **Lint validation:** `ruff check .` — Detects lint violations across the codebase.
+- **Format validation:** `ruff format --check .` — Verifies formatting consistency without modifying files.
+
+Both commands must complete successfully with no lint violations or formatting discrepancies. Resolve any reported issues before committing and pushing your changes.
 
 ---
 
@@ -471,6 +481,8 @@ If the new signal introduces a distinct finding or relationship that requires ex
 ### Step 5: Test Signal Extractor
 
 Add unit tests in `tests/test_signals_extractors.py` asserting that mocked raw tool outputs correctly populate the `signals` dictionary and trigger expected warnings.
+
+Apply the repository-wide Ruff validation described in the previous section before submitting or pushing changes.
 
 ---
 
@@ -591,8 +603,8 @@ Before requesting review, ensure your PR passes all items:
 - [ ] `mcp.json` updated with tool schema and parameter definitions
 - [ ] `server.json` updated if environment variables were introduced
 - [ ] `.env.example` updated with placeholder credentials (if applicable)
+- [ ] Ruff lint and format checks pass (`uv run ruff check .`, `uv run ruff format --check .`)
 - [ ] No secrets, live API keys, or temporary debugging logs committed
-
 ---
 
 ## 🐛 Reporting Bugs

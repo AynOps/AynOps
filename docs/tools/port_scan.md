@@ -13,8 +13,7 @@ The callable is:
 port_scan(target, scan_type="basic", timeout=None)
 ```
 
-The implementation passes `target` directly to Nmap. It does not normalize the
-target or perform domain, IP-address, ownership, or authorization validation.
+The target is whitespace-stripped and validated as a hostname, IP address, or CIDR network (disallowing whitespace and leading `-`). The implementation does not perform ownership or authorization validation.
 
 ## Purpose and common use cases
 
@@ -30,7 +29,7 @@ The MCP tool has one required parameter and two optional parameters:
 
 | Name | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `target` | string | Yes | — | Domain name or IP address passed directly to Nmap. The tool does not validate its format. |
+| `target` | string | Yes | — | Target hostname, IP address, or CIDR network without options or whitespace. |
 | `scan_type` | string | No | `"basic"` | One of exactly `basic`, `service`, `os`, `full`, or `vuln`. |
 | `timeout` | integer or null | No | Derived | Optional positive application-level timeout in seconds. `null` uses the mode's derived default. |
 
@@ -142,7 +141,7 @@ On success, the response contains `success: true` and these fields:
 | Field | Type | Description |
 |---|---|---|
 | `success` | boolean | `true` when Nmap completed and the result was assembled. |
-| `target` | string | The exact target value passed to the callable and Nmap; it is not normalized. |
+| `target` | string | The whitespace-stripped target value passed to the callable and Nmap. |
 | `scan_type` | string | The selected mode: `basic`, `service`, `os`, `full`, or `vuln`. |
 | `hosts_found` | integer | Number of host entries in `results`; it can be zero. |
 | `duration_seconds` | number or null | Nmap's elapsed scan time parsed as a floating-point number. It is `null` when scan statistics are unavailable or cannot be read. |
@@ -177,18 +176,24 @@ failure shapes are:
 
 | Situation | Response |
 |---|---|
+| Invalid target | `{"success": false, "error": "Invalid target. Provide a hostname, IP address or CIDR network without spaces or options."}` |
 | Invalid scan type | `{"success": false, "error": "Invalid scan_type 'invalid'. Valid options are: basic, service, os, full, vuln", "valid_scan_types": ["basic", "service", "os", "full", "vuln"]}` |
 | Invalid timeout (`timeout < 1`) | `{"success": false, "error": "Invalid timeout '0'. Must be a positive number of seconds."}` |
 | Application or Nmap timeout | `{"success": false, "error": "Port scan timed out"}` |
 | Nmap is missing or raises `nmap.PortScannerError` | `{"success": false, "error": "Nmap not found or not installed: <message>"}` |
 | Any other unexpected exception | `{"success": false, "error": "<exception message>"}` |
 
-The invalid scan-type response includes the complete valid-mode list. A target
-that Nmap cannot process is not rejected by a separate target-validation layer;
-its resulting Nmap error follows the Nmap or unexpected-error shapes above.
+The invalid scan-type response includes the complete valid-mode list. Malformed
+targets or targets containing option-injection characters are rejected before
+Nmap is executed; only unresolvable or unreachable valid targets produce Nmap
+errors following the Nmap or unexpected-error shapes above.
 
 ## Notes and limitations
 
+- The target parameter accepts only single hostnames, IP addresses, or CIDR
+  networks. Advanced Nmap target syntax—such as wildcards (`192.168.1.*`), octet
+  ranges (`10.0.0.1-20`), multiple space-separated targets, or file lists
+  (`-iL`)—is not supported.
 - Nmap must be installed and available to the Python `nmap` binding. Install
   Nmap separately as a system prerequisite, or use the repository's Docker
   image, which includes Nmap.
