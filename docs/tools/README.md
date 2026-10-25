@@ -15,7 +15,7 @@ completed pages.
 | [`email_security_check`](email_security_check.md) | Checks SPF, DKIM, and DMARC configuration | Available |
 | [`tech_stack_detect`](tech_stack_detect.md) | Detects web servers, CMSs, JavaScript frameworks, CDNs, and analytics | Available |
 | `cert_transparency` | Queries Certificate Transparency logs and extracts certificate and subdomain information | Pending |
-| `asn_lookup` | Looks up ASN and network ownership information through Team Cymru WHOIS | Pending |
+| [`asn_lookup`](asn_lookup.md) | Looks up ASN and network ownership information through Team Cymru WHOIS | Available |
 | `ip_reputation` | Checks whether an IP is flagged as malicious through AbuseIPDB | Pending |
 | `headers_analyzer` | Analyzes HTTP security headers and reports misconfigurations | Pending |
 | `full_recon` | Combines results from the core reconnaissance tools into a single report | Pending |
@@ -27,6 +27,6 @@ completed pages.
 | `cve_lookup` | Searches the NVD for known CVEs by software and version | Pending |
 | `cloud_exposure_check` | Checks for publicly accessible cloud storage buckets | Pending |
 | `trace_redirects` | Traces an HTTP redirect chain and flags suspicious hops | Pending |
-| `robots_txt_inspect` | Fetches and parses `robots.txt` for hidden directories and sitemaps | Pending |
+| [`robots_txt_inspect`](robots_txt_inspect.md) | Fetches and parses `robots.txt` for hidden directories and sitemaps | Available |
 | `subdomain_takeover` | Checks discovered subdomains for takeover indicators | Pending |
 | `hibp_check` | Checks whether an email or domain appears in Have I Been Pwned breach data | Pending |
