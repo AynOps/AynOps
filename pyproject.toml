@@ -1,6 +1,6 @@
 [project]
 name = "AynOps"
-version = "1.1.2"
+version = "1.2.0"
 description = "A Model Context Protocol server that gives AI Clients real-time cybersecurity reconnaissance capabilities — WHOIS, DNS enumeration, port scanning, SSL inspection, CVE lookup, IP reputation, ASN lookup and more."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -16,6 +16,16 @@ dependencies = [
     "requests>=2.34.2",
     "tldextract>=5.3.1",
 ]
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["server"]
+
+[tool.setuptools.packages.find]
+include = ["tools*", "utils*"]
 
 [dependency-groups]
 dev = [
