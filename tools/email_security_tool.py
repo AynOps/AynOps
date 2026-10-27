@@ -8,6 +8,7 @@ from typing import Any
 
 import dns.exception
 import dns.resolver
+import tldextract
 
 from utils import is_valid_domain, normalize_domain
 
@@ -349,6 +350,34 @@ def _is_dmarc_record(record: str) -> bool:
     return name == "v" and value.strip() == "DMARC1"
 
 
+# Offline-only extractor: suffix_list_urls=() makes tldextract use the Public
+# Suffix List snapshot bundled with the package instead of fetching it
+_TLD_EXTRACT = tldextract.TLDExtract(
+    suffix_list_urls=(), include_psl_private_domains=True
+)
+
+
+def _organizational_domain(domain: str) -> str | None:
+    """
+    Return the Organizational Domain (registrable domain) for ``domain`` using
+    the Public Suffix List, or None when it cannot be determined (for example
+    a bare public suffix such as "co.uk" or a name without a known suffix).
+    """
+    parts = _TLD_EXTRACT(domain)
+    if not parts.domain or not parts.suffix:
+        return None
+    return f"{parts.domain}.{parts.suffix}"
+
+
+def _has_valid_rua(value: str) -> bool:
+    """True if at least one comma-separated URI looks syntactically valid."""
+    for uri in value.split(","):
+        uri = uri.strip().split("!", 1)[0]  # ignore obsolete !size suffix
+        if re.fullmatch(r"[A-Za-z][A-Za-z0-9+.\-]*:\S+", uri):
+            return True
+    return False
+
+
 def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
     txt_records, failed = _query_txt(f"_dmarc.{domain}")
 
@@ -360,10 +389,32 @@ def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
             "record": None,
             "records": [],
             "policy": None,
+            "inherited_from": None,
             "score": 0,
         }
 
     dmarc_records = [r for r in txt_records if _is_dmarc_record(r)]
+
+    # RFC 7489 §6.6.3: with no policy record at the exact name, look up the
+    # Organizational Domain and use its policy (honoring sp= for subdomains).
+    inherited_from = None
+    org_domain = _organizational_domain(domain)
+    if not dmarc_records and org_domain and org_domain != domain:
+        org_records, org_failed = _query_txt(f"_dmarc.{org_domain}")
+        if org_failed:
+            recommendations.append("Could not verify DMARC — DNS lookup timed out.")
+            return {
+                "found": False,
+                "valid": False,
+                "record": None,
+                "records": [],
+                "policy": None,
+                "inherited_from": None,
+                "score": 0,
+            }
+        dmarc_records = [r for r in org_records if _is_dmarc_record(r)]
+        if dmarc_records:
+            inherited_from = org_domain
 
     if not dmarc_records:
         recommendations.append("DMARC not found — add a DMARC record.")
@@ -373,6 +424,7 @@ def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
             "record": None,
             "records": [],
             "policy": None,
+            "inherited_from": None,
             "score": 0,
         }
 
@@ -389,6 +441,7 @@ def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
             "record": None,
             "records": dmarc_records,
             "policy": None,
+            "inherited_from": inherited_from,
             "score": 0,
         }
 
@@ -401,22 +454,49 @@ def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
             tags[k.strip().lower()] = v.strip()
 
     valid = True
-    raw_policy = tags.get("p")
-    if raw_policy is None:
-        # RFC 9989 §4.7: a record without p= is treated as p=none.
-        policy = "none"
+    no_processing = False
+    p_raw = tags.get("p")
+    sp_raw = tags.get("sp") if inherited_from else None
+    ok = ("none", "quarantine", "reject")
+    bad_p = p_raw is not None and p_raw.lower() not in ok
+    bad_sp = sp_raw is not None and sp_raw.lower() not in ok
+
+    if bad_p or bad_sp:
+        # RFC 9989 §4.10.1: invalid p/sp -> treated as p=none if a valid rua
+        # is present, otherwise no DMARC processing.
+        valid = False
+        policy = "invalid"
+        bad_tags = []
+        if bad_p:
+            bad_tags.append(f"p={p_raw}")
+        if bad_sp:
+            bad_tags.append(f"sp={sp_raw}")
         recommendations.append(
-            "DMARC record has no 'p=' tag — it defaults to 'none' under RFC 9989, "
-            "but explicitly publishing a policy avoids ambiguous handling."
+            f"DMARC policy '{', '.join(bad_tags)}' is invalid — must be "
+            "'none', 'quarantine', or 'reject'."
         )
-    else:
-        policy = raw_policy.lower()
-        if policy not in ("none", "quarantine", "reject"):
-            policy = "invalid"
-            valid = False
+        if _has_valid_rua(tags.get("rua", "")):
             recommendations.append(
-                f"DMARC policy 'p={raw_policy}' is invalid — must be 'none', 'quarantine', or 'reject'."
+                "Per RFC 9989 §4.10.1, receivers treat this record as 'p=none' "
+                "because a valid rua= is present."
             )
+        else:
+            no_processing = True
+            recommendations.append(
+                "Per RFC 9989 §4.10.1, receivers apply no DMARC processing to "
+                "this record because it has no valid rua=."
+            )
+    else:
+        policy_tag = "sp" if inherited_from and "sp" in tags else "p"
+        raw_policy = tags.get(policy_tag)
+        if raw_policy is None:
+            policy = "none"
+            recommendations.append(
+                "DMARC record has no 'p=' tag — it defaults to 'none' under RFC 9989, "
+                "but explicitly publishing a policy avoids ambiguous handling."
+            )
+        else:
+            policy = raw_policy.lower()
 
     dmarc_score = 10
     if policy == "reject":
@@ -434,11 +514,15 @@ def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
         dmarc_score = max(0, dmarc_score - 5)
         recommendations.append("DMARC has an empty rua= tag with no reporting address.")
 
+    if no_processing:
+        dmarc_score = 0
+
     return {
         "found": True,
         "valid": valid,
         "record": record,
         "records": dmarc_records,
+        "inherited_from": inherited_from,
         "policy": policy,
         "score": dmarc_score,
     }
