@@ -17,7 +17,7 @@ completed pages.
 | [`cert_transparency`](cert_transparency.md) | Queries Certificate Transparency logs and extracts certificate and subdomain information | Available |
 | `asn_lookup` | Looks up ASN and network ownership information through Team Cymru WHOIS | Pending |
 | `ip_reputation` | Checks whether an IP is flagged as malicious through AbuseIPDB | Pending |
-| `headers_analyzer` | Analyzes HTTP security headers and reports misconfigurations | Pending |
+| [`headers_analyzer`](headers_analyzer.md) | Analyzes HTTP security headers and reports misconfigurations with per-header severity ratings | Available |
 | `full_recon` | Combines results from the core reconnaissance tools into a single report | Pending |
 
 ## Standalone tools
