@@ -47,28 +47,29 @@ None.
 
 ## Example successful response
 
-The values below are illustrative; AbuseIPDB supplies the report data and
-network metadata, and some fields may be unavailable.
+The response below is a schema-only illustration of the response shape for
+the documentation address `192.0.2.1`, not output captured from AbuseIPDB. A
+live lookup returns AbuseIPDB's data for the queried address.
 
 ```json
 {
   "success": true,
   "ip": "192.0.2.1",
   "ip_version": 4,
-  "is_malicious": true,
+  "is_malicious": false,
   "is_whitelisted": false,
-  "is_public": true,
+  "is_public": false,
   "is_tor": false,
-  "reputation": "high-risk",
+  "reputation": "clean",
   "num_distinct_users": 0,
-  "abuse_confidence_score": 95,
-  "total_reports": 342,
-  "country": "CN",
-  "isp": "Example ISP",
-  "domain": "example.net",
+  "abuse_confidence_score": 0,
+  "total_reports": 0,
+  "country": null,
+  "isp": null,
+  "domain": null,
   "hostnames": null,
-  "usage_type": "Data Center/Web Hosting/Transit",
-  "last_reported_at": "2026-05-01T00:00:00+00:00"
+  "usage_type": null,
+  "last_reported_at": null
 }
 ```
 
