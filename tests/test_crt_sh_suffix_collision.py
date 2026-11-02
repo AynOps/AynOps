@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
-from crt_sh_tool import cert_transparency  # noqa: E402
+from crt_sh_tool import cert_transparency
 
 
 def _mock_response(payload):
