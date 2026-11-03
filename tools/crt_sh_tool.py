@@ -6,6 +6,16 @@ from curl_cffi.requests.errors import RequestsError
 from utils import is_valid_domain, normalize_domain
 
 
+def _is_subdomain_of(name: str, domain: str) -> bool:
+    """Return True only if name is a strict subdomain of domain.
+
+    Uses a label-boundary check so that suffix collisions such as
+    "notexample.com" or "evil-example.com" are not treated as subdomains
+    of "example.com".
+    """
+    return name.endswith("." + domain)
+
+
 def cert_transparency(domain: str) -> dict[str, Any]:
     """
     Query crt.sh Certificate Transparency logs for a domain and extract
@@ -48,14 +58,13 @@ def cert_transparency(domain: str) -> dict[str, Any]:
 
                 if name.startswith("*."):
                     wildcard_pattern = name[1:]  # "*.example.com" -> ".example.com"
-                    if (
-                        wildcard_pattern.endswith("." + domain)
-                        or wildcard_pattern == "." + domain
+                    if wildcard_pattern == "." + domain or _is_subdomain_of(
+                        wildcard_pattern.lstrip("."), domain
                     ):
                         wildcards.add(wildcard_pattern)
                     continue
 
-                if not name.endswith(domain) or name == domain:
+                if name == domain or not _is_subdomain_of(name, domain):
                     continue
 
                 unique_subdomains.add(name)

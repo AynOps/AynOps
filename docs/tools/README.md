@@ -14,10 +14,10 @@ completed pages.
 | [`ssl_inspect`](ssl_inspect.md) | Inspects SSL/TLS certificates, cipher strength, SANs, and TLS version | Available |
 | [`email_security_check`](email_security_check.md) | Checks SPF, DKIM, and DMARC configuration | Available |
 | [`tech_stack_detect`](tech_stack_detect.md) | Detects web servers, CMSs, JavaScript frameworks, CDNs, and analytics | Available |
-| `cert_transparency` | Queries Certificate Transparency logs and extracts certificate and subdomain information | Pending |
+| [`cert_transparency`](cert_transparency.md) | Queries Certificate Transparency logs and extracts certificate and subdomain information | Available |
 | `asn_lookup` | Looks up ASN and network ownership information through Team Cymru WHOIS | Pending |
-| `ip_reputation` | Checks whether an IP is flagged as malicious through AbuseIPDB | Pending |
-| `headers_analyzer` | Analyzes HTTP security headers and reports misconfigurations | Pending |
+| [`ip_reputation`](ip_reputation.md) | Checks whether an IP is flagged as malicious through AbuseIPDB | Available |
+| [`headers_analyzer`](headers_analyzer.md) | Analyzes HTTP security headers and reports misconfigurations with per-header severity ratings | Available |
 | `full_recon` | Combines results from the core reconnaissance tools into a single report | Pending |
 
 ## Standalone tools
