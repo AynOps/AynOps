@@ -8,6 +8,7 @@ from tools import email_security_check
 from tools.email_security_tool import (
     _check_dmarc,
     _discover_dynamic_selectors,
+    _has_valid_rua,
     _is_dmarc_record,
     _is_spf_record,
     _is_valid_base64_key,
@@ -712,6 +713,57 @@ class TestEmailSecurityScanner(unittest.TestCase):
         self.assertEqual(result["policy"], "none")
         self.assertEqual(result["score"], 10)
         self.assertEqual(result["inherited_from"], "example.com")
+
+    def test_has_valid_rua(self):
+        """A rua entry is a URI optionally followed by a valid !size suffix."""
+        self.assertTrue(_has_valid_rua("mailto:dmarc@example.com"))
+        self.assertTrue(_has_valid_rua("mailto:dmarc@example.com!10m"))
+        self.assertTrue(_has_valid_rua("https://example.com/r, mailto:a@example.com"))
+        self.assertFalse(_has_valid_rua("mailto:dmarc@example.com!"))
+        self.assertFalse(_has_valid_rua("mailto:dmarc@example.com!x"))
+        self.assertFalse(_has_valid_rua("mailto:dmarc@example.com!10x"))
+        self.assertFalse(_has_valid_rua("not-a-uri"))
+        self.assertFalse(_has_valid_rua(""))
+
+    def test_dmarc_direct_invalid_sp_is_reported_invalid(self):
+        """An invalid sp= is rejected on a domain's own record too."""
+        rec = "v=DMARC1; p=reject; sp=bogus; rua=mailto:dmarc@example.com"
+        with patch(
+            "tools.email_security_tool._query_txt",
+            side_effect=self._dns({"_dmarc.example.com": [rec]}),
+        ):
+            result = _check_dmarc("example.com", [])
+        self.assertTrue(result["found"])
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["policy"], "invalid")
+        self.assertEqual(result["score"], 10)
+        self.assertIsNone(result["inherited_from"])
+
+    def test_dmarc_invalid_policy_malformed_rua_suffix_scores_zero(self):
+        """A malformed !size suffix is not a valid rua, so no DMARC processing."""
+        for rua in ("mailto:dmarc@example.com!", "mailto:dmarc@example.com!bogus"):
+            rec = f"v=DMARC1; p=invalid; rua={rua}"
+            with self.subTest(rua=rua):
+                with patch(
+                    "tools.email_security_tool._query_txt",
+                    side_effect=self._dns({"_dmarc.example.com": [rec]}),
+                ):
+                    result = _check_dmarc("example.com", [])
+                self.assertFalse(result["valid"])
+                self.assertEqual(result["policy"], "invalid")
+                self.assertEqual(result["score"], 0)
+
+    def test_dmarc_invalid_policy_valid_rua_suffix_scores_ten(self):
+        """A valid !size suffix still counts as a valid rua."""
+        rec = "v=DMARC1; p=invalid; rua=mailto:dmarc@example.com!10m"
+        with patch(
+            "tools.email_security_tool._query_txt",
+            side_effect=self._dns({"_dmarc.example.com": [rec]}),
+        ):
+            result = _check_dmarc("example.com", [])
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["policy"], "invalid")
+        self.assertEqual(result["score"], 10)
 
 
 if __name__ == "__main__":

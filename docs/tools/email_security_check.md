@@ -146,6 +146,10 @@ A policy record whose `p=` or `sp=` is invalid is reported with `policy`
 set to `invalid` and `valid` set to `false`, even if a valid `sp=` is
 present. Per RFC 9989 §4.10.1 such a record is scored as `p=none` when it
 has a syntactically valid `rua=` URI, and scores 0 when it has none.
+This applies to a domain's own record as well as an inherited one. A `rua=`
+entry counts as valid only when the whole entry is a URI, optionally followed
+by a `!<size>` suffix such as `!10m`; a bare `!` or a malformed suffix does
+not.
 
 ### DKIM object
 

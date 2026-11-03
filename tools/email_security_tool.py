@@ -369,13 +369,16 @@ def _organizational_domain(domain: str) -> str | None:
     return f"{parts.domain}.{parts.suffix}"
 
 
+_RUA_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.\-]*:[^\s!]+(?:![0-9]+[kKmMgGtT]?)?")
+
+
 def _has_valid_rua(value: str) -> bool:
-    """True if at least one comma-separated URI looks syntactically valid."""
-    for uri in value.split(","):
-        uri = uri.strip().split("!", 1)[0]  # ignore obsolete !size suffix
-        if re.fullmatch(r"[A-Za-z][A-Za-z0-9+.\-]*:\S+", uri):
-            return True
-    return False
+    """
+    True if at least one comma-separated entry is a syntactically valid
+    reporting URI, optionally followed by the obsolete "!<size>[k|m|g|t]"
+    suffix. The whole entry must match, so "mailto:a@b.co!" is not valid.
+    """
+    return any(_RUA_URI.fullmatch(uri.strip()) for uri in value.split(","))
 
 
 def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
@@ -456,7 +459,7 @@ def _check_dmarc(domain: str, recommendations: list[str]) -> dict[str, Any]:
     valid = True
     no_processing = False
     p_raw = tags.get("p")
-    sp_raw = tags.get("sp") if inherited_from else None
+    sp_raw = tags.get("sp")
     ok = ("none", "quarantine", "reject")
     bad_p = p_raw is not None and p_raw.lower() not in ok
     bad_sp = sp_raw is not None and sp_raw.lower() not in ok
